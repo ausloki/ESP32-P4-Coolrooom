@@ -90,7 +90,10 @@ substitutions:
   default_comp_diff_c:  "1.0"
   default_alarm_high_c: "3.0"
   default_alarm_low_c:  "3.0"
-
+  # ── Phase 3: Defrost scheduling & probe health ────────────────────
+  defrost_interval_h:  "8"      # hours between defrost cycles
+  defrost_max_min:     "30"     # maximum defrost duration (minutes)
+  probe_stale_ms:      "30000"  # probe 1 declared stale after this many ms
 ##############################################################################
 # Platform
 ##############################################################################
@@ -100,6 +103,7 @@ esphome:
   friendly_name: ${friendly_name}
   includes:
     - p4_helpers.h
+    - p4_control.h
   on_boot:
     - priority: 600
       then:
@@ -696,6 +700,34 @@ binary_sensor:
       sorting_weight: 33
     lambda: 'return id(hw_rtc_ok);'
 
+  # ── Phase 3: Alarm and fault indicators ───────────────────────────────────
+  - platform: template
+    id: alarm_high_active
+    name: "High Temperature Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 3
+    lambda: 'return id(ctl_alarm_high_active);'
+
+  - platform: template
+    id: alarm_low_active
+    name: "Low Temperature Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 4
+    lambda: 'return id(ctl_alarm_low_active);'
+
+  - platform: template
+    id: probe_fault_active
+    name: "Probe Fault (Stale / Invalid)"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 35
+    lambda: 'return id(ctl_probe_fault);'
+
 ##############################################################################
 # Number Entities — NVS-persistent control parameters
 ##############################################################################
@@ -796,6 +828,73 @@ button:
       sorting_weight: 11
 
 ##############################################################################
+# Phase 3: 10-second control loop
+# All decision logic lives in p4_control.h. This lambda is the orchestrator.
+##############################################################################
+
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          // ── 1. Probe health ─────────────────────────────────────────────
+          float t = id(probe1_temp).state;
+          bool fault = p4_ctl_probe_fault(t, id(rtd1_ch1_last_ms), ${probe_stale_ms});
+          id(ctl_probe_fault) = fault;
+          if (fault) {
+              // Safety: cut all actuators when primary probe is faulted
+              id(relay_compressor).turn_off();
+              id(relay_defrost).turn_off();
+              id(relay_siren).turn_on();
+              return;
+          }
+
+          // ── 2. Compressor hysteresis control ────────────────────────────
+          // (skip if defrost relay is active — mutual exclusion via write_lambda too)
+          if (!id(relay_defrost).state) {
+              int cmd = p4_ctl_compressor_eval(
+                  t,
+                  id(ctl_setpoint), id(ctl_comp_diff),
+                  id(relay_compressor).state,
+                  id(rtd1_ch1_last_ms), ${probe_stale_ms}
+              );
+              if (cmd == 1)  id(relay_compressor).turn_on();
+              if (cmd == -1) id(relay_compressor).turn_off();
+          }
+
+          // ── 3. Alarm evaluation ─────────────────────────────────────────
+          bool hi = p4_ctl_alarm_high(t, id(ctl_setpoint), id(ctl_alarm_high_delta));
+          bool lo = p4_ctl_alarm_low(t, id(ctl_setpoint), id(ctl_alarm_low_delta));
+          id(ctl_alarm_high_active) = hi;
+          id(ctl_alarm_low_active)  = lo;
+          if (hi || lo) {
+              if (!id(relay_siren).state) {
+                  ESP_LOGW("ctl", "ALARM: hi=%d lo=%d t=%.1f°C sp=%.1f°C",
+                           (int)hi, (int)lo, t, id(ctl_setpoint));
+                  id(relay_siren).turn_on();
+              }
+          } else {
+              if (id(relay_siren).state) id(relay_siren).turn_off();
+          }
+
+          // ── 4. Defrost scheduling ───────────────────────────────────────
+          const uint32_t def_interval_ms = (uint32_t)(${defrost_interval_h}) * 3600000U;
+          const uint32_t def_max_ms      = (uint32_t)(${defrost_max_min})    * 60000U;
+          if (!id(relay_defrost).state) {
+              if (p4_ctl_defrost_due(id(ctl_defrost_last_end_ms), def_interval_ms)) {
+                  ESP_LOGI("ctl", "Starting defrost cycle");
+                  id(relay_compressor).turn_off();
+                  id(relay_defrost).turn_on();
+                  id(ctl_defrost_on_since_ms) = millis();
+              }
+          } else {
+              if (p4_ctl_defrost_timeout(id(ctl_defrost_on_since_ms), def_max_ms)) {
+                  ESP_LOGI("ctl", "Defrost complete (timeout %u min)", (unsigned)${defrost_max_min});
+                  id(relay_defrost).turn_off();
+                  id(ctl_defrost_last_end_ms) = millis();
+              }
+          }
+
+##############################################################################
 # Globals
 ##############################################################################
 
@@ -880,3 +979,28 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+  # ── Phase 3: Control state ────────────────────────────────────────
+  - id: ctl_probe_fault
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_alarm_high_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_alarm_low_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_defrost_on_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_defrost_last_end_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
