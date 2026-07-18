@@ -106,3 +106,6 @@ graph LR
 | 6     | Extended control: lockout, grace, smart defrost, fallback, ice, no-cool | ✅ Complete |
 | 7     | Diagnostic sensors + RS485 health + select entities | ✅ Complete |
 | 8     | LVGL multi-page UI (home meter + settings + system pages) | ✅ Complete |
+| 9     | LVGL page navigation (script-based state + tab bar wiring) | ✅ Complete |
+| 10    | Extended diagnostic page (system heap, PSRAM, uptime, WiFi signal) | ⏳ In Progress |
+| 11    | Web dashboard + JSON time-series API (24h trends, metrics) | ⏳ Next |

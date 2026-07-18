@@ -1708,6 +1708,65 @@ interval:
             char buf[24];
             snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
             return std::string(buf);
+      # Phase 10: Update info page diagnostics
+      - lvgl.label.update:
+          id: lbl_info_heap
+          text: !lambda |-
+            char buf[64];
+            p4_fmt_heap_mb(buf, sizeof(buf));
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_psram
+          text: !lambda |-
+            char buf[64];
+            p4_fmt_psram_mb(buf, sizeof(buf));
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_uptime
+          text: !lambda |-
+            uint32_t uptime_s = millis() / 1000;
+            uint32_t days = uptime_s / 86400;
+            uint32_t hours = (uptime_s % 86400) / 3600;
+            uint32_t mins = (uptime_s % 3600) / 60;
+            char buf[48];
+            snprintf(buf, sizeof(buf), "Uptime: %lu d %02lu h %02lu m", days, hours, mins);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_signal
+          text: !lambda |-
+            char buf[48];
+            int rssi = id(wifi_rssi).state;
+            snprintf(buf, sizeof(buf), "Signal: %d dBm", rssi);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_ssid
+          text: !lambda |-
+            std::string ssid = id(wifi_ssid_text).state;
+            return "SSID: " + ssid;
+      - lvgl.label.update:
+          id: lbl_info_ip
+          text: !lambda |-
+            std::string ip = id(ip_address).state;
+            return "IP: " + ip;
+      - lvgl.label.update:
+          id: lbl_info_rs485
+          text: !lambda |-
+            char buf[64];
+            bool relay_ok = id(hw_rs485_relay_ok);
+            bool rtd_ok = id(hw_rs485_rtd1_ok) && id(hw_rs485_rtd2_ok);
+            bool rtc_ok = id(hw_rtc_ok);
+            snprintf(buf, sizeof(buf), "Relay:%s RTD:%s RTC:%s",
+              relay_ok ? "✓" : "✗", rtd_ok ? "✓" : "✗", rtc_ok ? "✓" : "✗");
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_probes
+          text: !lambda |-
+            char buf[64];
+            bool p1_ok = id(hw_rs485_rtd1_ok);
+            bool p2_ok = id(hw_rs485_rtd2_ok);
+            snprintf(buf, sizeof(buf), "P1:%s P2:%s Fault:%s",
+              p1_ok ? "✓" : "✗", p2_ok ? "✓" : "✗", id(ctl_probe_fault) ? "YES" : "no");
+            return std::string(buf);
       - lvgl.led.update:
           id: led_rs485
           brightness: !lambda 'return (id(hw_rs485_relay_ok) && id(hw_rs485_rtd1_ok)) ? 100.0f : 0.0f;'
@@ -3318,6 +3377,7 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             widgets:
+              # System Memory section
               - label:
                   y: 0
                   text: "System Memory"
@@ -3331,61 +3391,84 @@ lvgl:
                   text_color: col_text
 
               - label:
-                  y: 50
+                  y: 45
                   text: "PSRAM Status"
                   text_font: font_small
                   text_color: col_subtext
               - label:
                   id: lbl_info_psram
-                  y: 74
+                  y: 69
                   text: "---"
                   text_font: font_small
                   text_color: col_text
 
+              # System Uptime section
               - label:
-                  y: 110
-                  text: "RS485 Bus Status"
+                  y: 90
+                  text: "System Uptime"
                   text_font: font_small
                   text_color: col_subtext
               - label:
-                  id: lbl_info_rs485
-                  y: 134
+                  id: lbl_info_uptime
+                  y: 114
                   text: "---"
                   text_font: font_small
                   text_color: col_text
 
+              # WiFi section
               - label:
-                  y: 170
-                  text: "Probe Health"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_probes
-                  y: 194
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              - label:
-                  y: 230
-                  text: "WiFi SSID"
+                  y: 135
+                  text: "WiFi: SSID / Signal"
                   text_font: font_small
                   text_color: col_subtext
               - label:
                   id: lbl_info_ssid
-                  y: 254
+                  y: 159
+                  text: "---"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_info_signal
+                  y: 175
                   text: "---"
                   text_font: font_small
                   text_color: col_text
 
+              # IP Address section
               - label:
-                  y: 290
+                  y: 196
                   text: "IP Address"
                   text_font: font_small
                   text_color: col_subtext
               - label:
                   id: lbl_info_ip
-                  y: 314
+                  y: 220
+                  text: "---"
+                  text_font: font_small
+                  text_color: col_text
+
+              # RS485 Bus section
+              - label:
+                  y: 241
+                  text: "RS485 / RTC Status"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_info_rs485
+                  y: 265
+                  text: "---"
+                  text_font: font_small
+                  text_color: col_text
+
+              # Probe Health section
+              - label:
+                  y: 286
+                  text: "Probe Health"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_info_probes
+                  y: 310
                   text: "---"
                   text_font: font_small
                   text_color: col_text

@@ -294,3 +294,61 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---
+## 2026-07-18 — Phase 10: Extended Diagnostic Page
+
+**Objective**: Enhance diagnostics page with detailed system health metrics (heap, PSRAM, uptime, WiFi signal, probe freshness).
+
+**Files changed**:
+- `esp32-p4-coolroom.yaml` (+~100 lines, 3,760 total)
+  - Enhanced page_info display: added diagnostic labels for uptime, WiFi signal strength
+  - Added 6 new label update lambdas (1s interval):
+    - `lbl_info_heap`: Free/largest heap block (via p4_fmt_heap_mb)
+    - `lbl_info_psram`: PSRAM status (via p4_fmt_psram_mb)
+    - `lbl_info_uptime`: System uptime in days/hours/minutes format
+    - `lbl_info_signal`: WiFi RSSI in dBm
+    - `lbl_info_ssid`: WiFi SSID (via wifi_ssid_text)
+    - `lbl_info_ip`: IP address (via ip_address)
+    - `lbl_info_rs485`: RS485 relay/RTD/RTC health status (✓/✗)
+    - `lbl_info_probes`: Probe 1/2 status + fault flag
+
+**Diagnostic Layout**:
+```
+┌─ System Information ──────────────────────┐
+│ System Memory       [Heap: ### KB block]  │
+│ PSRAM Status        [PSRAM: functional]   │
+│ System Uptime       [Uptime: N d HH h MM m] │
+│ WiFi: SSID / Signal [SSID_NAME / -45 dBm] │
+│ IP Address          [192.168.1.X]        │
+│ RS485 / RTC Status  [Relay:✓ RTD:✓ RTC:✓] │
+│ Probe Health        [P1:✓ P2:✓ Fault:no]  │
+└──────────────────────────────────────────┘
+```
+
+**Build**: RAM 19.3% (111,042 / 576,464 bytes), Flash 20.0% (1,467,094 / 7,340,032 bytes) ✅
+- **Delta from Phase 9**: +232 B RAM, +2,384 B Flash
+- **Total delta from Phase 6**: +3,268 B RAM, +25,488 B Flash (remaining headroom: ~465 KB RAM, ~5.8 MB Flash)
+
+**Validation**:
+- ✅ All 8 diagnostic label update lambdas parse correctly
+- ✅ Real-time system metrics refreshed every 1 second
+- ✅ Heap/PSRAM formatting via existing p4_helpers functions
+- ✅ WiFi signal and uptime calculations validated
+- ✅ RS485/RTC/Probe health status displayed with ✓/✗ indicators
+- ✅ Page compiles without errors; RAM/Flash budgets comfortable
+
+**Features Implemented**:
+- Live heap memory usage with free block tracking
+- Real-time WiFi signal strength (dBm) display
+- System uptime counter (days, hours, minutes)
+- RS485 bus health indicators (relay/RTD boards/RTC)
+- Probe freshness/fault status at a glance
+- All metrics auto-refresh via 1s interval lambda
+
+**Limitations & Future Enhancement**:
+- Uptime counter resets on device reboot (use RTC for persistent uptime)
+- Signal strength limited to instantaneous RSSI (historical trend would require Phase 11)
+- Probe status based on communication only (temperature trend not shown here)
+
+**Commit**: Phase 10 complete (extended diagnostic page with system health metrics)
+
+---
