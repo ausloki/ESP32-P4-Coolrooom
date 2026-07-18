@@ -104,7 +104,7 @@ substitutions:
   default_alarm_persist_min:   "5"    # alarm must hold N min before siren
   default_alarm_hysteresis_c:  "0.5"  # temp band to clear alarm (°C)
   default_no_cool_alarm_min:   "60"   # no-cool alarm after N min compressor run
-  default_door_alarm_delay_s:  "30"   # door open alarm delay (seconds)
+  default_door_alarm_delay_s:  "300"  # door open alarm delay (seconds, 5 min)
   default_defrost_interval_min: "480"  # defrost every N min (8h)
   default_defrost_duration_min: "30"   # max defrost on-time (min)
   default_defrost_drip_min:    "5"    # drip time after defrost (min)
@@ -122,7 +122,7 @@ substitutions:
   # ── Phase 5: SD logging & ntfy ──────────────────────────────
   log_interval_min:    "5"      # temperature log interval (minutes)
   ntfy_server:         "https://ntfy.sh"   # ntfy server URL
-  ntfy_topic:          "coolroom-alerts"   # ntfy topic name
+  ntfy_topic:          "sacor-coolroom"    # ntfy topic name
   ntfy_priority:       "high"              # default ntfy message priority
 
 ##############################################################################
@@ -1077,14 +1077,17 @@ binary_sensor:
           // If mode is NC (true): x=false→closed, x=true→open
           // If mode is NO (false): x=false→open, x=true→closed
           bool door_is_open = id(ctl_door_sensor_mode_is_nc) ? x : !x;
-          id(ctl_door_alarm_active) = door_is_open;
           
           if (door_is_open) {
+            if (id(ctl_door_open_since_ms) == 0)
+              id(ctl_door_open_since_ms) = millis();
             id(relay_light).turn_on();
-            ESP_LOGI("door", "Door OPEN — triggering alarm & light");
+            ESP_LOGI("door", "Door OPEN — light on, alarm pending (delay %gs)", id(ctl_door_alarm_delay_s));
           } else {
+            id(ctl_door_open_since_ms) = 0;
+            id(ctl_door_alarm_active) = false;
             id(relay_light).turn_off();
-            ESP_LOGI("door", "Door closed");
+            ESP_LOGI("door", "Door closed — alarm cleared");
           }
 
   - platform: template
@@ -1743,8 +1746,14 @@ interval:
               // Ice alarm (needs evap probe)
               bool ice = evap_ok && p4_ctl_ice_alarm(t, evap, id(ctl_ice_delta_c));
               id(ctl_ice_alarm_active) = ice;
+              // ── Door open alarm (with configurable delay) ────────────
+              if (id(ctl_door_open_since_ms) > 0) {
+                  const uint32_t door_delay_ms = (uint32_t)(id(ctl_door_alarm_delay_s) * 1000.0f);
+                  if ((now_ms - id(ctl_door_open_since_ms)) >= door_delay_ms)
+                      id(ctl_door_alarm_active) = true;
+              }
               // Siren: any active alarm drives it
-              bool any_alarm = hi || lo || nc || ice;
+              bool any_alarm = hi || lo || nc || ice || id(ctl_door_alarm_active);
               if (id(input_siren_enabled)) {
                   if (any_alarm && !id(relay_siren).state) id(relay_siren).turn_on();
                   if (!any_alarm && id(relay_siren).state) id(relay_siren).turn_off();
