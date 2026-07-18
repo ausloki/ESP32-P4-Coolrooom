@@ -162,7 +162,11 @@ On the completion of ANY task, sub-task, or feature, you MUST execute the follow
 ### 1. Compilation & Code Review
 * Compile firmware and verify zero errors/warnings: `esphome compile esp32-p4-coolroom.yaml`
 * Review RAM/Flash metrics — ensure within target constraints (RAM < 25%, Flash < 20%)
-* If code complexity increased, generate a mermaid.js architecture graph detailing updated logic, state changes, or data flow
+* Generate code-review graph: Create a mermaid.js architecture graph detailing the updated logic, state changes, or data flow
+  - Run: `tools/code_review_graph_cli.sh` (or equivalent tool)
+  - Document: Explain what changed and why in graph title/annotations
+  - Purpose: Visualize control flow, LVGL widget hierarchy, relay/sensor interactions
+  - Include in: Session recap or handover notes as reference diagram
 
 ### 2. Documentation Updates
 * Update all relevant reference files:
