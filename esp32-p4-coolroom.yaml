@@ -482,8 +482,14 @@ switch:
     restore_mode: ALWAYS_OFF
     on_turn_on:
       - lambda: ESP_LOGI("relay", "Light ON");
+      - lvgl.led.update:
+          id: led_light
+          brightness: 100%
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Light OFF");
+      - lvgl.led.update:
+          id: led_light
+          brightness: 0%
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -2283,22 +2289,6 @@ lvgl:
                   text: "Coolroom"
                   text_font: font_medium
                   text_color: col_text
-              - button:
-                  id: btn_light_toggle
-                  align: RIGHT_MID
-                  x: -70
-                  width: 48
-                  height: 36
-                  bg_color: col_blue
-                  radius: 6
-                  border_width: 0
-                  widgets:
-                    - label:
-                        align: CENTER
-                        text: "💡"
-                        text_font: font_small
-                  on_click:
-                    - switch.toggle: relay_light
               - label:
                   id: lbl_clock
                   align: RIGHT_MID
@@ -2541,9 +2531,36 @@ lvgl:
                   text: "RTC"
                   text_font: font_small
                   text_color: col_text
+              - button:
+                  id: btn_led_light
+                  x: 230
+                  y: 66
+                  width: 44
+                  height: 22
+                  bg_color: col_panel
+                  radius: 4
+                  border_width: 1
+                  border_color: col_subtext
+                  widgets:
+                    - led:
+                        id: led_light
+                        x: 4
+                        y: 4
+                        width: 14
+                        height: 14
+                        color: col_orange
+                        brightness: 0%
+                    - label:
+                        x: 22
+                        y: 1
+                        text: "💡"
+                        text_font: font_small
+                        text_color: col_text
+                  on_click:
+                    - switch.toggle: relay_light
               - label:
                   id: lbl_heap
-                  x: 260
+                  x: 290
                   y: 64
                   text: "Heap: ---"
                   text_font: font_small
