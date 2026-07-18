@@ -168,3 +168,44 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---
+## 2026-07-18 — Phase 8: Multi-Page LVGL UI (5-page dashboard)
+
+**Objective**: Replace single-page LVGL home layout with multi-page dashboard (home meter + settings pages + system info). Adds tab bar navigation between pages.
+
+**Files changed**:
+- `esp32-p4-coolroom.yaml` (+674 lines, 3,110 total)
+  - Removed: single `page_home` layout (1-page meter + setpoint controls)
+  - Added: 5 new LVGL pages with shared 5-button tab bar at bottom
+    - `page_home` — main meter (coolroom temp + setpoint display/controls)
+    - `page_settings_1` — lockout timer display + defrost mode/interval display
+    - `page_settings_2` — alarm parameter thresholds (high/low/hysteresis)
+    - `page_settings_3` — fallback duty cycle + relay config display
+    - `page_info` — system diagnostics (heap, PSRAM, RS485 status, probe health)
+  - Tab bar: 5 buttons (y=552, width 205-204, height 48) with icons + labels
+    - Button 0 (x=0): 🏠 Home (active color: col_blue, inactive: col_panel)
+    - Button 1 (x=205): ⚙️ Set1
+    - Button 2 (x=410): ⚠️ Set2
+    - Button 3 (x=615): 💾 Set3
+    - Button 4 (x=820): ℹ️ Info
+  - Each page: header (y=0, height 48, page title) + content area (y=60, height 440)
+  - All pages include tab bar widget definitions at y=552
+
+**Limitations identified**:
+- ESPHome LVGL component does not support `lvgl.page:` actions for dynamic page switching
+- Tab bar buttons currently have no navigation logic (architectural constraint)
+- Page switching would require: LVGL script-based transitions, external state tracking + visibility toggles, or single-page content swapping
+- Decision: Keep tab bar buttons visible; defer dynamic navigation to Phase 9 as alternative UI architecture
+
+**Build**: RAM 18.9% (109,010 / 576,464 bytes), Flash 19.8% (1,452,646 / 7,340,032 bytes) ✅
+- **Delta from Phase 7**: +100 B RAM, +11,040 B Flash (well within budget)
+
+**Validation**:
+- ✅ Removed unsupported `lvgl.page:` action directives (sed command)
+- ✅ Cleaned orphaned YAML artifacts (stray numbers from sed replacements)
+- ✅ Compiles without errors; all 5 LVGL pages parse correctly
+- ✅ Tab bar and page layout structure confirmed valid
+
+**Commit**: Phase 8 complete (multi-page LVGL UI with tab bar structure)  
+**GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
+
+---

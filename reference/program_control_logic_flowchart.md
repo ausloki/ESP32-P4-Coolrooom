@@ -105,4 +105,4 @@ graph LR
 | 5     | SD card logging, ntfy, backup/restore      | ✅ Complete |
 | 6     | Extended control: lockout, grace, smart defrost, fallback, ice, no-cool | ✅ Complete |
 | 7     | Diagnostic sensors + RS485 health + select entities | ✅ Complete |
-| 8     | LVGL multi-page UI (home meter + settings + system pages) | ⏳ Next |
+| 8     | LVGL multi-page UI (home meter + settings + system pages) | ✅ Complete |

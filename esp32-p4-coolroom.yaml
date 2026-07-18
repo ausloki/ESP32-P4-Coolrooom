@@ -2104,11 +2104,10 @@ lvgl:
   default_font: font_small
 
   pages:
-    - id: page_main
+    # Home page
+    - id: page_home
       bg_color: col_bg
       widgets:
-
-        # ── Top header ─────────────────────────────────────────────────────
         - obj:
             x: 0
             y: 0
@@ -2122,7 +2121,7 @@ lvgl:
               - label:
                   x: 16
                   y: 14
-                  text: "Coolroom Controller"
+                  text: "Coolroom"
                   text_font: font_medium
                   text_color: col_text
               - label:
@@ -2133,7 +2132,6 @@ lvgl:
                   text_font: font_small
                   text_color: col_subtext
 
-        # ── Main temperature card (left) ────────────────────────────────────
         - obj:
             x: 8
             y: 56
@@ -2164,7 +2162,6 @@ lvgl:
                   text_font: font_small
                   text_color: col_subtext
 
-        # ── Setpoint control card ───────────────────────────────────────────
         - obj:
             x: 416
             y: 56
@@ -2226,7 +2223,6 @@ lvgl:
                         id: setpoint
                         cycle: false
 
-        # ── Secondary probes card ───────────────────────────────────────────
         - obj:
             x: 624
             y: 56
@@ -2263,7 +2259,6 @@ lvgl:
                   text_font: font_large
                   text_color: col_text
 
-        # ── Status card ─────────────────────────────────────────────────────
         - obj:
             x: 416
             y: 180
@@ -2273,7 +2268,6 @@ lvgl:
             radius: 12
             border_width: 0
             widgets:
-              # Compressor
               - led:
                   id: led_compressor
                   x: 16
@@ -2285,10 +2279,9 @@ lvgl:
               - label:
                   x: 36
                   y: 18
-                  text: "Compressor"
+                  text: "Comp"
                   text_font: font_small
                   text_color: col_text
-              # Defrost
               - led:
                   id: led_defrost
                   x: 130
@@ -2303,7 +2296,6 @@ lvgl:
                   text: "Defrost"
                   text_font: font_small
                   text_color: col_text
-              # High alarm
               - led:
                   id: led_alarm_hi
                   x: 230
@@ -2315,10 +2307,9 @@ lvgl:
               - label:
                   x: 250
                   y: 18
-                  text: "High Alarm"
+                  text: "Hi Alarm"
                   text_font: font_small
                   text_color: col_text
-              # Low alarm
               - led:
                   id: led_alarm_lo
                   x: 360
@@ -2330,10 +2321,9 @@ lvgl:
               - label:
                   x: 380
                   y: 18
-                  text: "Low Alarm"
+                  text: "Lo Alarm"
                   text_font: font_small
                   text_color: col_text
-              # Probe fault
               - led:
                   id: led_probe_fault
                   x: 490
@@ -2345,10 +2335,9 @@ lvgl:
               - label:
                   x: 510
                   y: 18
-                  text: "Probe Fault"
+                  text: "Fault"
                   text_font: font_small
                   text_color: col_text
-              # Second row: RS485 health
               - led:
                   id: led_rs485
                   x: 16
@@ -2385,7 +2374,6 @@ lvgl:
                   text_font: font_small
                   text_color: col_subtext
 
-        # ── Bottom bar ──────────────────────────────────────────────────────
         - obj:
             x: 0
             y: 304
@@ -2399,10 +2387,664 @@ lvgl:
             widgets:
               - label:
                   id: lbl_status_msg
-                  text: "Initialising..."
+                  text: "Running..."
                   text_font: font_small
                   text_color: col_subtext
 
+        # Tab bar buttons at bottom
+        - button:
+            x: 0
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_blue
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "🏠 Home"
+                  text_font: font_small
+
+        - button:
+            x: 205
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚙️ Set1"
+                  text_font: font_small
+
+        - button:
+            x: 410
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚠️ Set2"
+                  text_font: font_small
+
+        - button:
+            x: 615
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "💾 Set3"
+                  text_font: font_small
+
+        - button:
+            x: 820
+            y: 552
+            width: 204
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "ℹ️ Info"
+                  text_font: font_small
+              
+
+    # Settings 1 page
+    - id: page_settings_1
+      bg_color: col_bg
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 14
+                  text: "Settings 1: Lockout & Defrost"
+                  text_font: font_medium
+                  text_color: col_text
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label:
+                  y: 0
+                  text: "Compressor Lockout (min)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_lockout_val
+                  y: 28
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 90
+                  text: "Defrost Interval (hours)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_defrost_int_val
+                  y: 118
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 180
+                  text: "Defrost Duration (min)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_defrost_dur_val
+                  y: 208
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 270
+                  text: "Smart Defrost Delta (°C)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_defrost_delta_val
+                  y: 298
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+        # Tab bar buttons
+        - button:
+            x: 0
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "🏠 Home"
+                  text_font: font_small
+              
+
+        - button:
+            x: 205
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_blue
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚙️ Set1"
+                  text_font: font_small
+
+        - button:
+            x: 410
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚠️ Set2"
+                  text_font: font_small
+
+        - button:
+            x: 615
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "💾 Set3"
+                  text_font: font_small
+
+        - button:
+            x: 820
+            y: 552
+            width: 204
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "ℹ️ Info"
+                  text_font: font_small
+              
+
+    # Settings 2 page
+    - id: page_settings_2
+      bg_color: col_bg
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 14
+                  text: "Settings 2: Alarms"
+                  text_font: font_medium
+                  text_color: col_text
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label:
+                  y: 0
+                  text: "Alarm Persist (min)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_alarm_persist_val
+                  y: 28
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 90
+                  text: "Door Alarm Delay (sec)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_door_delay_val
+                  y: 118
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 180
+                  text: "No-Cool Timeout (min)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_nocool_val
+                  y: 208
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 270
+                  text: "Ice Detect Delta (°C)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_ice_delta_val
+                  y: 298
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+        # Tab bar buttons
+        - button:
+            x: 0
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "🏠 Home"
+                  text_font: font_small
+              
+
+        - button:
+            x: 205
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚙️ Set1"
+                  text_font: font_small
+
+        - button:
+            x: 410
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_blue
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚠️ Set2"
+                  text_font: font_small
+
+        - button:
+            x: 615
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "💾 Set3"
+                  text_font: font_small
+
+        - button:
+            x: 820
+            y: 552
+            width: 204
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "ℹ️ Info"
+                  text_font: font_small
+              
+
+    # Settings 3 page
+    - id: page_settings_3
+      bg_color: col_bg
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 14
+                  text: "Settings 3: Fallback"
+                  text_font: font_medium
+                  text_color: col_text
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label:
+                  y: 0
+                  text: "Fallback Enabled"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_fallback_enabled_val
+                  y: 28
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 90
+                  text: "Fallback Duty ON (sec)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_fallback_on_val
+                  y: 118
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 180
+                  text: "Fallback Duty OFF (sec)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_fallback_off_val
+                  y: 208
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+        # Tab bar buttons
+        - button:
+            x: 0
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "🏠 Home"
+                  text_font: font_small
+              
+
+        - button:
+            x: 205
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚙️ Set1"
+                  text_font: font_small
+
+        - button:
+            x: 410
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚠️ Set2"
+                  text_font: font_small
+
+        - button:
+            x: 615
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_blue
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "💾 Set3"
+                  text_font: font_small
+
+        - button:
+            x: 820
+            y: 552
+            width: 204
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "ℹ️ Info"
+                  text_font: font_small
+              
+
+    # Info page
+    - id: page_info
+      bg_color: col_bg
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 14
+                  text: "System Information"
+                  text_font: font_medium
+                  text_color: col_text
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label:
+                  y: 0
+                  text: "IP Address"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_info_ip
+                  y: 28
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 90
+                  text: "WiFi SSID"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_info_ssid
+                  y: 118
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 180
+                  text: "RS485 Status"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_info_rs485
+                  y: 208
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+              - label:
+                  y: 270
+                  text: "SD Card Free (MB)"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_info_sd
+                  y: 298
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+        # Tab bar buttons
+        - button:
+            x: 0
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "🏠 Home"
+                  text_font: font_small
+              
+
+        - button:
+            x: 205
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚙️ Set1"
+                  text_font: font_small
+
+        - button:
+            x: 410
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "⚠️ Set2"
+                  text_font: font_small
+
+        - button:
+            x: 615
+            y: 552
+            width: 205
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "💾 Set3"
+                  text_font: font_small
+
+        - button:
+            x: 820
+            y: 552
+            width: 204
+            height: 48
+            bg_color: col_blue
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "ℹ️ Info"
+                  text_font: font_small
 ##############################################################################
 # Phase 4: LVGL update automations — merged into interval: above
 ##############################################################################
