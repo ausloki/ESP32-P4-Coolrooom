@@ -1068,6 +1068,12 @@ number:
           id(ctl_alarm_high_delta) = x;
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
+      - lvgl.label.update:
+          id: lbl_alarm_high_val
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
+            return std::string(buf);
 
   # ── Phase 6: Extended control parameters ─────────────────────────────────
   - platform: template
@@ -1087,6 +1093,12 @@ number:
       - lambda: |-
           id(ctl_comp_lockout_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+      - lvgl.label.update:
+          id: lbl_lockout_val
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%d min", (int)x);
+            return std::string(buf);
 
   - platform: template
     id: defrost_interval_num
@@ -1105,6 +1117,12 @@ number:
       - lambda: |-
           id(ctl_defrost_interval_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+      - lvgl.label.update:
+          id: lbl_defrost_int_val
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%d min", (int)x);
+            return std::string(buf);
 
   - platform: template
     id: defrost_duration_num
@@ -1123,6 +1141,12 @@ number:
       - lambda: |-
           id(ctl_defrost_duration_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+      - lvgl.label.update:
+          id: lbl_defrost_dur_val
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%d min", (int)x);
+            return std::string(buf);
 
   - platform: template
     id: defrost_drip_num
@@ -1249,6 +1273,12 @@ number:
           id(ctl_alarm_low_delta) = x;
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
+      - lvgl.label.update:
+          id: lbl_alarm_low_val
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
+            return std::string(buf);
 
 ##############################################################################
 # Select Entities (Phase 7: Probe source profiles)
@@ -2491,49 +2521,185 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             widgets:
+              # ─────────── Lockout Timer ──────────────
               - label:
                   y: 0
                   text: "Compressor Lockout (min)"
                   text_font: font_small
                   text_color: col_text
-              - label:
-                  id: lbl_lockout_val
-                  y: 28
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+              - obj:
+                  y: 24
+                  width: 200
+                  height: 50
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: lbl_lockout_val
+                        x: 0
+                        y: 6
+                        width: 120
+                        height: 40
+                        text: "---"
+                        text_font: font_large
+                        text_color: col_text
+                    - button:
+                        x: 130
+                        y: 6
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▲"
+                              text_font: font_small
+                        on_click:
+                          - number.increment:
+                              id: comp_lockout_min
+                              cycle: false
+                    - button:
+                        x: 130
+                        y: 28
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▼"
+                              text_font: font_small
+                        on_click:
+                          - number.decrement:
+                              id: comp_lockout_min
+                              cycle: false
 
+              # ─────────── Defrost Interval ──────────────
               - label:
                   y: 90
-                  text: "Defrost Interval (hours)"
+                  text: "Defrost Interval (min)"
                   text_font: font_small
                   text_color: col_text
-              - label:
-                  id: lbl_defrost_int_val
-                  y: 118
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+              - obj:
+                  y: 114
+                  width: 200
+                  height: 50
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: lbl_defrost_int_val
+                        x: 0
+                        y: 6
+                        width: 120
+                        height: 40
+                        text: "---"
+                        text_font: font_large
+                        text_color: col_text
+                    - button:
+                        x: 130
+                        y: 6
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▲"
+                              text_font: font_small
+                        on_click:
+                          - number.increment:
+                              id: defrost_interval_num
+                              cycle: false
+                    - button:
+                        x: 130
+                        y: 28
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▼"
+                              text_font: font_small
+                        on_click:
+                          - number.decrement:
+                              id: defrost_interval_num
+                              cycle: false
 
+              # ─────────── Defrost Duration ──────────────
               - label:
                   y: 180
                   text: "Defrost Duration (min)"
                   text_font: font_small
                   text_color: col_text
-              - label:
-                  id: lbl_defrost_dur_val
-                  y: 208
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+              - obj:
+                  y: 204
+                  width: 200
+                  height: 50
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: lbl_defrost_dur_val
+                        x: 0
+                        y: 6
+                        width: 120
+                        height: 40
+                        text: "---"
+                        text_font: font_large
+                        text_color: col_text
+                    - button:
+                        x: 130
+                        y: 6
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▲"
+                              text_font: font_small
+                        on_click:
+                          - number.increment:
+                              id: defrost_duration_num
+                              cycle: false
+                    - button:
+                        x: 130
+                        y: 28
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▼"
+                              text_font: font_small
+                        on_click:
+                          - number.decrement:
+                              id: defrost_duration_num
+                              cycle: false
 
+              # ─────────── Defrost Smart Delta ──────────────
               - label:
                   y: 270
-                  text: "Smart Defrost Delta (°C)"
+                  text: "Defrost End Temp (°C)"
                   text_font: font_small
                   text_color: col_text
               - label:
-                  id: lbl_defrost_delta_val
+                  id: lbl_defrost_end_val
                   y: 298
                   text: "---"
                   text_font: font_large
@@ -2640,53 +2806,139 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             widgets:
+              # ─────────── High Alarm Delta ──────────────
               - label:
                   y: 0
+                  text: "High Temp Alarm (°C above SP)"
+                  text_font: font_small
+                  text_color: col_text
+              - obj:
+                  y: 24
+                  width: 200
+                  height: 50
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: lbl_alarm_high_val
+                        x: 0
+                        y: 6
+                        width: 120
+                        height: 40
+                        text: "---"
+                        text_font: font_large
+                        text_color: col_text
+                    - button:
+                        x: 130
+                        y: 6
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▲"
+                              text_font: font_small
+                        on_click:
+                          - number.increment:
+                              id: alarm_high_delta
+                              cycle: false
+                    - button:
+                        x: 130
+                        y: 28
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▼"
+                              text_font: font_small
+                        on_click:
+                          - number.decrement:
+                              id: alarm_high_delta
+                              cycle: false
+
+              # ─────────── Low Alarm Delta ──────────────
+              - label:
+                  y: 100
+                  text: "Low Temp Alarm (°C below SP)"
+                  text_font: font_small
+                  text_color: col_text
+              - obj:
+                  y: 124
+                  width: 200
+                  height: 50
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label:
+                        id: lbl_alarm_low_val
+                        x: 0
+                        y: 6
+                        width: 120
+                        height: 40
+                        text: "---"
+                        text_font: font_large
+                        text_color: col_text
+                    - button:
+                        x: 130
+                        y: 6
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▲"
+                              text_font: font_small
+                        on_click:
+                          - number.increment:
+                              id: alarm_low_delta
+                              cycle: false
+                    - button:
+                        x: 130
+                        y: 28
+                        width: 30
+                        height: 20
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text: "▼"
+                              text_font: font_small
+                        on_click:
+                          - number.decrement:
+                              id: alarm_low_delta
+                              cycle: false
+
+              # ─────────── Alarm Persist Time ──────────────
+              - label:
+                  y: 200
                   text: "Alarm Persist (min)"
                   text_font: font_small
                   text_color: col_text
               - label:
                   id: lbl_alarm_persist_val
-                  y: 28
+                  y: 228
                   text: "---"
                   text_font: font_large
                   text_color: col_text
 
+              # ─────────── Status Info ──────────────
               - label:
-                  y: 90
-                  text: "Door Alarm Delay (sec)"
+                  y: 300
+                  text: "Alarms Active: ---"
                   text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_door_delay_val
-                  y: 118
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
-
-              - label:
-                  y: 180
-                  text: "No-Cool Timeout (min)"
-                  text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_nocool_val
-                  y: 208
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
-
-              - label:
-                  y: 270
-                  text: "Ice Detect Delta (°C)"
-                  text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_ice_delta_val
-                  y: 298
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+                  text_color: col_subtext
 
         # Tab bar buttons
         - button:
@@ -2791,38 +3043,84 @@ lvgl:
             widgets:
               - label:
                   y: 0
-                  text: "Fallback Enabled"
+                  text: "System Status"
                   text_font: font_small
                   text_color: col_text
+
               - label:
-                  id: lbl_fallback_enabled_val
                   y: 28
+                  text: "Probe 1 (Main):"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_probe1_status
+                  y: 48
                   text: "---"
-                  text_font: font_large
+                  text_font: font_small
                   text_color: col_text
 
               - label:
-                  y: 90
-                  text: "Fallback Duty ON (sec)"
+                  y: 80
+                  text: "Compressor:"
                   text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_fallback_on_val
-                  y: 118
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+                  text_color: col_subtext
+              - obj:
+                  y: 100
+                  width: 400
+                  height: 30
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - led:
+                        x: 0
+                        y: 8
+                        width: 14
+                        height: 14
+                        color: col_green
+                        brightness: 0%
+                    - label:
+                        x: 20
+                        y: 4
+                        text: "---"
+                        text_font: font_small
+                        text_color: col_text
 
               - label:
-                  y: 180
-                  text: "Fallback Duty OFF (sec)"
+                  y: 150
+                  text: "Defrost:"
                   text_font: font_small
-                  text_color: col_text
+                  text_color: col_subtext
+              - obj:
+                  y: 170
+                  width: 400
+                  height: 30
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - led:
+                        x: 0
+                        y: 8
+                        width: 14
+                        height: 14
+                        color: col_blue
+                        brightness: 0%
+                    - label:
+                        x: 20
+                        y: 4
+                        text: "---"
+                        text_font: font_small
+                        text_color: col_text
+
               - label:
-                  id: lbl_fallback_off_val
-                  y: 208
-                  text: "---"
-                  text_font: font_large
+                  y: 220
+                  text: "Lockout Timer:"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_lockout_timer_display
+                  y: 240
+                  text: "0 min"
+                  text_font: font_small
                   text_color: col_text
 
         # Tab bar buttons
@@ -2928,50 +3226,74 @@ lvgl:
             widgets:
               - label:
                   y: 0
-                  text: "IP Address"
+                  text: "System Memory"
                   text_font: font_small
-                  text_color: col_text
+                  text_color: col_subtext
               - label:
-                  id: lbl_info_ip
-                  y: 28
+                  id: lbl_info_heap
+                  y: 24
                   text: "---"
-                  text_font: font_large
+                  text_font: font_small
                   text_color: col_text
 
               - label:
-                  y: 90
-                  text: "WiFi SSID"
+                  y: 50
+                  text: "PSRAM Status"
                   text_font: font_small
-                  text_color: col_text
+                  text_color: col_subtext
               - label:
-                  id: lbl_info_ssid
-                  y: 118
+                  id: lbl_info_psram
+                  y: 74
                   text: "---"
-                  text_font: font_large
+                  text_font: font_small
                   text_color: col_text
 
               - label:
-                  y: 180
-                  text: "RS485 Status"
+                  y: 110
+                  text: "RS485 Bus Status"
                   text_font: font_small
-                  text_color: col_text
+                  text_color: col_subtext
               - label:
                   id: lbl_info_rs485
-                  y: 208
+                  y: 134
                   text: "---"
-                  text_font: font_large
+                  text_font: font_small
                   text_color: col_text
 
               - label:
-                  y: 270
-                  text: "SD Card Free (MB)"
+                  y: 170
+                  text: "Probe Health"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_info_probes
+                  y: 194
+                  text: "---"
                   text_font: font_small
                   text_color: col_text
+
               - label:
-                  id: lbl_info_sd
-                  y: 298
+                  y: 230
+                  text: "WiFi SSID"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_info_ssid
+                  y: 254
                   text: "---"
-                  text_font: font_large
+                  text_font: font_small
+                  text_color: col_text
+
+              - label:
+                  y: 290
+                  text: "IP Address"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_info_ip
+                  y: 314
+                  text: "---"
+                  text_font: font_small
                   text_color: col_text
 
         # Tab bar buttons

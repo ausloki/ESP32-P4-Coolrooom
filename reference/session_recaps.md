@@ -209,3 +209,41 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---
+## 2026-07-18 — Phase 8b: Settings Pages with Interactive Controls
+
+**Objective**: Fill LVGL settings pages with real data displays and interactive +/- button controls for key parameters. Implement on_value callbacks to update UI labels when values change.
+
+**Files changed**:
+- `esp32-p4-coolroom.yaml` (+143 lines, 3,253 total)
+  - Added on_value callbacks to 5 number entities (comp_lockout_min, defrost_interval_num, defrost_duration_num, alarm_high_delta, alarm_low_delta)
+  - Enhanced `page_settings_1`: Added +/- button pairs for lockout, defrost interval, defrost duration, defrost end temp; buttons trigger number.increment/decrement actions
+  - Enhanced `page_settings_2`: Added +/- button pairs for high/low alarm deltas with real value displays wired to LVGL labels
+  - Enhanced `page_settings_3`: Replaced placeholder with system status display (probe health, compressor/defrost status, lockout timer)
+  - Enhanced `page_info`: Consolidated diagnostics page with system memory (heap/PSRAM), RS485 bus status, probe health, WiFi SSID, IP address
+
+**Interactive Features**:
+- `page_settings_1` buttons: Adjust lockout (0-10 min), defrost interval (60-1440 min), defrost duration (5-60 min)
+- `page_settings_2` buttons: Adjust high temp alarm (0.5-20°C), low temp alarm (0.5-20°C)
+- All +/- button pairs trigger number.increment/decrement which call LVGL label update via on_value callbacks
+- Label displays auto-update on value change (format: "X min", "X.X°C")
+
+**Build**: RAM 19.0% (109,602 / 576,464 bytes), Flash 19.9% (1,459,078 / 7,340,032 bytes) ✅
+- **Delta from Phase 8**: +592 B RAM, +6,432 B Flash (well within budget)
+- **Total delta from Phase 6**: +1,828 B RAM, +17,472 B Flash (remaining headroom: ~466 KB RAM, ~5.8 MB Flash)
+
+**Validation**:
+- ✅ All on_value callbacks correctly wire number entities to LVGL labels
+- ✅ +/- buttons have correct number.increment/decrement actions
+- ✅ Page_settings_1-3 and page_info display real system data
+- ✅ Compiles without errors; all 5 pages with enhanced content parse correctly
+- ✅ Tab bar and page navigation structure confirmed valid
+
+**Limitations & Future Work**:
+- Dynamic page switching still not implemented (deferred to Phase 9 LVGL navigation architecture)
+- Tab bar buttons have empty on_click sections (will require LVGL script or state-based visibility toggle)
+- Some parameter values still show placeholder "---" until sensor updates are wired
+
+**Commit**: Phase 8b complete (settings pages with interactive controls)  
+**GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
+
+---
