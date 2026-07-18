@@ -153,10 +153,15 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 
 **GPIO 20 — Door Reed Sensor:**
 - Connected to external GPIO header (item 24, 2×12 connector)
-- Normally-closed (NC) reed switch — reads LOW when door closed, HIGH when open
+- Reed switch can be configured as NC (Normally Closed) or NO (Normally Open)
 - INPUT_PULLUP mode pulls to 3.3V, reed pulls to GND when closed
+- **Web GUI Toggle:** "Door Sensor Mode + Light Relay" switch (Phase 5)
+  - ON = NC mode (switch closed when door closed) + Light Relay ON
+  - OFF = NO mode (switch open when door closed) + Light Relay OFF
 - Integration: Binary sensor `door_reed_sensor` → `ctl_door_alarm_active` flag
+- **Light Relay Control:** Automatically toggles light relay when door opens/closes
 - Control logic: Compressor disabled when door is open (safety interlock)
+- Global variable: `ctl_door_sensor_mode_is_nc` (persistent across restarts)
 
 ---
 
