@@ -145,6 +145,21 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 
 ---
 
+## ✅ USER GPIO — Field I/O Devices
+
+| GPIO | Function           | Device          | Status           |
+|------|--------------------|-----------------|------------------|
+| 20   | Door reed sensor   | Normally-closed | ✅ INPUT_PULLUP  |
+
+**GPIO 20 — Door Reed Sensor:**
+- Connected to external GPIO header (item 24, 2×12 connector)
+- Normally-closed (NC) reed switch — reads LOW when door closed, HIGH when open
+- INPUT_PULLUP mode pulls to 3.3V, reed pulls to GND when closed
+- Integration: Binary sensor `door_reed_sensor` → `ctl_door_alarm_active` flag
+- Control logic: Compressor disabled when door is open (safety interlock)
+
+---
+
 ## Key Architectural Notes
 
 1. **No on-chip WiFi.** The ESP32-P4 has no WiFi/Bluetooth silicon. All wireless communication goes through the ESP32-C6 co-processor via SDIO using the `esp_hosted` framework and ESPHome's `esp32_hosted` component.

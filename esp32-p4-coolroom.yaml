@@ -519,6 +519,26 @@ switch:
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Siren OFF");
 
+  # ── Door Sensor Mode (NC=on / NO=off) & Light Relay Control ────────────────
+  - platform: template
+    id: door_sensor_mode_light_control
+    name: "Door Sensor Mode + Light Relay"
+    icon: "mdi:door"
+    web_server:
+      sorting_group_id: group_door
+      sorting_weight: 3
+    turn_on_action:
+      - lambda: |-
+          id(ctl_door_sensor_mode_is_nc) = true;
+          id(relay_light).turn_on();
+          ESP_LOGI("door", "Door sensor mode: NC (Normally Closed) + Light ON");
+    turn_off_action:
+      - lambda: |-
+          id(ctl_door_sensor_mode_is_nc) = false;
+          id(relay_light).turn_off();
+          ESP_LOGI("door", "Door sensor mode: NO (Normally Open) + Light OFF");
+    lambda: 'return id(ctl_door_sensor_mode_is_nc);'
+
 ##############################################################################
 # Sensors — all temperature probes are RS485 RTD
 ##############################################################################
@@ -1040,6 +1060,32 @@ binary_sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 37
     lambda: 'return id(ctl_sensor_fallback_active);'
+
+  # ── GPIO 20: Door Reed Sensor (normally closed, opens when door opened) ────
+  - platform: gpio
+    id: door_reed_sensor
+    name: "Door Reed Sensor"
+    pin:
+      number: 20
+      mode: INPUT_PULLUP
+    device_class: door
+    web_server:
+      sorting_group_id: group_door
+      sorting_weight: 2
+    on_state:
+      - lambda: |-
+          // If mode is NC (true): x=false→closed, x=true→open
+          // If mode is NO (false): x=false→open, x=true→closed
+          bool door_is_open = id(ctl_door_sensor_mode_is_nc) ? x : !x;
+          id(ctl_door_alarm_active) = door_is_open;
+          
+          if (door_is_open) {
+            id(relay_light).turn_on();
+            ESP_LOGI("door", "Door OPEN — triggering alarm & light");
+          } else {
+            id(relay_light).turn_off();
+            ESP_LOGI("door", "Door closed");
+          }
 
   - platform: template
     id: defrost_drip_sensor
@@ -2097,6 +2143,12 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
+
+  # ── Door sensor mode (NC=true, NO=false) ───────────────────────────────────
+  - id: ctl_door_sensor_mode_is_nc
+    type: bool
+    restore_value: yes
+    initial_value: "true"
 
   - id: ctl_defrost_dripping
     type: bool

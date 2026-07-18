@@ -46,6 +46,7 @@
 | GT911 Touch INT | 23 | Schematic |
 | GT911 Touch RST | 33 | Schematic |
 | Display Backlight | 32 | Schematic |
+| Door Reed Sensor | 20 | GPIO header (Phase 5) |
 
 **Reserved** (never reuse): 6, 7-8, 9-13, 14-19, 23, 26-27, 32-33, 39-44, 53-54
 
