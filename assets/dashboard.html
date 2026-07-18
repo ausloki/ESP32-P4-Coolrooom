@@ -16,6 +16,100 @@
             max-width: 1400px;
             margin: 0 auto;
         }
+        
+        /* Login Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background-color: white;
+            margin: auto;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            width: 400px;
+            max-width: 90%;
+        }
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #003d82;
+        }
+        .modal-form-group {
+            margin-bottom: 15px;
+        }
+        .modal-form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .modal-form-group input, .modal-form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .modal-form-group input:focus {
+            outline: none;
+            border-color: #003d82;
+            box-shadow: 0 0 4px rgba(0,61,130,0.3);
+        }
+        .modal-button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-button-group button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .modal-button-group button.primary {
+            background: #003d82;
+            color: white;
+        }
+        .modal-button-group button.primary:hover {
+            background: #002447;
+        }
+        .modal-button-group button.secondary {
+            background: #ddd;
+            color: #333;
+        }
+        .modal-button-group button.secondary:hover {
+            background: #ccc;
+        }
+        .modal-info {
+            background: #e8f4f8;
+            border-left: 4px solid #003d82;
+            padding: 10px;
+            margin-top: 15px;
+            font-size: 12px;
+            color: #555;
+        }
+        .logout-button {
+            background: #dc3545 !important;
+            color: white !important;
+            padding: 8px 16px !important;
+            border-radius: 4px !important;
+            border: none !important;
+            cursor: pointer !important;
+            font-size: 12px !important;
+        }
+        .logout-button:hover {
+            background: #c82333 !important;
+        }
         header {
             background: #003d82;
             color: white;
@@ -159,6 +253,33 @@
             background: #c82333;
         }
         
+        .alert {
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        .alert-info {
+            background: #d1ecf1;
+            border-color: #0c5460;
+            color: #0c5460;
+        }
+        .alert-success {
+            background: #d4edda;
+            border-color: #155724;
+            color: #155724;
+        }
+        .alert-warning {
+            background: #fff3cd;
+            border-color: #856404;
+            color: #856404;
+        }
+        .alert-danger, .alert-error {
+            background: #f8d7da;
+            border-color: #721c24;
+            color: #721c24;
+        }
+        
         footer {
             text-align: center;
             color: #666;
@@ -181,6 +302,8 @@
             <div class="right">
                 <div class="role-badge" id="roleBadge">Loading...</div>
                 <div style="font-size: 12px; margin-top: 8px;">User: <span id="currentUser">---</span></div>
+                <div style="font-size: 11px; margin-top: 4px; color: #ffcc00;" id="inactivityWarning"></div>
+                <button class="logout-button" onclick="logout()">🚪 Logout</button>
             </div>
         </header>
 
@@ -285,6 +408,39 @@
                     <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
                     <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
                 </div>
+                <div>
+                    <h3>User Management</h3>
+                    <button onclick="openUserManagement()">👥 Manage Users</button>
+                </div>
+            </div>
+            
+            <!-- User Management Modal -->
+            <div id="userMgmtModal" class="modal">
+                <div class="modal-content" style="width: 600px;">
+                    <h2>👥 User Management</h2>
+                    <div id="userList" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                        <!-- Users will be listed here -->
+                    </div>
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
+                        <h3 style="margin-bottom: 15px;">Change User Password</h3>
+                        <div class="modal-form-group">
+                            <label for="pwChangeUser">Username</label>
+                            <select id="pwChangeUser" style="width: 100%; padding: 8px;">
+                                <option value="">Select user...</option>
+                                <option value="admin">admin (Administrator)</option>
+                                <option value="superadmin">superadmin (Super Administrator)</option>
+                            </select>
+                        </div>
+                        <div class="modal-form-group">
+                            <label for="pwChangeNew">New Password</label>
+                            <input type="password" id="pwChangeNew" placeholder="Enter new password">
+                        </div>
+                        <div class="modal-button-group">
+                            <button class="primary" onclick="changePassword()">Update Password</button>
+                            <button class="secondary" onclick="closeUserManagement()">Close</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -300,10 +456,53 @@
         </footer>
     </div>
 
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal show">
+        <div class="modal-content">
+            <h2>🔐 Coolroom Access</h2>
+            <div class="modal-form-group">
+                <label for="loginUsername">Username</label>
+                <input type="text" id="loginUsername" placeholder="admin, guest, or superadmin">
+            </div>
+            <div class="modal-form-group">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" placeholder="Leave empty for guest">
+            </div>
+            <div class="modal-button-group">
+                <button class="primary" onclick="handleLogin()">Login</button>
+            </div>
+            <div class="modal-info">
+                <strong>Demo Users:</strong><br>
+                👤 guest (no password)<br>
+                🔑 admin / P@lli5ter<br>
+                🔴 superadmin / P@lli5ter
+            </div>
+        </div>
+    </div>
+
     <script>
         // ═══════════════════════════════════════════════════════════════════════════════
-        // ROLE-BASED ACCESS CONTROL
+        // USER AUTHENTICATION & ROLE-BASED ACCESS CONTROL
         // ═══════════════════════════════════════════════════════════════════════════════
+        
+        // User database with roles and passwords
+        const USER_DATABASE = {
+            guest: {
+                role: 'guest',
+                password: '', // No password for guest
+                name: 'Guest User'
+            },
+            admin: {
+                role: 'admin',
+                password: 'P@lli5ter',
+                name: 'Administrator'
+            },
+            superadmin: {
+                role: 'superadmin',
+                password: 'P@lli5ter',
+                name: 'Super Administrator'
+            }
+        };
         
         const ROLE_PERMISSIONS = {
             guest: {
@@ -328,26 +527,220 @@
         
         let currentRole = 'guest';
         let currentUser = 'unknown';
+        let authToken = null;
         const API_URL = '/api/states';
         let tempChart = null;
+        
+        // Session timeout tracking
+        const SESSION_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
+        let inactivityTimer = null;
+        let lastActivityTime = Date.now();
 
-        // Initialize: Determine user role from localStorage or URL params
-        function initializeRole() {
-            // Try to get role from URL parameter (for testing)
-            const params = new URLSearchParams(window.location.search);
-            const roleParam = params.get('role');
-            
-            if (roleParam && ROLE_PERMISSIONS[roleParam]) {
-                currentRole = roleParam;
-            } else {
-                // Default to guest
-                currentRole = 'guest';
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // INACTIVITY TIMEOUT MANAGEMENT
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        function resetInactivityTimer() {
+            // Only enforce for non-guest users
+            if (currentRole === 'guest') {
+                return;
             }
             
-            // Get username (from localStorage or default)
-            currentUser = localStorage.getItem('currentUser') || 'guest';
+            lastActivityTime = Date.now();
             
-            // Update UI
+            // Clear existing timer
+            if (inactivityTimer) {
+                clearTimeout(inactivityTimer);
+            }
+            
+            // Update warning display
+            updateInactivityDisplay();
+            
+            // Set new timeout
+            inactivityTimer = setTimeout(() => {
+                showAlert('warning', 'Session expired due to inactivity. Logging out...');
+                setTimeout(() => {
+                    logout();
+                }, 2000);
+            }, SESSION_TIMEOUT);
+        }
+
+        function updateInactivityDisplay() {
+            if (currentRole === 'guest') {
+                return;
+            }
+            
+            const warningDiv = document.getElementById('inactivityWarning');
+            if (!warningDiv) return;
+            
+            // Update every second
+            const displayInterval = setInterval(() => {
+                if (currentRole === 'guest') {
+                    clearInterval(displayInterval);
+                    warningDiv.textContent = '';
+                    return;
+                }
+                
+                const elapsed = Date.now() - lastActivityTime;
+                const remaining = Math.max(0, SESSION_TIMEOUT - elapsed);
+                const minutes = Math.floor(remaining / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                
+                if (remaining > 0) {
+                    warningDiv.textContent = `⏱️ Logout in ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                } else {
+                    warningDiv.textContent = '';
+                    clearInterval(displayInterval);
+                }
+            }, 1000);
+        }
+
+        function setupActivityListeners() {
+            // Track mouse movement
+            document.addEventListener('mousemove', resetInactivityTimer, false);
+            
+            // Track keyboard input
+            document.addEventListener('keydown', resetInactivityTimer, false);
+            
+            // Track mouse clicks
+            document.addEventListener('click', resetInactivityTimer, false);
+            
+            // Track scrolling
+            document.addEventListener('scroll', resetInactivityTimer, false);
+            
+            // Track touch events (for mobile)
+            document.addEventListener('touchstart', resetInactivityTimer, false);
+            document.addEventListener('touchend', resetInactivityTimer, false);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // AUTHENTICATION FUNCTIONS
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            // Validate credentials
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            
+            if (!USER_DATABASE[username]) {
+                alert('User not found');
+                return;
+            }
+            
+            const user = USER_DATABASE[username];
+            
+            // Check password (guest has no password)
+            if (user.password && user.password !== password) {
+                alert('Invalid password');
+                return;
+            }
+            
+            // Authentication successful
+            currentUser = username;
+            currentRole = user.role;
+            authToken = generateAuthToken(username);
+            
+            // Save session to localStorage
+            localStorage.setItem('authUser', username);
+            localStorage.setItem('authToken', authToken);
+            localStorage.setItem('authRole', user.role);
+            
+            // Hide login modal and show dashboard
+            hideLoginModal();
+            initializeRole();
+            fetchStatus();
+            
+            // Start inactivity timer for non-guest users
+            if (currentRole !== 'guest') {
+                setupActivityListeners();
+                resetInactivityTimer();
+            }
+        }
+
+        function generateAuthToken(username) {
+            // Simple token generation (in production, use JWT)
+            return btoa(`${username}:${Date.now()}`);
+        }
+
+        function logout() {
+            // Clear inactivity timer
+            if (inactivityTimer) {
+                clearTimeout(inactivityTimer);
+            }
+            
+            // Remove activity listeners
+            document.removeEventListener('mousemove', resetInactivityTimer, false);
+            document.removeEventListener('keydown', resetInactivityTimer, false);
+            document.removeEventListener('click', resetInactivityTimer, false);
+            document.removeEventListener('scroll', resetInactivityTimer, false);
+            document.removeEventListener('touchstart', resetInactivityTimer, false);
+            document.removeEventListener('touchend', resetInactivityTimer, false);
+            
+            // Clear session
+            localStorage.removeItem('authUser');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('authRole');
+            
+            // Reset variables
+            currentUser = 'unknown';
+            currentRole = 'guest';
+            authToken = null;
+            
+            // Show login modal
+            showLoginModal();
+        }
+
+        function showLoginModal() {
+            document.getElementById('loginModal').classList.add('show');
+        }
+
+        function hideLoginModal() {
+            document.getElementById('loginModal').classList.remove('show');
+            
+            // Start inactivity timer for non-guest users
+            if (currentRole !== 'guest') {
+                setupActivityListeners();
+                resetInactivityTimer();
+            }
+        }
+
+        function checkAuth() {
+            const savedUser = localStorage.getItem('authUser');
+            const savedToken = localStorage.getItem('authToken');
+            
+            if (savedUser && savedToken && USER_DATABASE[savedUser]) {
+                currentUser = savedUser;
+                currentRole = USER_DATABASE[savedUser].role;
+                authToken = savedToken;
+                hideLoginModal();
+                
+                // Start inactivity timer for non-guest users
+                if (currentRole !== 'guest') {
+                    setupActivityListeners();
+                    resetInactivityTimer();
+                }
+            } else {
+                showLoginModal();
+            }
+        }
+
+        // Initialize authentication on page load
+        window.addEventListener('load', () => {
+            checkAuth();
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // ROLE-BASED ACCESS CONTROL
+// ═══════════════════════════════════════════════════════════════════════════════
+        // UI INITIALIZATION & ROLE DISPLAY
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        function initializeRole() {
             updateRoleDisplay();
             updateUIForRole();
         }
@@ -390,7 +783,7 @@
         }
 
         function disableAllButtons() {
-            document.querySelectorAll('button:not(#roleSwitch)').forEach(btn => {
+            document.querySelectorAll('button:not(.logout-button)').forEach(btn => {
                 btn.disabled = true;
                 btn.title = 'Insufficient permissions';
             });
@@ -606,6 +999,95 @@
             showAlert('info', 'Hardware configuration page would open');
         }
 
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // USER MANAGEMENT FUNCTIONS (SUPERADMIN ONLY)
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        function openUserManagement() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can manage users');
+                return;
+            }
+            
+            // Populate user list
+            displayUserList();
+            document.getElementById('userMgmtModal').classList.add('show');
+        }
+
+        function closeUserManagement() {
+            document.getElementById('userMgmtModal').classList.remove('show');
+        }
+
+        function displayUserList() {
+            const userListDiv = document.getElementById('userList');
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<tr style="border-bottom: 2px solid #ddd; padding: 10px 0;">';
+            html += '<th style="text-align: left; padding: 10px;">Username</th>';
+            html += '<th style="text-align: left; padding: 10px;">Role</th>';
+            html += '<th style="text-align: left; padding: 10px;">Status</th>';
+            html += '</tr>';
+            
+            Object.entries(USER_DATABASE).forEach(([username, user]) => {
+                const bgColor = username === currentUser ? '#e8f4f8' : 'transparent';
+                const status = username === currentUser ? '(Current User)' : 'Inactive';
+                html += `<tr style="border-bottom: 1px solid #eee; background: ${bgColor};">`;
+                html += `<td style="padding: 10px;"><strong>${username}</strong></td>`;
+                html += `<td style="padding: 10px;">${user.role}</td>`;
+                html += `<td style="padding: 10px; color: #666; font-size: 12px;">${status}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</table>';
+            html += '<div style="margin-top: 15px; font-size: 12px; background: #f0f0f0; padding: 10px; border-radius: 4px;">';
+            html += '<strong>Default Password:</strong> P@lli5ter (for admin & superadmin)<br>';
+            html += '<strong>Guest:</strong> No password required<br>';
+            html += '<strong>Only SuperAdmin can change passwords</strong>';
+            html += '</div>';
+            
+            userListDiv.innerHTML = html;
+        }
+
+        function changePassword() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can change passwords');
+                return;
+            }
+            
+            const username = document.getElementById('pwChangeUser').value;
+            const newPassword = document.getElementById('pwChangeNew').value;
+            
+            if (!username) {
+                alert('Please select a user');
+                return;
+            }
+            
+            if (!newPassword) {
+                alert('Please enter a new password');
+                return;
+            }
+            
+            if (!USER_DATABASE[username]) {
+                alert('User not found');
+                return;
+            }
+            
+            // Update password
+            USER_DATABASE[username].password = newPassword;
+            
+            // Save to localStorage (in production, this would be saved server-side)
+            localStorage.setItem('userDB', JSON.stringify(USER_DATABASE));
+            
+            showAlert('success', `Password for ${username} has been updated`);
+            
+            // Reset form
+            document.getElementById('pwChangeUser').value = '';
+            document.getElementById('pwChangeNew').value = '';
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // INITIALIZATION & AUTO-REFRESH
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
         // Initialize and start auto-refresh
         initializeRole();
         setInterval(fetchStatus, 10000);
