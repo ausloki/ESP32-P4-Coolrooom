@@ -29,8 +29,8 @@
 #
 # PHASE STATUS
 #   Phase 1: WiFi, HA native API, web server, OTA            ✓
-#   Phase 2: RS485 Modbus — relays + 3x RTD probes           ← CURRENT
-#   Phase 3: Coolroom control logic
+#   Phase 2: RS485 Modbus — relays + 3x RTD probes           ✓
+#   Phase 3: Coolroom control logic                          ← CURRENT
 #   Phase 4: LVGL 7" MIPI-DSI touchscreen UI
 #   Phase 5: SD card logging, ntfy, backup/restore
 ##############################################################################
@@ -55,9 +55,9 @@ substitutions:
   i2c_sda_pin: GPIO7
   i2c_scl_pin: GPIO8
 
-  # ── RS485 UART (⚠️  VERIFY FROM SCHEMATIC — GPIO35/36 are estimates) ──────
-  rs485_tx_pin: GPIO35
-  rs485_rx_pin: GPIO36
+  # ── RS485 UART (✅ CONFIRMED from Waveshare 13_RS485_Test example) ────────
+  rs485_tx_pin: GPIO27
+  rs485_rx_pin: GPIO26
 
   # ── Relay board ───────────────────────────────────────────────────────────
   modbus_relay_address: "1"
@@ -75,14 +75,15 @@ substitutions:
   rtd2_temp_reg_ch1:   "1"
 
   # ── WiFi co-processor (ESP32-C6 via SDIO) ─────────────────────────────────
-  # ⚠️  VERIFY ALL PINS FROM SCHEMATIC
-  wifi_sdio_clk_pin: GPIO25
-  wifi_sdio_cmd_pin: GPIO26
-  wifi_sdio_d0_pin:  GPIO27
-  wifi_sdio_d1_pin:  GPIO28
-  wifi_sdio_d2_pin:  GPIO29
-  wifi_sdio_d3_pin:  GPIO30
+  # ✅ CONFIRMED from Waveshare esp32_p4_function_ev_board.h (CONFIG_BSP_BOARD_TYPE_FIB)
+  wifi_sdio_clk_pin: GPIO18
+  wifi_sdio_cmd_pin: GPIO19
+  wifi_sdio_d0_pin:  GPIO14
+  wifi_sdio_d1_pin:  GPIO15
+  wifi_sdio_d2_pin:  GPIO16
+  wifi_sdio_d3_pin:  GPIO17
   wifi_c6_reset_pin: GPIO54
+  wifi_c6_wakeup_pin: GPIO6
 
   # ── Control defaults ──────────────────────────────────────────────────────
   default_setpoint_c:   "2.0"
@@ -132,7 +133,7 @@ psram:
 
 ##############################################################################
 # WiFi via ESP32-C6 co-processor (ESP-Hosted SDIO)
-# ⚠️  SDIO PINS UNCONFIRMED — verify from schematic before first WiFi use
+# ✅ SDIO PINS CONFIRMED from Waveshare esp32_p4_function_ev_board.h (FIB variant)
 ##############################################################################
 
 esp32_hosted:
@@ -202,6 +203,19 @@ time:
           ESP_LOGI("ntp", "Sync complete — switching to normal interval");
           p4_ntp_set_interval(${ntp_normal_sync_ms});
 
+  # PCF8563 external RTC (battery-backed, synced from NTP via ESP32 internal RTC)
+  # ⚠️ RTC CHIP: PCF8563 assumed from Waveshare convention. See reference/RTC_PCF8563_Configuration.md.
+  #    Verify from board schematic PDF if I2C scan does not show 0x51.
+  - platform: pcf8563
+    id: rtc_pcf8563
+    i2c_id: i2c_bus
+    address: 0x51                        # PCF8563 fixed I2C address
+    update_interval: 60s
+    on_time_sync:
+      - lambda: |-
+          ESP_LOGI("rtc", "PCF8563 synced from NTP");
+          id(hw_rtc_ok) = true;
+
 logger:
   level: INFO
   hardware_uart: USB_SERIAL_JTAG
@@ -263,7 +277,7 @@ i2c:
 
 ##############################################################################
 # RS485 / Modbus
-# ⚠️  UART PINS UNCONFIRMED — verify rs485_tx_pin/rx_pin from schematic
+# ✅ UART PINS CONFIRMED from Waveshare 13_RS485_Test example (GPIO 27 TX / 26 RX)
 ##############################################################################
 
 uart:
@@ -673,6 +687,15 @@ binary_sensor:
       sorting_weight: 32
     lambda: 'return id(hw_rs485_rtd2_ok);'
 
+  - platform: template
+    id: rtc_online
+    name: "RTC (PCF8563) Online"
+    device_class: connectivity
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 33
+    lambda: 'return id(hw_rtc_ok);'
+
 ##############################################################################
 # Number Entities — NVS-persistent control parameters
 ##############################################################################
@@ -821,6 +844,12 @@ globals:
     initial_value: "false"
 
   - id: hw_rs485_rtd2_ok
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # ── RTC health flag ────────────────────────────────────────────────────────
+  - id: hw_rtc_ok
     type: bool
     restore_value: no
     initial_value: "false"

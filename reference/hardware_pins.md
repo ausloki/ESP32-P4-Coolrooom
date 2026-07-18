@@ -47,20 +47,19 @@ Source: Waveshare ESP-IDF tutorial, section 6 I2S Audio Example.
 
 ---
 
-## ⚠️ UNCONFIRMED PINS — VERIFY FROM SCHEMATIC BEFORE DEPLOYMENT
+## ✅ CONFIRMED PINS (from Waveshare official examples)
 
-Download schematic: https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf
+Download schematic for further verification: https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf
 
 ### RS485 Header (PH2.0 4-PIN — item 22)
 | Signal    | GPIO  | Status                |
 |-----------|-------|-----------------------|
-| UART TX   | ?     | VERIFY FROM SCHEMATIC |
-| UART RX   | ?     | VERIFY FROM SCHEMATIC |
+| UART TX   | 27    | ✅ CONFIRMED          |
+| UART RX   | 26    | ✅ CONFIRMED          |
 | VCC (5V)  | PWR   | Power only            |
 | GND       | GND   | Power only            |
 
-Likely candidate: UART1 or UART4 on the ESP32-P4. Possible GPIO: 35/36, 32/33, or 14/15.  
-Check schematic net names `UART_RXD` / `UART_TXD` near the RS485 header footprint.
+Source: Waveshare `examples/ESP-IDF/13_RS485_Test/main/uart_echo_example_main.c` (ECHO_TEST_TXD=27, ECHO_TEST_RXD=26).
 
 ### WiFi Co-processor (ESP32-C6 via SDIO — item 2)
 The C6 module connects to SDMMC host slot 0 on the ESP32-P4.  
@@ -68,17 +67,16 @@ The TF card uses slot 1 (GPIO 39-44). Slot 0 uses a separate pin set.
 
 | Signal        | GPIO  | Status                |
 |---------------|-------|-----------------------|
-| SDIO CLK      | ?     | VERIFY FROM SCHEMATIC |
-| SDIO CMD      | ?     | VERIFY FROM SCHEMATIC |
-| SDIO D0       | ?     | VERIFY FROM SCHEMATIC |
-| SDIO D1       | ?     | VERIFY FROM SCHEMATIC |
-| SDIO D2       | ?     | VERIFY FROM SCHEMATIC |
-| SDIO D3       | ?     | VERIFY FROM SCHEMATIC |
-| ESP32-C6 RESET| ?     | VERIFY FROM SCHEMATIC |
+| SDIO CLK      | 18    | ✅ CONFIRMED          |
+| SDIO CMD      | 19    | ✅ CONFIRMED          |
+| SDIO D0       | 14    | ✅ CONFIRMED          |
+| SDIO D1       | 15    | ✅ CONFIRMED          |
+| SDIO D2       | 16    | ✅ CONFIRMED          |
+| SDIO D3       | 17    | ✅ CONFIRMED          |
+| ESP32-C6 WKUP | 6     | ✅ CONFIRMED          |
+| ESP32-C6 RESET| 54    | ✅ CONFIRMED          |
 
-Typical ESP32-P4 reference designs use GPIO 25-30 for SDMMC slot 0, but Waveshare may differ.  
-Check schematic net names `SDIO_CLK` / `SDIO_CMD` / `SDIO_D0..D3` near the C6 module footprint.  
-The C6 reset may share a GPIO with the SDMMC D3 line or use a dedicated GPIO.
+Source: Waveshare `esp32_p4_function_ev_board.h` (CONFIG_BSP_BOARD_TYPE_FIB variant). Board variant detected from I2S audio pins (GPIO 9-13) and I2C pins (GPIO 7/8).
 
 ### Touch Controller (GT911 — item 7)
 The GT911 communicates via I2C. It may share GPIO7/8 with the external I2C header, or use dedicated lines.
@@ -115,11 +113,47 @@ Exact assignments depend on the schematic. Avoid GPIOs in the reserved table abo
 
 ---
 
+## ⚠️ UNCONFIRMED PINS — VERIFY FROM SCHEMATIC
+
+### Touch Controller (GT911 — item 7)
+The GT911 communicates via I2C. It may share GPIO7/8 with the external I2C header, or use dedicated lines.
+
+| Signal    | GPIO  | Status                |
+|-----------|-------|-----------------------|
+| SDA       | 7?    | Likely shared — VERIFY|
+| SCL       | 8?    | Likely shared — VERIFY|
+| INT       | ?     | Interrupt — VERIFY    |
+| RST       | ?     | Reset — VERIFY        |
+
+### Status LED (item 13)
+| Signal    | GPIO  | Status                |
+|-----------|-------|-----------------------|
+| LED       | ?     | VERIFY FROM SCHEMATIC |
+
+---
+
+## 🚫 RESERVED / OCCUPIED GPIO (DO NOT USE)
+
+| GPIO Range | Used By                            |
+|------------|---------------------------------|
+| 9–13       | On-board I2S audio (ES8311 / mics) |
+| 39–44      | TF card SDMMC (slot 1)             |
+| 53         | Audio amplifier enable             |
+| 7–8        | External I2C header + onboard RTC  |
+| 14–19      | ESP32-C6 SDIO co-processor         |
+| 26–27      | RS485 UART                         |
+| 54         | ESP32-C6 reset                     |
+| 6          | ESP32-C6 wakeup                    |
+
+---
+
 ## Key Architectural Notes
 
 1. **No on-chip WiFi.** The ESP32-P4 has no WiFi/Bluetooth silicon. All wireless communication goes through the ESP32-C6 co-processor via SDIO using the `esp_hosted` framework and ESPHome's `esp32_hosted` component.
 
-2. **Mandatory: Verify SDIO WiFi pins before first flash.** The `esp32_hosted` config in `esp32-p4-coolroom.yaml` contains placeholder SDIO pins. The device will not achieve WiFi connectivity until these match the schematic.
+2. **SDIO WiFi pins confirmed** from Waveshare `esp32_p4_function_ev_board.h` FIB variant (GPIO 14-19, 6, 54). Applied to `esp32-p4-coolroom.yaml` as of Phase 2/3 boundary commit.
+
+3. **RS485 UART pins confirmed** from Waveshare `13_RS485_Test` example (GPIO 27 TX, 26 RX). Applied to YAML same commit.
 
 3. **Mandatory: Verify RS485 UART pins before RS485 devices work.** The relay board and RTD sensor require the correct UART TX/RX pin assignments.
 

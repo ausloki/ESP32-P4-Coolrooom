@@ -126,3 +126,11 @@ inline float p4_free_heap_kb() {
 inline float p4_free_psram_kb() {
     return static_cast<float>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)) / 1024.0f;
 }
+
+// ─── RTC Notes ──────────────────────────────────────────────────────────────
+// The ESP32-P4 board has an onboard PCF8563 RTC (item 11, I2C addr 0x51).
+// ESPHome's pcf8563 component handles all RTC I2C communication.
+// Call id(rtc_pcf8563).now() from lambdas to get the RTC time.
+//
+// The RTC is synced from the ESP32 internal RTC once NTP syncs.
+// Battery backup preserves time across power cycles.
