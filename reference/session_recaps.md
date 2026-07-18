@@ -92,3 +92,42 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---
+
+## 2026-07-18 — Phase 6: Extended Control Logic (ported from old project)
+
+### What changed
+
+**p4_control.h extended**:
+- `p4_ctl_defrost_timeout()` — restored (was accidentally removed)
+- `p4_ctl_comp_locked_out()` — compressor off-delay lockout protection
+- `p4_ctl_startup_grace()` / `p4_ctl_defrost_grace()` — quiet alarm periods
+- `p4_ctl_alarm_persisted()` — alarm must hold N minutes before firing siren
+- `p4_ctl_alarm_hysteresis_clear()` — hysteresis band to clear alarm
+- `p4_ctl_door_alarm()` — door open duration vs configurable delay
+- `p4_ctl_smart_defrost_ready()` — coolroom-to-evap delta triggered defrost with comp runtime gate
+- `p4_ctl_defrost_term_by_temp()` — evap temperature termination of defrost
+- `p4_ctl_no_cool_alarm()` — compressor runs but room doesn't cool
+- `p4_ctl_ice_alarm()` — evap-coolroom delta too small = ice on evaporator
+- `p4_ctl_fallback_should_run()` — duty-cycle compressor control when probe faults
+
+**esp32-p4-coolroom.yaml**:
+- 17 new Phase 6 substitutions (defaults for all new parameters)
+- 2 new grace globals: `ctl_startup_grace_min`, `ctl_defrost_grace_min`
+- 17 new configurable globals (NVS-persistent control parameters)
+- 13 new runtime state globals (timestamps, alarm flags, fallback state)
+- 9 new input feature flags (NVS-persistent enable/disable switches)
+- 9 new number entities (lockout, defrost timing, alarm persist, door delay, no-cool, ice, fallback)
+- 5 new binary sensors (door alarm, no-cool, ice, fallback active, drip phase)
+- 2 new buttons (manual defrost start/stop)
+- Rewrote 10s control loop with 9 numbered steps (probe fault → grace → fallback → lockout → defrost → compressor → alarms with persist → SD log → ntfy)
+
+**References updated**:
+- `reference/control_logic_ns_diagram.md` — 18 Phase 6 globals added to state flag table
+- `reference/program_control_logic_flowchart.md` — Phase 6 current, Phase 5 complete; Phase 7/8 added to table
+
+**Build**: RAM 18.7% (107.9 KB/576 KB), Flash 19.5% (1.43 MB/7.3 MB) ✅
+
+**Commit**: Phase 6 complete  
+**GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
+
+---

@@ -96,6 +96,24 @@ substitutions:
   default_comp_diff_c:  "1.0"
   default_alarm_high_c: "3.0"
   default_alarm_low_c:  "3.0"
+
+  # ── Phase 6: Extended control parameter defaults ──────────────────────────
+  default_comp_lockout_min:    "3"    # compressor off-delay (minutes)
+  default_startup_grace_min:   "15"   # no alarms for N min after boot
+  default_defrost_grace_min:   "20"   # no alarms for N min after defrost
+  default_alarm_persist_min:   "5"    # alarm must hold N min before siren
+  default_alarm_hysteresis_c:  "0.5"  # temp band to clear alarm (°C)
+  default_no_cool_alarm_min:   "60"   # no-cool alarm after N min compressor run
+  default_door_alarm_delay_s:  "30"   # door open alarm delay (seconds)
+  default_defrost_interval_min: "480"  # defrost every N min (8h)
+  default_defrost_duration_min: "30"   # max defrost on-time (min)
+  default_defrost_drip_min:    "5"    # drip time after defrost (min)
+  default_defrost_end_c:       "5.0"  # evap temp to terminate defrost (°C)
+  default_ice_delta_c:         "2.0"  # coolroom-evap min delta; below = ice alarm
+  default_fallback_on_min:     "3"    # sensor fallback compressor on-time (min)
+  default_fallback_off_min:    "27"   # sensor fallback compressor off-time (min)
+  default_smart_delta_c:       "8.0"  # delta threshold for smart defrost trigger
+  default_smart_dwell_min:     "30"   # delta must hold N min before smart defrost
   # ── Phase 3: Defrost scheduling & probe health ────────────────────
   defrost_interval_h:  "8"      # hours between defrost cycles
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
@@ -851,6 +869,54 @@ binary_sensor:
       sorting_weight: 36
     lambda: 'return id(sd_card_ok);'
 
+  # ── Phase 6: Extended alarm/status indicators ─────────────────────────────
+  - platform: template
+    id: door_alarm_active
+    name: "Door Open Alarm"
+    device_class: door
+    web_server:
+      sorting_group_id: group_door
+      sorting_weight: 1
+    lambda: 'return id(ctl_door_alarm_active);'
+
+  - platform: template
+    id: no_cool_alarm_sensor
+    name: "No-Cool Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 5
+    lambda: 'return id(ctl_no_cool_alarm_active);'
+
+  - platform: template
+    id: ice_alarm_sensor
+    name: "Ice Detect Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 6
+    lambda: 'return id(ctl_ice_alarm_active);'
+
+  - platform: template
+    id: sensor_fallback_sensor
+    name: "Sensor Fallback Active"
+    device_class: running
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 37
+    lambda: 'return id(ctl_sensor_fallback_active);'
+
+  - platform: template
+    id: defrost_drip_sensor
+    name: "Defrost Drip Phase"
+    device_class: running
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 3
+    lambda: 'return id(ctl_defrost_dripping);'
+
 ##############################################################################
 # Number Entities — NVS-persistent control parameters
 ##############################################################################
@@ -922,6 +988,169 @@ number:
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
 
+  # ── Phase 6: Extended control parameters ─────────────────────────────────
+  - platform: template
+    id: comp_lockout_min
+    name: "Compressor Off-Delay (min)"
+    icon: "mdi:timer-lock"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 10
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_compressor
+      sorting_weight: 10
+    lambda: 'return id(ctl_comp_lockout_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_comp_lockout_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_interval_num
+    name: "Defrost Interval (min)"
+    icon: "mdi:snowflake-melt"
+    unit_of_measurement: "min"
+    min_value: 60
+    max_value: 1440
+    step: 30
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 10
+    lambda: 'return id(ctl_defrost_interval_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_interval_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_duration_num
+    name: "Defrost Max Duration (min)"
+    icon: "mdi:timer"
+    unit_of_measurement: "min"
+    min_value: 5
+    max_value: 60
+    step: 5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 11
+    lambda: 'return id(ctl_defrost_duration_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_duration_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_drip_num
+    name: "Defrost Drip Time (min)"
+    icon: "mdi:water-outline"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 30
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 12
+    lambda: 'return id(ctl_defrost_drip_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_drip_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_end_temp
+    name: "Defrost Termination Temp (°C)"
+    icon: "mdi:thermometer-chevron-down"
+    unit_of_measurement: "°C"
+    min_value: 0.0
+    max_value: 15.0
+    step: 0.5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 13
+    lambda: 'return id(ctl_defrost_end_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_end_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: alarm_persist_num
+    name: "Alarm Persist Time (min)"
+    icon: "mdi:timer-alert"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 30
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 10
+    lambda: 'return id(ctl_alarm_persist_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_alarm_persist_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: door_alarm_delay_num
+    name: "Door Alarm Delay (s)"
+    icon: "mdi:door-open"
+    unit_of_measurement: "s"
+    min_value: 0
+    max_value: 300
+    step: 10
+    entity_category: config
+    web_server:
+      sorting_group_id: group_door
+      sorting_weight: 10
+    lambda: 'return id(ctl_door_alarm_delay_s);'
+    set_action:
+      - lambda: |-
+          id(ctl_door_alarm_delay_s) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: no_cool_alarm_num
+    name: "No-Cool Alarm Timeout (min)"
+    icon: "mdi:alert-circle"
+    unit_of_measurement: "min"
+    min_value: 15
+    max_value: 240
+    step: 15
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 11
+    lambda: 'return id(ctl_no_cool_alarm_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_no_cool_alarm_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: ice_delta_num
+    name: "Ice Alarm Delta (°C)"
+    icon: "mdi:snowflake-alert"
+    unit_of_measurement: "°C"
+    min_value: 0.5
+    max_value: 10.0
+    step: 0.5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 12
+    lambda: 'return id(ctl_ice_delta_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_ice_delta_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
   - platform: template
     id: alarm_low_delta
     name: "Low Temp Alarm Delta (°C)"
@@ -962,7 +1191,35 @@ button:
       sorting_group_id: group_system_info
       sorting_weight: 11
 
-  # ── Phase 5: SD card management buttons ─────────────────────────────────
+  # ── Phase 6: Manual defrost control ──────────────────────────────────────
+  - platform: template
+    id: btn_manual_defrost_start
+    name: "Start Manual Defrost"
+    icon: "mdi:snowflake-melt"
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 20
+    on_press:
+      - lambda: |-
+          id(ctl_manual_defrost_req) = true;
+          ESP_LOGI("ctl", "Manual defrost requested via button");
+
+  - platform: template
+    id: btn_manual_defrost_stop
+    name: "Stop Manual Defrost"
+    icon: "mdi:stop-circle"
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 21
+    on_press:
+      - lambda: |-
+          if (id(relay_defrost).state) id(relay_defrost).turn_off();
+          if (id(relay_compressor).state) id(relay_compressor).turn_off();
+          id(ctl_manual_defrost_req) = false;
+          id(ctl_defrost_dripping) = false;
+          id(ctl_defrost_last_end_ms) = millis();
+          ESP_LOGI("ctl", "Manual defrost stopped via button");
+          p4_sd_log_event("DEFROST_MANUAL_STOP", "button");
   - platform: template
     id: btn_sd_backup
     name: "Backup Params to SD"
@@ -1020,92 +1277,203 @@ interval:
   - interval: 10s
     then:
       - lambda: |-
-          // ── 1. Probe health ─────────────────────────────────────────────
-          float t = id(probe1_temp).state;
+          const uint32_t now_ms = millis();
+          float t    = id(probe1_temp).state;
+          float evap = id(probe2_temp).state;
+          bool evap_ok = p4_rtd_valid(evap) && p4_sample_fresh(id(rtd1_ch2_last_ms), ${probe_stale_ms} * 3);
+
+          // ── 1. Probe fault detection ────────────────────────────────────
           bool fault = p4_ctl_probe_fault(t, id(rtd1_ch1_last_ms), ${probe_stale_ms});
           id(ctl_probe_fault) = fault;
+
+          // ── 2. Grace periods ────────────────────────────────────────────
+          const uint32_t startup_grace_ms  = (uint32_t)(id(ctl_startup_grace_min)  * 60000.0f);
+          const uint32_t defrost_grace_ms  = (uint32_t)(id(ctl_defrost_grace_min)  * 60000.0f);
+          const uint32_t alarm_persist_ms  = (uint32_t)(id(ctl_alarm_persist_min)  * 60000.0f);
+          bool in_grace = p4_ctl_startup_grace(id(ctl_boot_ms), startup_grace_ms) ||
+                          p4_ctl_defrost_grace(id(ctl_defrost_last_end_ms), defrost_grace_ms);
+
+          // ── 3. Sensor fallback duty cycle (when probe is faulted) ───────
+          bool fallback_run = p4_ctl_fallback_should_run(
+              fault, id(input_fallback_enabled),
+              id(ctl_fallback_phase_on), id(ctl_fallback_last_toggle_ms),
+              (uint32_t)(id(ctl_fallback_on_min)  * 60000.0f),
+              (uint32_t)(id(ctl_fallback_off_min) * 60000.0f));
           if (fault) {
-              // Safety: cut all actuators when primary probe is faulted
-              id(relay_compressor).turn_off();
-              id(relay_defrost).turn_off();
-              id(relay_siren).turn_on();
-              return;
-          }
-
-          // ── 2. Compressor hysteresis control ────────────────────────────
-          // (skip if defrost relay is active — mutual exclusion via write_lambda too)
-          if (!id(relay_defrost).state) {
-              int cmd = p4_ctl_compressor_eval(
-                  t,
-                  id(ctl_setpoint), id(ctl_comp_diff),
-                  id(relay_compressor).state,
-                  id(rtd1_ch1_last_ms), ${probe_stale_ms}
-              );
-              if (cmd == 1)  id(relay_compressor).turn_on();
-              if (cmd == -1) id(relay_compressor).turn_off();
-          }
-
-          // ── 3. Alarm evaluation ─────────────────────────────────────────
-          bool hi = p4_ctl_alarm_high(t, id(ctl_setpoint), id(ctl_alarm_high_delta));
-          bool lo = p4_ctl_alarm_low(t, id(ctl_setpoint), id(ctl_alarm_low_delta));
-          id(ctl_alarm_high_active) = hi;
-          id(ctl_alarm_low_active)  = lo;
-          if (hi || lo) {
-              if (!id(relay_siren).state) {
-                  ESP_LOGW("ctl", "ALARM: hi=%d lo=%d t=%.1f°C sp=%.1f°C",
-                           (int)hi, (int)lo, t, id(ctl_setpoint));
-                  id(relay_siren).turn_on();
+              id(ctl_sensor_fallback_active) = id(input_fallback_enabled);
+              if (!id(relay_defrost).state) {
+                  if (fallback_run && !id(relay_compressor).state) {
+                      id(relay_compressor).turn_on();
+                      id(ctl_comp_on_since_ms) = now_ms;
+                  } else if (!fallback_run && id(relay_compressor).state) {
+                      id(relay_compressor).turn_off();
+                      id(ctl_comp_last_off_ms) = now_ms;
+                      id(ctl_comp_on_since_ms) = 0;
+                  }
               }
+              // Drive siren for probe fault
+              if (id(input_siren_enabled) && !id(relay_siren).state)
+                  id(relay_siren).turn_on();
           } else {
+              if (id(ctl_sensor_fallback_active)) {
+                  id(ctl_sensor_fallback_active) = false;
+                  id(ctl_fallback_last_toggle_ms) = 0;
+              }
+          }
+
+          // ── 4. Compressor lockout (off-delay protection) ─────────────────
+          const uint32_t lockout_ms = (uint32_t)(id(ctl_comp_lockout_min) * 60000.0f);
+          bool locked_out = p4_ctl_comp_locked_out(id(ctl_comp_last_off_ms), lockout_ms);
+
+          // ── 5. Defrost sequencing (skip if probe fault) ──────────────────
+          if (!fault) {
+              const uint32_t def_interval_ms  = (uint32_t)(id(ctl_defrost_interval_min) * 60000.0f);
+              const uint32_t def_duration_ms  = (uint32_t)(id(ctl_defrost_duration_min) * 60000.0f);
+              const uint32_t drip_ms          = (uint32_t)(id(ctl_defrost_drip_min)     * 60000.0f);
+
+              if (id(ctl_defrost_dripping)) {
+                  // Drip phase: keep compressor off until drip time elapsed
+                  if (id(relay_compressor).state) {
+                      id(relay_compressor).turn_off();
+                      id(ctl_comp_last_off_ms) = now_ms;
+                      id(ctl_comp_on_since_ms) = 0;
+                  }
+                  if ((now_ms - id(ctl_drip_start_ms)) >= drip_ms) {
+                      id(ctl_defrost_dripping) = false;
+                      ESP_LOGI("ctl", "Drip phase complete");
+                  }
+              } else if (id(relay_defrost).state) {
+                  // Defrost running: keep compressor off, watch for end conditions
+                  if (id(relay_compressor).state) {
+                      id(relay_compressor).turn_off();
+                      id(ctl_comp_last_off_ms) = now_ms;
+                      id(ctl_comp_on_since_ms) = 0;
+                  }
+                  bool end_by_temp = evap_ok && id(input_defrost_term_temp_enabled) &&
+                                     p4_ctl_defrost_term_by_temp(evap, id(ctl_defrost_end_c), true);
+                  bool end_by_time = p4_ctl_defrost_timeout(id(ctl_defrost_on_since_ms), def_duration_ms);
+                  if (end_by_temp || end_by_time) {
+                      id(relay_defrost).turn_off();
+                      id(ctl_defrost_last_end_ms) = now_ms;
+                      p4_sd_log_event("DEFROST_END", end_by_temp ? "evap_temp" : "timeout");
+                      if (id(input_defrost_drip_enabled) && drip_ms > 0) {
+                          id(ctl_defrost_dripping) = true;
+                          id(ctl_drip_start_ms) = now_ms;
+                      }
+                  }
+              } else {
+                  // Not defrosting: check if a cycle should start
+                  bool manual_start = id(ctl_manual_defrost_req);
+                  // Smart delta tracking
+                  if (id(input_smart_defrost_enabled) && evap_ok) {
+                      float delta = t - evap;
+                      if (delta >= id(ctl_smart_delta_c) && id(relay_compressor).state) {
+                          if (id(ctl_defrost_delta_since_ms) == 0)
+                              id(ctl_defrost_delta_since_ms) = now_ms;
+                      } else {
+                          id(ctl_defrost_delta_since_ms) = 0;
+                      }
+                  }
+                  bool smart_start = id(input_smart_defrost_enabled) &&
+                      p4_ctl_smart_defrost_ready(t, evap,
+                          id(ctl_smart_delta_c),
+                          id(ctl_defrost_delta_since_ms),
+                          (uint32_t)(id(ctl_smart_dwell_min) * 60000.0f),
+                          id(ctl_comp_on_since_ms),
+                          (uint32_t)(15UL * 60000UL),  // 15 min min comp run
+                          false);
+                  bool time_start = p4_ctl_defrost_due(id(ctl_defrost_last_end_ms), def_interval_ms);
+                  if (manual_start || smart_start || time_start) {
+                      id(ctl_manual_defrost_req) = false;
+                      id(ctl_defrost_delta_since_ms) = 0;
+                      if (id(relay_compressor).state) {
+                          id(relay_compressor).turn_off();
+                          id(ctl_comp_last_off_ms) = now_ms;
+                          id(ctl_comp_on_since_ms) = 0;
+                      }
+                      id(relay_defrost).turn_on();
+                      id(ctl_defrost_on_since_ms) = now_ms;
+                      const char* reason = manual_start ? "manual" : (smart_start ? "smart_delta" : "interval");
+                      ESP_LOGI("ctl", "Defrost started: %s", reason);
+                      p4_sd_log_event("DEFROST_START", reason);
+                  }
+
+                  // ── 6. Compressor hysteresis (skip if defrost, dripping, locked out) ──
+                  if (!locked_out) {
+                      int cmd = p4_ctl_compressor_eval(
+                          t, id(ctl_setpoint), id(ctl_comp_diff),
+                          id(relay_compressor).state,
+                          id(rtd1_ch1_last_ms), ${probe_stale_ms});
+                      if (cmd == 1) {
+                          id(relay_compressor).turn_on();
+                          if (id(ctl_comp_on_since_ms) == 0) id(ctl_comp_on_since_ms) = now_ms;
+                      }
+                      if (cmd == -1) {
+                          if (id(relay_compressor).state) {
+                              id(relay_compressor).turn_off();
+                              id(ctl_comp_last_off_ms) = now_ms;
+                              id(ctl_comp_on_since_ms) = 0;
+                          }
+                      }
+                  }
+              }
+          }
+
+          // ── 7. Alarm evaluation (with grace + persist + hysteresis) ──────
+          if (!fault && !in_grace) {
+              bool raw_hi = p4_ctl_alarm_high(t, id(ctl_setpoint), id(ctl_alarm_high_delta));
+              bool raw_lo = p4_ctl_alarm_low(t, id(ctl_setpoint), id(ctl_alarm_low_delta));
+              // Persist tracking
+              if (raw_hi && id(ctl_high_alarm_since_ms) == 0) id(ctl_high_alarm_since_ms) = now_ms;
+              if (!raw_hi) id(ctl_high_alarm_since_ms) = 0;
+              if (raw_lo && id(ctl_low_alarm_since_ms) == 0) id(ctl_low_alarm_since_ms) = now_ms;
+              if (!raw_lo) id(ctl_low_alarm_since_ms) = 0;
+              bool hi = raw_hi && p4_ctl_alarm_persisted(id(ctl_high_alarm_since_ms), alarm_persist_ms);
+              bool lo = raw_lo && p4_ctl_alarm_persisted(id(ctl_low_alarm_since_ms), alarm_persist_ms);
+              id(ctl_alarm_high_active) = hi;
+              id(ctl_alarm_low_active)  = lo;
+              // No-cool alarm
+              bool nc = p4_ctl_no_cool_alarm(t, id(ctl_setpoint), id(ctl_comp_diff),
+                                              id(relay_compressor).state, id(ctl_comp_on_since_ms),
+                                              (uint32_t)(id(ctl_no_cool_alarm_min) * 60000.0f));
+              id(ctl_no_cool_alarm_active) = nc;
+              // Ice alarm (needs evap probe)
+              bool ice = evap_ok && p4_ctl_ice_alarm(t, evap, id(ctl_ice_delta_c));
+              id(ctl_ice_alarm_active) = ice;
+              // Siren: any active alarm drives it
+              bool any_alarm = hi || lo || nc || ice;
+              if (id(input_siren_enabled)) {
+                  if (any_alarm && !id(relay_siren).state) id(relay_siren).turn_on();
+                  if (!any_alarm && id(relay_siren).state) id(relay_siren).turn_off();
+              }
+          } else if (!fault) {
+              // In grace: clear alarm flags, silence siren
+              id(ctl_alarm_high_active) = false;
+              id(ctl_alarm_low_active)  = false;
+              id(ctl_no_cool_alarm_active) = false;
+              id(ctl_ice_alarm_active)  = false;
               if (id(relay_siren).state) id(relay_siren).turn_off();
           }
 
-          // ── 4. Defrost scheduling ───────────────────────────────────────
-          const uint32_t def_interval_ms = (uint32_t)(${defrost_interval_h}) * 3600000U;
-          const uint32_t def_max_ms      = (uint32_t)(${defrost_max_min})    * 60000U;
-          if (!id(relay_defrost).state) {
-              if (p4_ctl_defrost_due(id(ctl_defrost_last_end_ms), def_interval_ms)) {
-                  ESP_LOGI("ctl", "Starting defrost cycle");
-                  id(relay_compressor).turn_off();
-                  id(relay_defrost).turn_on();
-                  id(ctl_defrost_on_since_ms) = millis();
-              }
-          } else {
-              if (p4_ctl_defrost_timeout(id(ctl_defrost_on_since_ms), def_max_ms)) {
-                  ESP_LOGI("ctl", "Defrost complete (timeout %u min)", (unsigned)${defrost_max_min});
-                  id(relay_defrost).turn_off();
-                  id(ctl_defrost_last_end_ms) = millis();
-                  p4_sd_log_event("DEFROST_END", "timeout");
-              }
-          }
-
-          // ── 5. Phase 5: SD temperature logging ──────────────────────────
-          // Log every log_interval_min minutes (10s ticks)
+          // ── 8. SD temperature logging (Phase 5) ─────────────────────────
           const uint32_t log_every_ticks = (uint32_t)(${log_interval_min}) * 6U;
           id(log_tick_count) = id(log_tick_count) + 1U;
           if (id(sd_card_ok) && id(log_tick_count) >= log_every_ticks) {
               id(log_tick_count) = 0;
               p4_sd_log_temps(
-                  id(probe1_temp).state,
-                  id(probe2_temp).state,
-                  id(probe3_temp).state,
-                  id(ctl_setpoint),
-                  id(relay_compressor).state,
-                  id(relay_defrost).state,
-                  id(ctl_alarm_high_active),
-                  id(ctl_alarm_low_active),
-                  id(ctl_probe_fault));
+                  id(probe1_temp).state, id(probe2_temp).state, id(probe3_temp).state,
+                  id(ctl_setpoint), id(relay_compressor).state, id(relay_defrost).state,
+                  id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_probe_fault));
           }
 
-          // ── 6. Phase 5: ntfy push notifications (edge-triggered) ────────
-          // High alarm: send once on rising edge, clear on falling
-          bool ntfy_hi  = id(ctl_alarm_high_active);
-          bool ntfy_lo  = id(ctl_alarm_low_active);
-          bool ntfy_pf  = id(ctl_probe_fault);
+          // ── 9. ntfy push notifications — edge-triggered (Phase 5) ───────
+          bool ntfy_hi = id(ctl_alarm_high_active);
+          bool ntfy_lo = id(ctl_alarm_low_active);
+          bool ntfy_pf = id(ctl_probe_fault);
           if (ntfy_hi && !id(ntfy_alarm_hi_sent)) {
               id(ntfy_alarm_hi_sent) = true;
               id(ntfy_high_alarm_request).trigger();
-              p4_sd_log_event("ALARM_HI", id(probe1_temp).state == id(probe1_temp).state ? std::to_string((int)id(probe1_temp).state).c_str() : "---");
+              p4_sd_log_event("ALARM_HI", "");
           } else if (!ntfy_hi && id(ntfy_alarm_hi_sent)) {
               id(ntfy_alarm_hi_sent) = false;
               id(ntfy_alarm_clear_request).trigger();
@@ -1290,6 +1658,199 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
+
+  # ── Phase 6: Extended control state ────────────────────────────────────────
+  # Configurable parameters (NVS-persistent)
+  - id: ctl_comp_lockout_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_comp_lockout_min}
+
+  - id: ctl_startup_grace_min
+    type: float
+    restore_value: no
+    initial_value: ${default_startup_grace_min}
+
+  - id: ctl_defrost_grace_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_grace_min}
+
+  - id: ctl_defrost_interval_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_interval_min}
+
+  - id: ctl_defrost_duration_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_duration_min}
+
+  - id: ctl_defrost_drip_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_drip_min}
+
+  - id: ctl_defrost_end_c
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_end_c}
+
+  - id: ctl_alarm_persist_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_alarm_persist_min}
+
+  - id: ctl_alarm_hysteresis_c
+    type: float
+    restore_value: yes
+    initial_value: ${default_alarm_hysteresis_c}
+
+  - id: ctl_door_alarm_delay_s
+    type: float
+    restore_value: yes
+    initial_value: ${default_door_alarm_delay_s}
+
+  - id: ctl_no_cool_alarm_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_no_cool_alarm_min}
+
+  - id: ctl_ice_delta_c
+    type: float
+    restore_value: yes
+    initial_value: ${default_ice_delta_c}
+
+  - id: ctl_fallback_on_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_fallback_on_min}
+
+  - id: ctl_fallback_off_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_fallback_off_min}
+
+  - id: ctl_smart_delta_c
+    type: float
+    restore_value: yes
+    initial_value: ${default_smart_delta_c}
+
+  - id: ctl_smart_dwell_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_smart_dwell_min}
+
+  # Runtime timestamps and state flags (non-persistent)
+  - id: ctl_comp_last_off_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_comp_on_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_high_alarm_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_low_alarm_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_door_open_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_no_cool_alarm_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ice_alarm_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_door_alarm_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_defrost_dripping
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_drip_start_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_manual_defrost_req
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_defrost_delta_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_sensor_fallback_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_fallback_phase_on
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_fallback_last_toggle_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: input_door_sensor_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+  - id: input_siren_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_defrost_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_fallback_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_defrost_term_temp_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_defrost_drip_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_smart_defrost_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
 
 ##############################################################################
 # Phase 4: LDO — MIPI-DSI D-PHY power rail

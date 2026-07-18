@@ -112,8 +112,20 @@ Control loop:                  if probe_fault → both OFF immediately
 | `ctl_defrost_last_end_ms`| uint32_t| millis() when last defrost ended      |
 | `hw_rs485_relay_ok`     | bool     | Relay board comms health              |
 | `hw_rtc_ok`             | bool     | PCF8563 RTC health                    |
-| `sd_card_ok`            | bool     | Phase 5: SD card mounted              |
-| `ntfy_alarm_hi_sent`    | bool     | Phase 5: ntfy high alarm edge flag    |
-| `ntfy_alarm_lo_sent`    | bool     | Phase 5: ntfy low alarm edge flag     |
-| `ntfy_probe_fault_sent` | bool     | Phase 5: ntfy probe fault edge flag   |
-| `log_tick_count`        | uint32_t | Phase 5: 10s ticks since last SD log  |
+| `ctl_comp_lockout_min`  | float    | Phase 6: off-delay lockout time (min)  |
+| `ctl_comp_last_off_ms`  | uint32_t | Phase 6: millis() when compressor last turned OFF |
+| `ctl_comp_on_since_ms`  | uint32_t | Phase 6: millis() when compressor last turned ON  |
+| `ctl_high_alarm_since_ms`| uint32_t| Phase 6: millis() when hi alarm first detected    |
+| `ctl_low_alarm_since_ms` | uint32_t| Phase 6: millis() when lo alarm first detected    |
+| `ctl_no_cool_alarm_active`| bool   | Phase 6: no-cool alarm state                      |
+| `ctl_ice_alarm_active`  | bool     | Phase 6: ice detection alarm state                |
+| `ctl_door_alarm_active` | bool     | Phase 6: door open alarm state                    |
+| `ctl_defrost_dripping`  | bool     | Phase 6: drip phase active                        |
+| `ctl_sensor_fallback_active`| bool | Phase 6: duty-cycle fallback running              |
+| `ctl_manual_defrost_req`| bool     | Phase 6: manual defrost button pressed            |
+| `ctl_defrost_delta_since_ms`| uint32_t| Phase 6: smart defrost delta tracking           |
+| `input_smart_defrost_enabled`| bool | Phase 6: smart delta defrost enabled             |
+| `input_defrost_term_temp_enabled`| bool | Phase 6: terminate defrost by evap temp      |
+| `input_defrost_drip_enabled`| bool | Phase 6: enable drip phase after defrost          |
+| `input_fallback_enabled`| bool     | Phase 6: sensor fallback duty mode enabled        |
+| `input_siren_enabled`   | bool     | Phase 6: siren output enabled                     |
