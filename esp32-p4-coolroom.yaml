@@ -998,6 +998,37 @@ binary_sensor:
       sorting_weight: 3
     lambda: 'return id(ctl_defrost_dripping);'
 
+  # ── Phase 9: LVGL page navigation states ───────────────────────────────────
+  - platform: template
+    id: page_home_state
+    name: "Page Home Active"
+    entity_category: diagnostic
+    lambda: 'return id(page_home_active);'
+
+  - platform: template
+    id: page_settings_1_state
+    name: "Page Settings 1 Active"
+    entity_category: diagnostic
+    lambda: 'return id(page_settings_1_active);'
+
+  - platform: template
+    id: page_settings_2_state
+    name: "Page Settings 2 Active"
+    entity_category: diagnostic
+    lambda: 'return id(page_settings_2_active);'
+
+  - platform: template
+    id: page_settings_3_state
+    name: "Page Settings 3 Active"
+    entity_category: diagnostic
+    lambda: 'return id(page_settings_3_active);'
+
+  - platform: template
+    id: page_info_state
+    name: "Page Info Active"
+    entity_category: diagnostic
+    lambda: 'return id(page_info_active);'
+
 ##############################################################################
 # Number Entities — NVS-persistent control parameters
 ##############################################################################
@@ -2016,6 +2047,32 @@ globals:
     restore_value: yes
     initial_value: "false"
 
+  # ── Phase 9: LVGL page navigation state ────────────────────────────────────
+  - id: page_home_active
+    type: bool
+    restore_value: no
+    initial_value: "true"
+
+  - id: page_settings_1_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: page_settings_2_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: page_settings_3_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: page_info_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
 ##############################################################################
 # Phase 4: LDO — MIPI-DSI D-PHY power rail
 # Channel 3 at 2.5V is the standard ESP32-P4 MIPI-DSI configuration.
@@ -2435,6 +2492,8 @@ lvgl:
                   align: CENTER
                   text: "🏠 Home"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_home
 
         - button:
             x: 205
@@ -2449,6 +2508,8 @@ lvgl:
                   align: CENTER
                   text: "⚙️ Set1"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_1
 
         - button:
             x: 410
@@ -2463,6 +2524,8 @@ lvgl:
                   align: CENTER
                   text: "⚠️ Set2"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_2
 
         - button:
             x: 615
@@ -2477,6 +2540,8 @@ lvgl:
                   align: CENTER
                   text: "💾 Set3"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_3
 
         - button:
             x: 820
@@ -2491,6 +2556,8 @@ lvgl:
                   align: CENTER
                   text: "ℹ️ Info"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_info
               
 
     # Settings 1 page
@@ -2719,7 +2786,8 @@ lvgl:
                   align: CENTER
                   text: "🏠 Home"
                   text_font: font_small
-              
+            on_click:
+              - script.execute: switch_to_page_home
 
         - button:
             x: 205
@@ -2734,6 +2802,8 @@ lvgl:
                   align: CENTER
                   text: "⚙️ Set1"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_1
 
         - button:
             x: 410
@@ -2748,6 +2818,8 @@ lvgl:
                   align: CENTER
                   text: "⚠️ Set2"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_2
 
         - button:
             x: 615
@@ -2762,6 +2834,8 @@ lvgl:
                   align: CENTER
                   text: "💾 Set3"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_3
 
         - button:
             x: 820
@@ -2776,6 +2850,8 @@ lvgl:
                   align: CENTER
                   text: "ℹ️ Info"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_info
               
 
     # Settings 2 page
@@ -2954,7 +3030,8 @@ lvgl:
                   align: CENTER
                   text: "🏠 Home"
                   text_font: font_small
-              
+            on_click:
+              - script.execute: switch_to_page_home
 
         - button:
             x: 205
@@ -2969,6 +3046,8 @@ lvgl:
                   align: CENTER
                   text: "⚙️ Set1"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_1
 
         - button:
             x: 410
@@ -2983,6 +3062,8 @@ lvgl:
                   align: CENTER
                   text: "⚠️ Set2"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_2
 
         - button:
             x: 615
@@ -2997,6 +3078,8 @@ lvgl:
                   align: CENTER
                   text: "💾 Set3"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_3
 
         - button:
             x: 820
@@ -3011,6 +3094,8 @@ lvgl:
                   align: CENTER
                   text: "ℹ️ Info"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_info
               
 
     # Settings 3 page
@@ -3137,7 +3222,8 @@ lvgl:
                   align: CENTER
                   text: "🏠 Home"
                   text_font: font_small
-              
+            on_click:
+              - script.execute: switch_to_page_home
 
         - button:
             x: 205
@@ -3152,6 +3238,8 @@ lvgl:
                   align: CENTER
                   text: "⚙️ Set1"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_1
 
         - button:
             x: 410
@@ -3166,6 +3254,8 @@ lvgl:
                   align: CENTER
                   text: "⚠️ Set2"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_2
 
         - button:
             x: 615
@@ -3180,6 +3270,8 @@ lvgl:
                   align: CENTER
                   text: "💾 Set3"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_3
 
         - button:
             x: 820
@@ -3194,6 +3286,8 @@ lvgl:
                   align: CENTER
                   text: "ℹ️ Info"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_info
               
 
     # Info page
@@ -3310,7 +3404,8 @@ lvgl:
                   align: CENTER
                   text: "🏠 Home"
                   text_font: font_small
-              
+            on_click:
+              - script.execute: switch_to_page_home
 
         - button:
             x: 205
@@ -3325,6 +3420,8 @@ lvgl:
                   align: CENTER
                   text: "⚙️ Set1"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_1
 
         - button:
             x: 410
@@ -3339,6 +3436,8 @@ lvgl:
                   align: CENTER
                   text: "⚠️ Set2"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_2
 
         - button:
             x: 615
@@ -3353,6 +3452,8 @@ lvgl:
                   align: CENTER
                   text: "💾 Set3"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_settings_3
 
         - button:
             x: 820
@@ -3367,6 +3468,8 @@ lvgl:
                   align: CENTER
                   text: "ℹ️ Info"
                   text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_info
 ##############################################################################
 # Phase 4: LVGL update automations — merged into interval: above
 ##############################################################################
@@ -3431,3 +3534,49 @@ script:
             Priority: "urgent"
             Tags: "warning,thermometer"
           body: "Probe 1 stale or invalid — check RS485 connection."
+
+  # ── Phase 9: LVGL page navigation scripts ──────────────────────────────────
+  - id: switch_to_page_home
+    then:
+      - lambda: |-
+          id(page_home_active) = true;
+          id(page_settings_1_active) = false;
+          id(page_settings_2_active) = false;
+          id(page_settings_3_active) = false;
+          id(page_info_active) = false;
+
+  - id: switch_to_page_settings_1
+    then:
+      - lambda: |-
+          id(page_home_active) = false;
+          id(page_settings_1_active) = true;
+          id(page_settings_2_active) = false;
+          id(page_settings_3_active) = false;
+          id(page_info_active) = false;
+
+  - id: switch_to_page_settings_2
+    then:
+      - lambda: |-
+          id(page_home_active) = false;
+          id(page_settings_1_active) = false;
+          id(page_settings_2_active) = true;
+          id(page_settings_3_active) = false;
+          id(page_info_active) = false;
+
+  - id: switch_to_page_settings_3
+    then:
+      - lambda: |-
+          id(page_home_active) = false;
+          id(page_settings_1_active) = false;
+          id(page_settings_2_active) = false;
+          id(page_settings_3_active) = true;
+          id(page_info_active) = false;
+
+  - id: switch_to_page_info
+    then:
+      - lambda: |-
+          id(page_home_active) = false;
+          id(page_settings_1_active) = false;
+          id(page_settings_2_active) = false;
+          id(page_settings_3_active) = false;
+          id(page_info_active) = true;
