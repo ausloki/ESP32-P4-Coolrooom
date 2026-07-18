@@ -299,6 +299,10 @@ web_server:
   auth:
     username: !secret web_server_username
     password: !secret web_server_password
+  # Phase 11: Web Dashboard & REST API
+  # Access REST API: GET http://192.168.x.x/api/states (returns all entity states as JSON)
+  # Dashboard: /assets/dashboard.html or serve via external web server
+  # Example: curl -u username:password http://192.168.x.x/api/states | jq '.'
   sorting_groups:
     - id: group_system_info
       name: "System"

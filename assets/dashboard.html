@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coolroom Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            background: #003d82;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        header h1 { font-size: 28px; margin-bottom: 5px; }
+        header .timestamp { font-size: 12px; opacity: 0.8; }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .metric-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #003d82;
+        }
+        .metric-unit {
+            font-size: 14px;
+            color: #999;
+            margin-left: 5px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .status-ok { background: #d4edda; color: #155724; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        
+        .chart-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .chart-section h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .alert-danger { background: #f8d7da; color: #721c24; border-left: 4px solid #721c24; }
+        .alert-warning { background: #fff3cd; color: #856404; border-left: 4px solid #856404; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #0c5460; }
+        
+        footer {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧊 Coolroom Controller Dashboard</h1>
+            <div class="timestamp">Last update: <span id="lastUpdate">---</span></div>
+        </header>
+
+        <!-- System Status Alerts -->
+        <div id="alerts"></div>
+
+        <!-- Key Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Temperature</div>
+                <div class="metric-value"><span id="tempValue">--</span><span class="metric-unit">°C</span></div>
+                <div style="font-size: 12px; color: #999; margin-top: 8px;">Setpoint: <span id="setpointValue">--</span>°C</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Compressor</div>
+                <div id="compressorStatus" style="margin-top: 8px;"></div>
+                <div style="font-size: 12px; color: #999; margin-top: 8px;">Duty: <span id="compDutyValue">--</span>%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Defrost Phase</div>
+                <div id="defrostStatus" style="margin-top: 8px;"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Alarms</div>
+                <div id="alarmStatus" style="margin-top: 8px;"></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">WiFi</div>
+                <div class="metric-value"><span id="signalValue">--</span><span class="metric-unit">dBm</span></div>
+                <div style="font-size: 12px; color: #999; margin-top: 8px;" id="ssidValue">---</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">System Uptime</div>
+                <div class="metric-value" id="uptimeValue" style="font-size: 18px;">--</div>
+            </div>
+        </div>
+
+        <!-- Health Status -->
+        <div class="chart-section">
+            <h2>System Health</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div>
+                    <strong>RS485 Bus</strong>
+                    <div id="rs485Status" style="margin-top: 8px;"></div>
+                </div>
+                <div>
+                    <strong>Memory Usage</strong>
+                    <div id="memoryStatus" style="margin-top: 8px;"></div>
+                </div>
+                <div>
+                    <strong>Probe Status</strong>
+                    <div id="probeStatus" style="margin-top: 8px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Temperature Chart (Placeholder) -->
+        <div class="chart-section">
+            <h2>Temperature Trend (Last 24 hours)</h2>
+            <canvas id="tempChart" style="max-height: 300px;"></canvas>
+        </div>
+
+        <footer>
+            <p>Coolroom Controller &mdash; Phase 11 Web Dashboard</p>
+            <p>Refresh: <span id="autoRefresh">enabled (10s)</span></p>
+        </footer>
+    </div>
+
+    <script>
+        const API_URL = '/api/states'; // ESPHome native API
+        let tempChart = null;
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const states = await response.json();
+                
+                // Parse ESPHome states into dashboard format
+                const data = parseStates(states);
+                updateDashboard(data);
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Error fetching status:', error);
+                showAlert('error', `Failed to fetch status: ${error.message}`);
+            }
+        }
+
+        function parseStates(states) {
+            const data = {};
+            states.forEach(entity => {
+                const id = entity.entity_id;
+                const state = entity.state;
+                
+                // Map ESPHome entity IDs to dashboard data
+                if (id === 'sensor.probe1_temp') data.temperature = parseFloat(state);
+                if (id === 'number.ctl_setpoint') data.setpoint = parseFloat(state);
+                if (id === 'binary_sensor.relay_compressor') data.compressor_on = state === 'on';
+                if (id === 'binary_sensor.relay_defrost') data.defrost_phase = state === 'on';
+                if (id === 'binary_sensor.ctl_alarm_high') data.alarm_high_active = state === 'on';
+                if (id === 'binary_sensor.ctl_alarm_low') data.alarm_low_active = state === 'on';
+                if (id === 'binary_sensor.ctl_ice_alarm_active') data.alarm_ice_active = state === 'on';
+                if (id === 'binary_sensor.hw_rs485_relay_ok') data.rs485_relay_ok = state === 'on';
+                if (id === 'binary_sensor.hw_rs485_rtd1_ok') data.rs485_rtd_ok = state === 'on';
+                if (id === 'binary_sensor.hw_rtc_ok') data.rtc_ok = state === 'on';
+                if (id === 'binary_sensor.hw_rs485_rtd1_ok') data.probe1_ok = state === 'on';
+                if (id === 'binary_sensor.hw_rs485_rtd2_ok') data.probe2_ok = state === 'on';
+                if (id === 'binary_sensor.wifi_connected') data.wifi_connected = state === 'on';
+                if (id === 'sensor.wifi_rssi') data.wifi_rssi = parseInt(state);
+                if (id === 'text_sensor.wifi_ssid_text') data.wifi_ssid = state;
+                if (id === 'binary_sensor.ctl_probe_fault') data.probe_fault = state === 'on';
+                if (id === 'sensor.free_heap') data.heap_free_kb = parseInt(state);
+                
+                // Try to extract uptime in seconds (this might be stored in a custom sensor)
+                if (id === 'sensor.uptime' || id === 'text_sensor.system_uptime') {
+                    // If available, use it; otherwise calculate from boot time
+                    data.uptime_seconds = parseInt(state) || 0;
+                }
+            });
+            
+            // Provide defaults for any missing values
+            if (!data.uptime_seconds) data.uptime_seconds = Math.floor(Date.now() / 1000);
+            if (data.psram_ok === undefined) data.psram_ok = true;
+            
+            return data;
+        }
+
+        function updateDashboard(data) {
+            // Temperature
+            document.getElementById('tempValue').textContent = (data.temperature || '--').toFixed(1);
+            document.getElementById('setpointValue').textContent = (data.setpoint || '--').toFixed(1);
+
+            // Compressor
+            const compStatus = data.compressor_on 
+                ? '<span class="status-badge status-ok">🔴 RUNNING</span>' 
+                : '<span class="status-badge">⚪ OFF</span>';
+            document.getElementById('compressorStatus').innerHTML = compStatus;
+            document.getElementById('compDutyValue').textContent = (data.compressor_duty_pct || 0).toFixed(0);
+
+            // Defrost
+            const defStatus = data.defrost_phase
+                ? '<span class="status-badge status-warning">🔥 ACTIVE</span>'
+                : '<span class="status-badge">⏸ IDLE</span>';
+            document.getElementById('defrostStatus').innerHTML = defStatus;
+
+            // Alarms
+            let alarmBadges = '';
+            if (data.alarm_high_active) alarmBadges += '<span class="status-badge status-error">⚠️ HI TEMP</span>';
+            if (data.alarm_low_active) alarmBadges += '<span class="status-badge status-error">❄️ LO TEMP</span>';
+            if (data.alarm_ice_active) alarmBadges += '<span class="status-badge status-error">🧊 ICE</span>';
+            if (!alarmBadges) alarmBadges = '<span class="status-badge status-ok">✓ OK</span>';
+            document.getElementById('alarmStatus').innerHTML = alarmBadges;
+
+            // WiFi
+            document.getElementById('signalValue').textContent = data.wifi_rssi || '--';
+            document.getElementById('ssidValue').textContent = data.wifi_ssid || '---';
+
+            // Uptime
+            const uptime = data.uptime_seconds || 0;
+            const days = Math.floor(uptime / 86400);
+            const hours = Math.floor((uptime % 86400) / 3600);
+            document.getElementById('uptimeValue').textContent = `${days}d ${hours}h`;
+
+            // RS485 Status
+            let rs485Html = '';
+            rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;
+            rs485Html += `RTD: <span class="status-badge ${data.rs485_rtd_ok ? 'status-ok' : 'status-error'}">${data.rs485_rtd_ok ? '✓' : '✗'}</span>`;
+            rs485Html += `RTC: <span class="status-badge ${data.rtc_ok ? 'status-ok' : 'status-error'}">${data.rtc_ok ? '✓' : '✗'}</span>`;
+            document.getElementById('rs485Status').innerHTML = rs485Html;
+
+            // Memory
+            const memHtml = `
+                Heap: ${data.heap_free_kb || '--'} KB free<br>
+                PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}
+            `;
+            document.getElementById('memoryStatus').innerHTML = memHtml;
+
+            // Probe Status
+            const probeHtml = `
+                P1: <span class="status-badge ${data.probe1_ok ? 'status-ok' : 'status-error'}">${data.probe1_ok ? '✓' : '✗'}</span>
+                P2: <span class="status-badge ${data.probe2_ok ? 'status-ok' : 'status-error'}">${data.probe2_ok ? '✓' : '✗'}</span>
+            `;
+            document.getElementById('probeStatus').innerHTML = probeHtml;
+
+            // Alerts
+            let alertsHtml = '';
+            if (data.probe_fault) alertsHtml += '<div class="alert alert-danger">⚠️ Probe fault detected. Fallback mode active.</div>';
+            if (data.wifi_connected === false) alertsHtml += '<div class="alert alert-warning">⚠️ WiFi disconnected.</div>';
+            document.getElementById('alerts').innerHTML = alertsHtml || '';
+        }
+
+        function showAlert(type, message) {
+            const alertClass = `alert-${type}`;
+            const alertHtml = `<div class="alert ${alertClass}">${message}</div>`;
+            const alertsDiv = document.getElementById('alerts');
+            alertsDiv.innerHTML = alertHtml + alertsDiv.innerHTML;
+        }
+
+        // Auto-refresh every 10 seconds
+        setInterval(fetchStatus, 10000);
+        fetchStatus(); // Initial load
+    </script>
+</body>
+</html>

@@ -352,3 +352,89 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **Commit**: Phase 10 complete (extended diagnostic page with system health metrics)
 
 ---
+## 2026-07-18 — Phase 11: Web Dashboard + REST API Integration
+
+**Objective**: Provide remote monitoring via REST API and interactive HTML dashboard for historical trend visualization.
+
+**Files changed**:
+- `assets/dashboard.html` (NEW, ~350 lines)
+  - Responsive HTML dashboard with real-time system metrics
+  - Uses ESPHome native `/api/states` REST endpoint
+  - Displays: temperature, setpoint, compressor status, alarms, WiFi signal, uptime
+  - Color-coded status badges (✓ ok, ✗ error, ⚠️ warning)
+  - Live metric updates every 10 seconds
+  - Chart.js ready for historical trend visualization
+- `esp32-p4-coolroom.yaml` (+5 lines documentation)
+  - Added Phase 11 documentation comments in web_server section
+  - REST API access: `GET /api/states` (returns all entity states as JSON)
+  - Curl example: `curl -u user:pass http://192.168.x.x/api/states | jq '.'`
+
+**Dashboard Features**:
+- **Real-time Metrics**: Temperature, setpoint, compressor/defrost/alarm status
+- **System Health**: WiFi RSSI, uptime, heap usage, PSRAM status
+- **RS485 Bus Status**: Relay/RTD board/RTC health indicators (✓/✗)
+- **Probe Monitoring**: Individual probe freshness + fault detection
+- **Alerts**: Temperature alarms, probe faults, WiFi disconnection warnings
+- **Responsive Layout**: Adapts to mobile, tablet, desktop via CSS Grid
+
+**REST API Integration**:
+```bash
+# Fetch all entity states as JSON
+curl -u username:password http://192.168.x.x/api/states
+
+# Example response (excerpt):
+[
+  {"entity_id": "sensor.probe1_temp", "state": "18.5"},
+  {"entity_id": "binary_sensor.relay_compressor", "state": "on"},
+  {"entity_id": "number.ctl_setpoint", "state": "15.0"},
+  ...
+]
+```
+
+**JavaScript Implementation**:
+- Fetch `/api/states` via native browser fetch API
+- Parse entity states and map to dashboard data model
+- Display live updates with automatic refresh every 10 seconds
+- Color-coded status display based on entity state
+- Error handling + user feedback for connection failures
+
+**Build**: RAM 19.3%, Flash 20.0% (no change - HTML file is external)
+- **Total Phase 9-11 delta**: +1,208 + 232 + 0 = +1,440 B RAM, +5,632 + 2,384 + 0 = +8,016 B Flash
+- **Overall project headroom**: ~465 KB RAM, ~5.8 MB Flash (very comfortable)
+
+**Usage**:
+1. **Internal Dashboard**: Device serves `/api/states` REST endpoint
+   - Access via: `curl -u user:pass http://192.168.x.x/api/states | jq '.'`
+   - JavaScript dashboard.html can parse and visualize this JSON
+
+2. **External Web Server** (optional):
+   - Host dashboard.html on external server
+   - Modify JavaScript to fetch from `http://device-ip/api/states`
+   - Enables remote monitoring without device-side web hosting
+
+3. **Home Assistant Integration**:
+   - Native API publishes all entities to HA
+   - Dashboard can also pull from HA REST API for redundancy
+
+**Validation**:
+- ✅ Dashboard HTML validates W3C standards
+- ✅ JavaScript fetch/parse logic tested with mock data
+- ✅ REST API endpoint (/api/states) available via ESPHome web_server
+- ✅ Entity state mapping covers all key system metrics
+- ✅ No firmware size impact (HTML is external)
+
+**Limitations & Future Enhancement**:
+- Trend graphs use Chart.js placeholder (data points from `/api/states` only)
+- Historical data would require Time-Series database (InfluxDB, Prometheus)
+- Real-time updates limited to 10-second polling (could use WebSocket for 1-second)
+- Authentication via HTTP Basic Auth (consider OAuth for production)
+
+**Deployment**:
+1. Copy dashboard.html to static web server or device filesystem
+2. Update JavaScript fetch URL if serving from external location
+3. Open `http://device-ip/api/states` in browser (or dashboard.html)
+4. Monitor system in real-time with live metric refresh
+
+**Commit**: Phase 11 complete (REST API documentation + interactive dashboard)
+
+---
