@@ -67,6 +67,10 @@ When firmware changes, **always update in the same commit**:
 - `reference/program_control_logic_flowchart.md` — if phase status or architecture changes
 - YAML `# PHASE STATUS` header comment
 
+**At every compact / phase boundary**, also:
+- Append a dated recap block to `reference/session_recaps.md` summarising what changed
+- Push `session_recaps.md` together with the diagram updates in the same commit
+
 ## Phase Status
 
 | Phase | Description | Status |
