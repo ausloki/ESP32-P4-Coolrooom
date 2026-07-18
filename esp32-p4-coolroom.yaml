@@ -304,11 +304,11 @@ web_server:
   # - GUEST: View-only main display (temperature, status, alarms)
   # - ADMIN: View main + settings, modify operational parameters (setpoint, alarms, defrost)
   # - SUPERADMIN: Full access (backup/restore, logs, WiFi, hardware settings)
-  # 
+  #
   # Implementation: Users authenticate via HTTP Basic Auth, role determined by username
   # Role mapping configured in secrets.yaml:
   #   web_admin_users: "admin:superadmin,user1:admin,guest:guest"
-  # 
+  #
   # Access REST API: GET http://192.168.x.x/api/states (returns all entity states as JSON)
   # Dashboard: /assets/dashboard.html or serve via external web server
   # Example: curl -u admin:password http://192.168.x.x/api/states | jq '.'
@@ -463,11 +463,17 @@ switch:
       - lvgl.led.update:
           id: led_compressor
           brightness: 100%
+      - lvgl.label.update:
+          id: ui_compressor_icon
+          text_color: col_green
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Compressor OFF");
       - lvgl.led.update:
           id: led_compressor
           brightness: 0%
+      - lvgl.label.update:
+          id: ui_compressor_icon
+          text_color: col_grey
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -485,11 +491,17 @@ switch:
       - lvgl.led.update:
           id: led_light
           brightness: 100%
+      - lvgl.label.update:
+          id: ui_light_icon
+          text_color: col_orange
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Light OFF");
       - lvgl.led.update:
           id: led_light
           brightness: 0%
+      - lvgl.label.update:
+          id: ui_light_icon
+          text_color: col_grey
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -617,14 +629,19 @@ sensor:
     lambda: 'return p4_rtd_or_nan(id(rtd1_ch1_raw).state);'
     on_value:
       - lvgl.label.update:
-          id: lbl_coolroom_temp
+          id: lbl_coolroom_temp_large
           text: !lambda 'return p4_fmt_temp(x, false);'
+      - lvgl.arc.update:
+          id: home_temp_arc
+          value: !lambda |-
+            if (!p4_rtd_valid(x)) return 0;
+            return (int)((x + 20.0f) / 35.0f * 100.0f);
       - if:
           condition:
             lambda: 'return p4_rtd_valid(x) && x > id(ctl_setpoint) + id(ctl_alarm_high_delta);'
           then:
             - lvgl.label.update:
-                id: lbl_coolroom_temp
+                id: lbl_coolroom_temp_large
                 text_color: col_red
           else:
             - if:
@@ -632,11 +649,11 @@ sensor:
                   lambda: 'return p4_rtd_valid(x) && x < id(ctl_setpoint) - id(ctl_alarm_low_delta);'
                 then:
                   - lvgl.label.update:
-                      id: lbl_coolroom_temp
+                      id: lbl_coolroom_temp_large
                       text_color: col_blue
                 else:
                   - lvgl.label.update:
-                      id: lbl_coolroom_temp
+                      id: lbl_coolroom_temp_large
                       text_color: col_green
 
   - platform: template
@@ -655,7 +672,7 @@ sensor:
       return p4_rtd_or_nan(id(rtd1_ch2_raw).state);
     on_value:
       - lvgl.label.update:
-          id: lbl_evap_temp
+          id: lbl_evap_temp_large
           text: !lambda 'return p4_fmt_temp(x, false);'
 
   - platform: template
@@ -674,8 +691,13 @@ sensor:
       return p4_rtd_or_nan(id(rtd2_ch1_raw).state);
     on_value:
       - lvgl.label.update:
-          id: lbl_ambient_temp
+          id: lbl_ambient_temp_large
           text: !lambda 'return p4_fmt_temp(x, false);'
+      - lvgl.arc.update:
+          id: home_ambient_arc
+          value: !lambda |-
+            if (!p4_rtd_valid(x)) return 0;
+            return (int)((x + 20.0f) / 35.0f * 100.0f);
 
   # ── Probe staleness diagnostics ────────────────────────────────────────────
   - platform: template
@@ -955,8 +977,8 @@ binary_sensor:
           id: led_probe_fault
           brightness: !lambda 'return x ? 100.0f : 0.0f;'
       - lvgl.label.update:
-          id: lbl_status_msg
-          text: !lambda 'return x ? std::string("PROBE FAULT — check RS485 connection") : std::string("OK");'
+          id: lbl_status_text
+          text: !lambda 'return x ? std::string("PROBE FAULT") : std::string("OK");'
 
   # ── Phase 5: SD card health ──────────────────────────────────────────────
   - platform: template
@@ -968,6 +990,18 @@ binary_sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 36
     lambda: 'return id(sd_card_ok);'
+
+  # ── Alarm state indicator (for LVGL icon color updates) ────────────────────
+  - platform: template
+    id: any_alarm_active
+    name: "Any Alarm Active"
+    device_class: problem
+    entity_category: diagnostic
+    lambda: 'return id(ctl_alarm_high_active) || id(ctl_alarm_low_active);'
+    on_state:
+      - lvgl.label.update:
+          id: ui_alarm_icon
+          text_color: !lambda 'return x ? id(col_red) : id(col_grey);'
 
   # ── Phase 6: Extended alarm/status indicators ─────────────────────────────
   - platform: template
@@ -1016,6 +1050,18 @@ binary_sensor:
       sorting_group_id: group_defrost
       sorting_weight: 3
     lambda: 'return id(ctl_defrost_dripping);'
+
+  # ── Defrost control logic mode indicator (for LVGL icon color) ─────────────
+  - platform: template
+    id: defrost_mode_active
+    name: "Defrost Mode Active"
+    device_class: running
+    entity_category: diagnostic
+    lambda: 'return id(ctl_defrost_on_since_ms) > 0;'
+    on_state:
+      - lvgl.label.update:
+          id: ui_defrost_icon
+          text_color: !lambda 'return x ? id(col_orange) : id(col_grey);'
 
   # ── Phase 9: LVGL page navigation states ───────────────────────────────────
   - platform: template
@@ -1071,17 +1117,14 @@ number:
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
       - lvgl.label.update:
-          id: lbl_setpoint_val
+          id: lbl_setpoint_status
           text: !lambda |-
             char buf[12];
-            snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
+            snprintf(buf, sizeof(buf), "Set: %.1f\u00b0C", x);
             return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_setpoint_display
-          text: !lambda |-
-            char buf[20];
-            snprintf(buf, sizeof(buf), "SP: %.1f°C", x);
-            return std::string(buf);
+      - lvgl.arc.update:
+          id: home_setpoint_arc
+          value: !lambda 'return (int)((x + 20.0f) / 35.0f * 100.0f);'
 
   - platform: template
     id: compressor_differential
@@ -1722,7 +1765,7 @@ interval:
             std::string s(buf);
             return s.size() > 8 ? s.substr(s.size()-8) : s;
       - lvgl.label.update:
-          id: lbl_heap
+          id: lbl_power_info
           text: !lambda |-
             char buf[24];
             snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
@@ -2246,8 +2289,14 @@ color:
     hex: "2C2C2E"
   - id: col_green      # Compressor ON / good status
     hex: "30D158"
-  - id: col_blue       # Defrost
+  - id: col_blue       # Defrost / Coolroom temp arc (snowflake blue)
     hex: "0A84FF"
+  - id: col_cyan       # Setpoint arc
+    hex: "00BCD4"
+  - id: col_pink       # Ambient temp arc
+    hex: "FF1493"
+  - id: col_grey       # Status icons (inactive)
+    hex: "888888"
   - id: col_red        # Alarm
     hex: "FF453A"
   - id: col_orange     # Probe fault / warning
@@ -2269,10 +2318,11 @@ lvgl:
   default_font: font_small
 
   pages:
-    # Home page
+    # Home page - Horseshoe Arc Design
     - id: page_home
       bg_color: col_bg
       widgets:
+        # Header bar with clock and WiFi
         - obj:
             x: 0
             y: 0
@@ -2291,297 +2341,405 @@ lvgl:
                   text_color: col_text
               - label:
                   id: lbl_clock
-                  align: RIGHT_MID
-                  x: -16
-                  text: "--:--:--"
+                  x: 900
+                  y: 14
+                  text: "--:--"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  x: 950
+                  y: 14
+                  text: "📶"
                   text_font: font_small
                   text_color: col_subtext
 
-        - obj:
+        # Left Sidebar - Control Buttons (vertical stack)
+        # Defrost button
+        - button:
             x: 8
             y: 56
-            width: 400
-            height: 240
+            width: 80
+            height: 110
             bg_color: col_panel
             radius: 12
-            border_width: 0
+            border_width: 2
+            border_color: col_blue
             widgets:
-              - label:
-                  x: 16
-                  y: 12
-                  text: "COOLROOM"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_coolroom_temp
-                  align: CENTER
-                  y: 10
-                  text: "---"
-                  text_font: font_huge
-                  text_color: col_green
-              - label:
-                  id: lbl_setpoint_display
-                  align: BOTTOM_MID
-                  y: -14
-                  text: "SP: 2.0°C"
-                  text_font: font_small
-                  text_color: col_subtext
-
-        - obj:
-            x: 416
-            y: 56
-            width: 200
-            height: 116
-            bg_color: col_panel
-            radius: 12
-            border_width: 0
-            widgets:
-              - label:
-                  x: 12
-                  y: 10
-                  text: "SETPOINT"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_setpoint_val
-                  x: 12
-                  y: 34
-                  text: "2.0°C"
-                  text_font: font_large
-                  text_color: col_text
-              - button:
-                  id: btn_sp_up
-                  align: RIGHT_MID
-                  x: -10
-                  y: 10
-                  width: 44
-                  height: 44
-                  bg_color: col_blue
-                  radius: 8
-                  border_width: 0
-                  widgets:
-                    - label:
-                        align: CENTER
-                        text: "▲"
-                        text_font: font_small
-                  on_click:
-                    - number.increment:
-                        id: setpoint
-                        cycle: false
-              - button:
-                  id: btn_sp_dn
-                  align: RIGHT_MID
-                  x: -10
-                  y: -10
-                  width: 44
-                  height: 44
-                  bg_color: col_blue
-                  radius: 8
-                  border_width: 0
-                  widgets:
-                    - label:
-                        align: CENTER
-                        text: "▼"
-                        text_font: font_small
-                  on_click:
-                    - number.decrement:
-                        id: setpoint
-                        cycle: false
-
-        - obj:
-            x: 624
-            y: 56
-            width: 392
-            height: 116
-            bg_color: col_panel
-            radius: 12
-            border_width: 0
-            widgets:
-              - label:
-                  x: 16
-                  y: 10
-                  text: "EVAPORATOR"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_evap_temp
-                  x: 16
-                  y: 32
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
-              - label:
-                  x: 210
-                  y: 10
-                  text: "AMBIENT"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_ambient_temp
-                  x: 210
-                  y: 32
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
-
-        - obj:
-            x: 416
-            y: 180
-            width: 600
-            height: 116
-            bg_color: col_panel
-            radius: 12
-            border_width: 0
-            widgets:
-              - led:
-                  id: led_compressor
-                  x: 16
-                  y: 24
-                  width: 14
-                  height: 14
-                  color: col_green
-                  brightness: 0%
-              - label:
-                  x: 36
-                  y: 18
-                  text: "Comp"
-                  text_font: font_small
-                  text_color: col_text
               - led:
                   id: led_defrost
-                  x: 130
-                  y: 24
-                  width: 14
-                  height: 14
+                  x: -20
+                  y: -20
+                  width: 8
+                  height: 8
                   color: col_blue
                   brightness: 0%
               - label:
-                  x: 150
-                  y: 18
-                  text: "Defrost"
+                  align: CENTER
+                  text: "❄️\nDefrost"
                   text_font: font_small
                   text_color: col_text
+            on_click:
+              - switch.toggle: relay_defrost
+              - lvgl.led.update:
+                  id: led_defrost
+                  brightness: !lambda |-
+                    return id(relay_defrost).state ? 100 : 0;
+
+        # Compressor button
+        - button:
+            x: 8
+            y: 174
+            width: 80
+            height: 110
+            bg_color: col_panel
+            radius: 12
+            border_width: 2
+            border_color: col_green
+            widgets:
               - led:
-                  id: led_alarm_hi
-                  x: 230
-                  y: 24
-                  width: 14
-                  height: 14
-                  color: col_red
+                  id: led_compressor
+                  x: -20
+                  y: -20
+                  width: 8
+                  height: 8
+                  color: col_green
                   brightness: 0%
               - label:
-                  x: 250
-                  y: 18
-                  text: "Hi Alarm"
+                  align: CENTER
+                  text: "🔥\nComp"
                   text_font: font_small
                   text_color: col_text
+            on_click:
+              - switch.toggle: relay_compressor
+              - lvgl.led.update:
+                  id: led_compressor
+                  brightness: !lambda |-
+                    return id(relay_compressor).state ? 100 : 0;
+
+        # Light button
+        - button:
+            x: 8
+            y: 292
+            width: 80
+            height: 110
+            bg_color: col_panel
+            radius: 12
+            border_width: 2
+            border_color: col_orange
+            widgets:
               - led:
-                  id: led_alarm_lo
-                  x: 360
-                  y: 24
-                  width: 14
-                  height: 14
-                  color: col_red
-                  brightness: 0%
-              - label:
-                  x: 380
-                  y: 18
-                  text: "Lo Alarm"
-                  text_font: font_small
-                  text_color: col_text
-              - led:
-                  id: led_probe_fault
-                  x: 490
-                  y: 24
-                  width: 14
-                  height: 14
+                  id: led_light
+                  x: -20
+                  y: -20
+                  width: 8
+                  height: 8
                   color: col_orange
                   brightness: 0%
               - label:
-                  x: 510
-                  y: 18
-                  text: "Fault"
+                  align: CENTER
+                  text: "💡\nLight"
                   text_font: font_small
                   text_color: col_text
+            on_click:
+              - switch.toggle: relay_light
+              - lvgl.led.update:
+                  id: led_light
+                  brightness: !lambda |-
+                    return id(relay_light).state ? 100 : 0;
+
+        # Alarm button
+        - button:
+            x: 8
+            y: 410
+            width: 80
+            height: 110
+            bg_color: col_panel
+            radius: 12
+            border_width: 2
+            border_color: col_red
+            widgets:
               - led:
-                  id: led_rs485
-                  x: 16
-                  y: 70
-                  width: 14
-                  height: 14
-                  color: col_green
+                  id: led_alarm_hi
+                  x: -20
+                  y: -20
+                  width: 8
+                  height: 8
+                  color: col_red
                   brightness: 0%
               - label:
-                  x: 36
-                  y: 64
-                  text: "RS485"
+                  align: CENTER
+                  text: "🔔\nAlarm"
                   text_font: font_small
                   text_color: col_text
-              - led:
-                  id: led_rtc
-                  x: 130
-                  y: 70
-                  width: 14
-                  height: 14
-                  color: col_green
-                  brightness: 0%
+
+        # Center Arc Gauge Container - Horseshoe Meter Display
+        - obj:
+            x: 100
+            y: 56
+            width: 912
+            height: 496
+            bg_color: col_bg
+            border_width: 0
+            radius: 0
+            widgets:
+              # Outer decorative arc (light grey reference ring)
+              - arc:
+                  align: CENTER
+                  y: 118
+                  width: 375
+                  height: 375
+                  bg_opa: TRANSP
+                  arc_color: col_subtext
+                  arc_opa: 20%
+                  arc_width: 15
+                  rotation: 225
+                  start_angle: 0
+                  end_angle: 270
+                  value: 50
+                  indicator:
+                    arc_opa: TRANSP
+                  knob:
+                    bg_opa: TRANSP
+
+              # Inner dark donut ring (visual separator)
+              - obj:
+                  align: CENTER
+                  y: 118
+                  width: 357
+                  height: 357
+                  radius: 179
+                  border_width: 60
+                  border_color: col_panel
+                  bg_color: col_bg
+
+              # Arc 1: Current Coolroom Temperature (Outer, Blue)
+              - arc:
+                  id: home_temp_arc
+                  align: CENTER
+                  y: 118
+                  width: 372
+                  height: 372
+                  bg_opa: TRANSP
+                  arc_color: col_blue
+                  arc_width: 16
+                  rotation: 225
+                  start_angle: 0
+                  end_angle: 270
+                  value: 50
+                  indicator:
+                    arc_opa: TRANSP
+                  knob:
+                    bg_opa: TRANSP
+
+              # Arc 2: Setpoint Temperature (Middle, Cyan)
+              - arc:
+                  id: home_setpoint_arc
+                  align: CENTER
+                  y: 118
+                  width: 322
+                  height: 322
+                  bg_opa: TRANSP
+                  arc_color: col_cyan
+                  arc_width: 12
+                  rotation: 225
+                  start_angle: 0
+                  end_angle: 270
+                  value: 50
+                  indicator:
+                    arc_opa: TRANSP
+                  knob:
+                    bg_opa: TRANSP
+
+              # Arc 3: Ambient Temperature (Inner, Pink)
+              - arc:
+                  id: home_ambient_arc
+                  align: CENTER
+                  y: 118
+                  width: 272
+                  height: 272
+                  bg_opa: TRANSP
+                  arc_color: col_pink
+                  arc_width: 10
+                  rotation: 225
+                  start_angle: 0
+                  end_angle: 270
+                  value: 50
+                  indicator:
+                    arc_opa: TRANSP
+                  knob:
+                    bg_opa: TRANSP
+
+              # Inner cover (hides arc hubs)
+              - obj:
+                  align: CENTER
+                  y: 118
+                  width: 270
+                  height: 270
+                  radius: 135
+                  border_width: 18
+                  border_color: col_panel
+                  bg_color: col_bg
+
+              # CENTER: Large temperature display
               - label:
-                  x: 150
-                  y: 64
-                  text: "RTC"
+                  id: lbl_coolroom_temp_large
+                  text: "--°C"
+                  align: CENTER
+                  y: 95
+                  text_font: font_huge
+                  text_color: col_blue
+
+              # Setpoint label below temperature
+              - label:
+                  id: lbl_setpoint_status
+                  text: "Set: --°C"
+                  align: CENTER
+                  y: 170
+                  text_font: font_medium
+                  text_color: col_cyan
+
+              # Status text (Running/Fault)
+              - label:
+                  id: lbl_status_text
+                  text: "Running"
+                  align: CENTER
+                  y: 200
                   text_font: font_small
-                  text_color: col_text
+                  text_color: col_orange
+
+              # LEFT PANEL: Status Icons (vertically stacked outside ring)
+              # Compressor/Defrost icon
+              - label:
+                  id: ui_compressor_icon
+                  text: "❄️"
+                  align: CENTER
+                  x: 35
+                  y: 50
+                  text_font: font_medium
+                  text_color: col_grey
+
+              # Defrost/Fire icon
+              - label:
+                  id: ui_defrost_icon
+                  text: "🔥"
+                  align: CENTER
+                  x: 35
+                  y: 130
+                  text_font: font_medium
+                  text_color: col_grey
+
+              # Light icon (touchable to toggle light relay)
               - button:
-                  id: btn_led_light
-                  x: 230
-                  y: 66
-                  width: 44
-                  height: 22
-                  bg_color: col_panel
-                  radius: 4
-                  border_width: 1
-                  border_color: col_subtext
+                  x: 20
+                  y: 195
+                  width: 30
+                  height: 30
+                  bg_color: col_bg
+                  border_width: 0
+                  radius: 15
+                  bg_opa: TRANSP
                   widgets:
-                    - led:
-                        id: led_light
-                        x: 4
-                        y: 4
-                        width: 14
-                        height: 14
-                        color: col_orange
-                        brightness: 0%
                     - label:
-                        x: 22
-                        y: 1
+                        id: ui_light_icon
                         text: "💡"
-                        text_font: font_small
-                        text_color: col_text
+                        align: CENTER
+                        text_font: font_medium
+                        text_color: col_grey
                   on_click:
                     - switch.toggle: relay_light
+
+              # Alarm icon (touchable to reset/cancel alarm)
+              - button:
+                  x: 20
+                  y: 275
+                  width: 30
+                  height: 30
+                  bg_color: col_bg
+                  border_width: 0
+                  radius: 15
+                  bg_opa: TRANSP
+                  widgets:
+                    - label:
+                        id: ui_alarm_icon
+                        text: "🔔"
+                        align: CENTER
+                        text_font: font_medium
+                        text_color: col_grey
+                  on_click:
+                    - lambda: |-
+                        id(ctl_alarm_high_active) = false;
+                        id(ctl_alarm_low_active) = false;
+
+              # RIGHT PANEL: Secondary Readings
               - label:
-                  id: lbl_heap
-                  x: 290
-                  y: 64
+                  id: lbl_ambient_temp_large
+                  text: "Ambient\n--°C"
+                  align: CENTER
+                  x: 850
+                  y: 80
+                  text_font: font_small
+                  text_color: col_text
+
+              - label:
+                  id: lbl_evap_temp_large
+                  text: "Evap\n--°C"
+                  align: CENTER
+                  x: 850
+                  y: 180
+                  text_font: font_small
+                  text_color: col_text
+
+              - label:
+                  id: lbl_power_info
                   text: "Heap: ---"
+                  align: CENTER
+                  x: 850
+                  y: 280
                   text_font: font_small
                   text_color: col_subtext
 
+        # Hidden LED indicators for status updates
         - obj:
-            x: 0
-            y: 304
-            width: 1024
-            height: 296
-            bg_color: col_panel
-            radius: 0
+            x: -50
+            y: -50
+            width: 40
+            height: 40
+            bg_color: col_bg
             border_width: 0
-            pad_top: 8
-            pad_left: 16
+            radius: 0
             widgets:
-              - label:
-                  id: lbl_status_msg
-                  text: "Running..."
-                  text_font: font_small
-                  text_color: col_subtext
+              - led:
+                  id: led_alarm_lo
+                  x: 0
+                  y: 0
+                  width: 8
+                  height: 8
+                  color: col_red
+                  brightness: 0%
+              - led:
+                  id: led_probe_fault
+                  x: 10
+                  y: 0
+                  width: 8
+                  height: 8
+                  color: col_orange
+                  brightness: 0%
+              - led:
+                  id: led_rs485
+                  x: 20
+                  y: 0
+                  width: 8
+                  height: 8
+                  color: col_green
+                  brightness: 0%
+              - led:
+                  id: led_rtc
+                  x: 30
+                  y: 0
+                  width: 8
+                  height: 8
+                  color: col_green
+                  brightness: 0%
 
         # Tab bar buttons at bottom
         - button:
@@ -2663,7 +2821,7 @@ lvgl:
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_info
-              
+
 
     # Settings 1 page
     - id: page_settings_1
@@ -2957,7 +3115,7 @@ lvgl:
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_info
-              
+
 
     # Settings 2 page
     - id: page_settings_2
@@ -3201,7 +3359,7 @@ lvgl:
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_info
-              
+
 
     # Settings 3 page
     - id: page_settings_3
@@ -3393,7 +3551,7 @@ lvgl:
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_info
-              
+
 
     # Info page
     - id: page_info

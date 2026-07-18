@@ -1,5 +1,12 @@
 # Control Logic — Nassi-Schneiderman (NS) Diagram
-# ESP32-P4 Coolroom Controller — Phase 3
+# ESP32-P4 Coolroom Controller — Phases 3 & 4
+
+**Phase 3:** Control logic (10s interval loop)  
+**Phase 4:** LVGL touchscreen display (real-time sensor updates)
+
+---
+
+## Phase 3: Control Loop (10 s interval)
 
 Each `10s interval` tick runs the full control loop in sequence.
 All decisions are made in `p4_control.h` C++ functions; YAML lambda orchestrates.
@@ -129,3 +136,208 @@ Control loop:                  if probe_fault → both OFF immediately
 | `input_defrost_drip_enabled`| bool | Phase 6: enable drip phase after defrost          |
 | `input_fallback_enabled`| bool     | Phase 6: sensor fallback duty mode enabled        |
 | `input_siren_enabled`   | bool     | Phase 6: siren output enabled                     |
+
+---
+
+## Phase 4: LVGL Home Page Display (Real-Time Updates)
+
+**Architecture:** Three concentric horseshoe arc gauges with real-time temperature visualization  
+**Update Rates:** Probe1 2s, Probe3 10s, Setpoint on-change  
+**Layout:** Left sidebar (status icons) + center meter + right sidebar (secondary readings)
+
+### Display Loop Execution
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PROBE1 TEMP UPDATE (every 2s)                                              │
+│  ├─ on_value trigger                                                         │
+│  ├─ VALIDATION: p4_rtd_valid(x)?                                             │
+│  │  ├─ YES: calculate arc value = (int)((x + 20) / 35 * 100)%               │
+│  │  │       update home_temp_arc widget                                      │
+│  │  │       update lbl_coolroom_temp_large label                             │
+│  │  └─ NO:  arc value = 0, label = "--°C"                                   │
+│  └─ Update interval: 2000 ms                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  PROBE3 TEMP UPDATE (every 10s)                                             │
+│  ├─ on_value trigger                                                         │
+│  ├─ VALIDATION: p4_rtd_valid(x)?                                             │
+│  │  ├─ YES: calculate arc value = (int)((x + 20) / 35 * 100)%               │
+│  │  │       update home_ambient_arc widget                                   │
+│  │  │       update lbl_ambient_temp_large label                              │
+│  │  └─ NO:  arc value = 0, label = "--°C"                                   │
+│  └─ Update interval: 10000 ms                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  SETPOINT NUMBER CHANGE (on user interaction)                               │
+│  ├─ set_action trigger                                                       │
+│  ├─ STORE: id(ctl_setpoint) = x, sync NVS preferences                       │
+│  ├─ CALCULATE: arc value = (int)((x + 20) / 35 * 100)%                     │
+│  ├─ UPDATE: home_setpoint_arc widget                                         │
+│  ├─ FORMAT: snprintf "Set: %.1f°C"                                           │
+│  ├─ UPDATE: lbl_setpoint_status label                                        │
+│  └─ No periodic rate; event-driven                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  TEMPERATURE-TO-ARC CONVERSION                                              │
+│  value = (int)((temp_celsius + 20.0f) / 35.0f * 100.0f)                    │
+│                                                                              │
+│  Mapping:  -20°C → 0%    (gauge start)                                      │
+│            0°C  → 57%    (typical operating point)                          │
+│            15°C → 100%   (gauge end)                                        │
+│                                                                              │
+│  Clamping: value is automatically clamped to 0–100% by LVGL arc widget     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Arc Gauge Specifications
+
+| Arc ID | Color | Width (px) | Size | Purpose | Update Rate |
+|--------|-------|-----------|------|---------|-------------|
+| `home_temp_arc` | Blue #0A84FF | 372×372 | 16px | Coolroom temp (outer) | 2s (probe1) |
+| `home_setpoint_arc` | Cyan #00BCD4 | 322×322 | 12px | Setpoint (middle) | on-change |
+| `home_ambient_arc` | Pink #FF1493 | 272×272 | 10px | Ambient temp (inner) | 10s (probe3) |
+
+All arcs:
+- **Rotation:** 225° start angle, 270° sweep (horseshoe)
+- **Transparency:** `indicator { arc_opa: TRANSP }`, `knob { bg_opa: TRANSP }`
+- **Value range:** 0–100% (representing -20°C to 15°C scale)
+- **Background:** Transparent (`bg_opa: TRANSP`)
+
+### Center Display Labels
+
+| Label ID | Font | Color | Content | Update Trigger |
+|----------|------|-------|---------|-----------------|
+| `lbl_coolroom_temp_large` | 64pt Bold | Blue | Temperature (--°C) | probe1 2s |
+| `lbl_setpoint_status` | 20pt | Cyan | Setpoint (Set: --°C) | setpoint change |
+| `lbl_status_text` | 15pt | Orange | Status ("Running") | control loop event |
+
+### Sidebar Elements
+
+**Left Sidebar (x=35)** — Status Icons
+- y=50: ❄️ Compressor (20pt medium, col_grey)
+- y=130: 🔥 Defrost (20pt medium, col_grey)
+- y=210: 💡 Light (20pt medium, col_grey)
+- y=290: 🔔 Alarm (20pt medium, col_grey)
+
+**Right Sidebar (x=850)** — Secondary Readings
+- y=80: Ambient temperature (15pt small font)
+- y=180: Evaporator temperature (15pt small font)
+- y=280: Heap memory info (15pt subtext color)
+
+### Color Palette (Phase 4 Additions)
+
+```yaml
+col_blue:     #0A84FF  # Coolroom arc, snowflake indicator
+col_cyan:     #00BCD4  # Setpoint arc
+col_pink:     #FF1493  # Ambient arc
+col_grey:     #888888  # Inactive status icons
+col_bg:       #1C1C1E  # Panel background
+col_panel:    #2C2C2E  # Card surface (donut ring)
+col_text:     #FFFFFF  # Primary text
+col_subtext:  #888888  # Secondary text / reference ring
+col_orange:   #FF9F0A  # Status messages
+col_green:    #30D158  # Compressor active
+col_red:      #FF453A  # Alarm active
+```
+
+### Widget Hierarchy
+
+```
+home_page (screen)
+  ├─ obj: left_sidebar_buttons (x=0, y=56)
+  │  ├─ btn_defrost (relay control)
+  │  ├─ btn_compressor
+  │  ├─ btn_light
+  │  └─ btn_alarm (status only)
+  │
+  ├─ obj: center_meter_container (x=100, y=56)
+  │  ├─ arc: outer_reference_ring (decorative, grey)
+  │  ├─ obj: donut_separator (dark border ring)
+  │  ├─ arc: home_temp_arc (blue, outer)
+  │  ├─ arc: home_setpoint_arc (cyan, middle)
+  │  ├─ arc: home_ambient_arc (pink, inner)
+  │  ├─ obj: inner_cover_circle (hides arc hubs)
+  │  ├─ label: lbl_coolroom_temp_large (64pt)
+  │  ├─ label: lbl_setpoint_status (20pt)
+  │  └─ label: lbl_status_text (15pt)
+  │
+  └─ obj: right_sidebar_readings (x=900, y=56)
+     ├─ label: lbl_ambient_temp_large
+     ├─ label: lbl_evap_temp_large
+     └─ label: lbl_power_info
+```
+
+### Icon Visual Feedback Loop (Real-Time)
+
+Status icons (left sidebar) update their color dynamically based on control state:
+
+```
+RELAY-BOUND ICONS (Hardware State):
+├─ relay_compressor.state change
+│  ├─ on_turn_on  → ui_compressor_icon.text_color = col_green
+│  └─ on_turn_off → ui_compressor_icon.text_color = col_grey
+│
+└─ relay_light.state change
+   ├─ on_turn_on  → ui_light_icon.text_color = col_orange
+   └─ on_turn_off → ui_light_icon.text_color = col_grey
+
+CONTROL LOGIC-BOUND ICONS (Software State):
+├─ defrost_mode_active (binary sensor)
+│  └─ lambda: ctl_defrost_on_since_ms > 0
+│     ├─ TRUE  → ui_defrost_icon.text_color = col_orange
+│     └─ FALSE → ui_defrost_icon.text_color = col_grey
+│
+└─ any_alarm_active (binary sensor)
+   └─ lambda: ctl_alarm_high_active || ctl_alarm_low_active
+      ├─ TRUE  → ui_alarm_icon.text_color = col_red
+      └─ FALSE → ui_alarm_icon.text_color = col_grey
+```
+
+**Icon State Table:**
+
+| Icon | ID | Color | State | Bound To |
+|------|-----|--------|-------|-----------|
+| ❄️ Compressor | ui_compressor_icon | Green | Relay ON | relay_compressor |
+| ❄️ Compressor | ui_compressor_icon | Grey | Relay OFF | relay_compressor |
+| 🔥 Defrost | ui_defrost_icon | Orange | Control active | ctl_defrost_on_since_ms > 0 |
+| 🔥 Defrost | ui_defrost_icon | Grey | Control idle | ctl_defrost_on_since_ms = 0 |
+| 💡 Light | ui_light_icon | Orange | Relay ON | relay_light |
+| 💡 Light | ui_light_icon | Grey | Relay OFF | relay_light |
+| 🔔 Alarm | ui_alarm_icon | Red | Any alarm | ctl_alarm_high/low_active |
+| 🔔 Alarm | ui_alarm_icon | Grey | No alarm | !any alarm |
+
+**Key Design Principle:**
+- **Relay-bound:** Compressor & Light icons reflect hardware relay state (can enable/disable via relay settings)
+- **Control logic-bound:** Defrost & Alarm icons reflect software control state (can trigger via settings without relay)
+- This enables passive defrost cycles, soft alarm triggers, and flexible operation modes
+
+**Touch Handlers:**
+- Light icon: `switch.toggle: relay_light` (toggle relay on/off)
+- Alarm icon: Set `ctl_alarm_high_active = false` and `ctl_alarm_low_active = false` (soft reset)
+
+### Known Constraints & Workarounds
+
+1. **Line Indicator (Setpoint Needle):** Removed
+   - ESPHome LVGL line widget doesn't support dynamic `value` parameter
+   - Middle cyan arc provides adequate setpoint visualization
+   - Could be re-implemented with alternative pointer/needle widget if needed
+
+2. **Icon Color Dynamics:** ✅ COMPLETE (was planned enhancement)
+   - Implemented via relay on_turn_on/off handlers (relay-bound icons)
+   - Implemented via binary sensor on_state handlers (control logic-bound icons)
+   - All four icons now provide real-time visual feedback
+
+3. **No Arc Animation Timing:** Instant value updates
+   - LVGL arc widget updates immediately to new value
+   - No built-in easing/animation support in ESPHome LVGL implementation
+   - Smooth visual updates depend on LVGL's internal rendering
+
+---
+
+## PHASE SUMMARY TABLE
+
+| Phase | Component | Status | Build Test | Device Test |
+|-------|-----------|--------|------------|-------------|
+| 1 | WiFi, HA API, Web Server, OTA | ✅ | ✅ | ✅ |
+| 2 | RS485 Modbus (relays, RTD, RTC) | ✅ | ✅ | ✅ |
+| 3 | Control Logic (hysteresis, defrost, alarms) | ✅ | ✅ | ✅ |
+| 4 | LVGL Touchscreen Dashboard | ⏳ | ✅ | ⏳ |
+| 5 | SD Card Logging, ntfy, Backup/Restore | 🔄 | — | — |
