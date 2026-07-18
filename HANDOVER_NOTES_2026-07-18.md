@@ -1,13 +1,13 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 **Date**: 2026-07-18  
-**Status**: All 11 Phases Complete ✅  
-**Last Commits**: `221998d`, `1e592f1`, `6d982c3` (Phase 9-11)
+**Status**: All 12 Phases Complete ✅  
+**Last Commits**: `517f167` (Phase 12: RBAC)
 
 ---
 
 ## Executive Summary
 
-The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 11 phases. All phases have been implemented, compiled successfully, documented, and committed to git. The project uses 19.3% RAM and 20.0% Flash with comfortable headroom for future enhancements.
+The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 12 phases. All phases have been implemented, compiled successfully, documented, and committed to git. The project uses 19.3% RAM and 20.0% Flash with comfortable headroom for future enhancements. Phase 12 adds comprehensive role-based access control (RBAC) for the web GUI with three distinct access levels.
 
 **Ready for**: Device deployment, production testing, customer handoff.
 
@@ -29,6 +29,7 @@ The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 11 
 | 9 | Page navigation (scripts + tab wiring) | ✅ | RAM 19.2%, Flash 20.0% | `221998d` |
 | 10 | Extended diagnostics (metrics, health) | ✅ | RAM 19.3%, Flash 20.0% | `1e592f1` |
 | 11 | Web dashboard + REST API | ✅ | RAM 19.3%, Flash 20.0% | `6d982c3` |
+| 12 | Role-Based Access Control (RBAC) | ✅ | RAM 19.3%, Flash 20.0% | `517f167` |
 
 ---
 
@@ -43,19 +44,59 @@ The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 11 
 - **5 LVGL Pages**: Home (meter + setpoints) + 3 Settings (controls) + Info (diagnostics)
 - **Tab bar navigation**: All buttons wired with script-based state management
 - **Real-time diagnostics**: 8 metrics on info page (heap, PSRAM, uptime, WiFi, RS485)
-- **Web dashboard**: `assets/dashboard.html` (REST API integration)
+- **Web dashboard**: `assets/dashboard.html` (REST API integration + RBAC)
+- **Role-Based Access Control**: Three access levels (GUEST/ADMIN/SUPERADMIN) with permission matrix
 
 ### Monitoring & Control
 - **Home Assistant integration**: Native API publishes all entities
 - **REST API**: `/api/states` endpoint returns JSON entity states
 - **SD card logging**: Daily CSV temps + event log + JSON backup/restore
 - **ntfy notifications**: Push alerts for alarms, probe faults
+- **Web GUI Security**: Role-based access with three tiers:
+  - **GUEST**: View-only main display (temperature, status, alarms)
+  - **ADMIN**: View main + settings, modify operational parameters (setpoint, alarms, defrost)
+  - **SUPERADMIN**: Full access (backup/restore, logs, WiFi settings, hardware config)
 
 ### Documentation
 - `reference/program_control_logic_flowchart.md`: Updated phase summary table
 - `reference/session_recaps.md`: Detailed recaps for Phases 9, 10, 11
 - `reference/hardware_pins.md`: All GPIO assignments verified
 - `reference/control_logic_ns_diagram.md`: State machine visualization
+
+---
+
+---
+
+## Phase 12: Role-Based Access Control (RBAC)
+
+**Objective**: Implement three-tier access control for web GUI to protect sensitive operations.
+
+**Access Levels**:
+- **GUEST** (view-only): Temperature display, status indicators, alarms — no modifications allowed
+- **ADMIN**: GUEST access + settings pages, can modify operational parameters (setpoint, alarms, defrost interval)
+- **SUPERADMIN**: ADMIN access + system administration (backup/restore, logs management, WiFi configuration, hardware settings)
+
+**Implementation Details**:
+- Enhanced `dashboard.html` with role-based UI/functionality
+- JavaScript permission matrix controls show/hide of sections and button enable/disable
+- Role passed via URL parameter: `?role=admin` or stored in localStorage
+- All sensitive operations protected with `canPerformAction()` checks
+- Permission-denied warnings shown to unauthorized users
+- No firmware changes needed (entirely client-side + simple YAML comments)
+
+**Usage Examples**:
+```bash
+# Guest access (view-only)
+http://192.168.1.X/assets/dashboard.html?role=guest
+
+# Admin access
+http://192.168.1.X/assets/dashboard.html?role=admin
+
+# SuperAdmin access
+http://192.168.1.X/assets/dashboard.html?role=superadmin
+```
+
+**Build**: RAM 19.3%, Flash 20.0% (no firmware impact — external HTML)
 
 ---
 
@@ -93,11 +134,24 @@ The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 11 
 - Added REST API documentation in YAML web_server comments
 - Compiled: No firmware size impact (external HTML), RAM 19.3%, Flash 20.0%
 
+**Phase 12: Role-Based Access Control (RBAC)**
+- Implemented three-tier access control: GUEST (view-only) / ADMIN (modify operational) / SUPERADMIN (full)
+- Enhanced dashboard with role-based UI show/hide and button enable/disable
+- Added comprehensive permission matrix in JavaScript
+- GUEST users can only view main display (temperature, status, alarms)
+- ADMIN users can access settings pages and modify setpoint/alarms/defrost parameters
+- SUPERADMIN users get system administration panel (backup/restore, logs, WiFi, hardware)
+- Role passed via URL parameter (?role=admin) or localStorage
+- All sensitive operations protected with canPerformAction() authorization checks
+- Permission-denied warnings shown to unauthorized users
+- Compiled: No firmware size impact (external HTML/CSS/JS), RAM 19.3%, Flash 20.0%
+
 ### Git Commits
 ```
-6d982c3 Phase 11: Web Dashboard + REST API integration
-1e592f1 Phase 10: Extended diagnostic page with system health metrics
-221998d Phase 9: LVGL page navigation with script-based state management
+517f167 ← Phase 12: Role-Based Access Control (RBAC) for web GUI
+6d982c3 ← Phase 11: Web Dashboard + REST API integration
+1e592f1 ← Phase 10: Extended diagnostic page with system health metrics
+221998d ← Phase 9: LVGL page navigation with script-based state management
 ```
 
 ### Documentation Updates
