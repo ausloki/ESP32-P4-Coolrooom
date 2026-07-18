@@ -1,0 +1,12 @@
+# Custom partition table for ESP32-P4 with 32MB NOR Flash.
+# OTA partitions are 7MB each — substantially larger than the S3's 3.5MB
+# to accommodate the P4's richer firmware (LVGL, Modbus, hosted WiFi stack).
+# NVS extended block added for persistent settings storage beyond OTA cycle.
+#
+# Name,     Type, SubType,  Offset,    Size,     Flags
+nvs,        data, nvs,      0x9000,    0xC000,
+phy_init,   data, phy,      0x15000,   0x1000,
+otadata,    data, ota,      0x16000,   0x2000,
+ota_0,      app,  ota_0,    0x20000,   0x700000,
+ota_1,      app,  ota_1,    0x720000,  0x700000,
+nvs_ext,    data, nvs,      0xE20000,  0x100000,

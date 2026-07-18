@@ -1,0 +1,503 @@
+##############################################################################
+# ESP32-P4 Coolroom Controller
+# Board: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
+# https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-7B
+#
+# HARDWARE-FIRST RULE
+# ─────────────────────────────────────────────────────────────────────────────
+# Every pin assignment in this file must be verified against the board
+# schematic before the firmware is flashed. See reference/hardware_pins.md.
+# Pins marked VERIFY_FROM_SCHEMATIC will cause incorrect behaviour if wrong.
+# Download schematic:
+# https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf
+#
+# PHASE STATUS (current: Phase 1 — WiFi, HA integration, network provisioning)
+# Phase 1: WiFi provisioning, HA native API, web server, OTA, NTP ← CURRENT
+# Phase 2: RS485 Modbus (relay board + RTD temp sensor), sensor globals
+# Phase 3: Coolroom control logic (setpoint, compressor, defrost, alarms)
+# Phase 4: LVGL touchscreen UI on 7" MIPI-DSI display
+# Phase 5: SD card logging, ntfy notifications, SD backup/restore
+##############################################################################
+
+substitutions:
+  device_name:    esp32-p4-coolroom
+  friendly_name:  "Coolroom Controller P4"
+  timezone:       Australia/Perth
+  ntp_server_1:   au.pool.ntp.org
+  ntp_server_2:   time.google.com
+
+  # ── I2C Header (CONFIRMED from Waveshare docs) ───────────────────────────
+  i2c_sda_pin:    GPIO7
+  i2c_scl_pin:    GPIO8
+
+  # ── RS485 UART (⚠️  VERIFY FROM SCHEMATIC — see reference/hardware_pins.md)
+  # Placeholder values — DO NOT FLASH without schematic verification.
+  rs485_tx_pin:   GPIO35
+  rs485_rx_pin:   GPIO36
+
+  # ── RS485 hardware addresses (same Waveshare RTU devices as prior project)
+  modbus_relay_address:         "1"
+  modbus_rtd_address:           "100"
+  modbus_rtd_universal_address: "249"
+  rtd_temp_reg_ch1:             "1"
+  rtd_temp_reg_ch2:             "2"
+  rtd_temp_scale:               "0.1"
+
+  # ── WiFi co-processor SDIO pins (⚠️  VERIFY FROM SCHEMATIC)
+  # The ESP32-C6 is on SDMMC host slot 0. These are educated estimates based
+  # on the ESP32-P4 Function EV Board reference design. Verify before flashing.
+  # The TF card (slot 1) uses GPIO 39-44 — slot 0 MUST use different pins.
+  wifi_sdio_clk_pin:   GPIO25
+  wifi_sdio_cmd_pin:   GPIO26
+  wifi_sdio_d0_pin:    GPIO27
+  wifi_sdio_d1_pin:    GPIO28
+  wifi_sdio_d2_pin:    GPIO29
+  wifi_sdio_d3_pin:    GPIO30
+  wifi_c6_reset_pin:   GPIO54
+
+  # ── Coolroom setpoints (runtime-configurable; defaults here) ─────────────
+  default_setpoint_c:      "2.0"
+  default_comp_diff_c:     "1.0"
+  default_alarm_high_c:    "3.0"
+  default_alarm_low_c:     "3.0"
+
+  # ── UI colors ─────────────────────────────────────────────────────────────
+  color_accent:    "0x18bcf2"
+  color_warning:   "0xd2691e"
+  color_success:   "0x7fff00"
+
+##############################################################################
+# Platform
+##############################################################################
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  variant: esp32p4
+  framework:
+    type: esp-idf
+    # ESP-IDF V5.3.1+ recommended for this board per Waveshare documentation.
+    # version: recommended   # use ESPHome's recommended IDF version
+    sdkconfig_options:
+      # Allow code execution from PSRAM for display-intensive tasks.
+      CONFIG_SPIRAM_RODATA: "y"
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: "y"
+      # SDIO co-processor: enlarge receive mailboxes to avoid dropped segments
+      # under heavy web+SSE load (mirrors proven settings from S3 project).
+      CONFIG_LWIP_TCP_SND_BUF_DEFAULT: "65535"
+      CONFIG_LWIP_TCP_WND_DEFAULT: "65535"
+      CONFIG_LWIP_TCP_RECVMBOX_SIZE: "16"
+    advanced:
+      execute_from_psram: true   # P4 + DMA-capable PSRAM — valid here
+  # engineering_sample: false    # Set true only if chip revision < 3.0
+  flash_size: 32MB
+  partitions: partitions_custom.csv
+  cpu_frequency: 360MHz          # 400MHz available; start conservatively
+
+psram:
+  mode: ocpi   # Octal PSRAM mode for ESP32-P4
+
+##############################################################################
+# WiFi via ESP32-C6 co-processor (ESP-Hosted SDIO)
+#
+# ⚠️  SDIO GPIO PINS BELOW ARE ESTIMATES — VERIFY FROM BOARD SCHEMATIC.
+# See reference/hardware_pins.md. If these are wrong the device will boot
+# without WiFi (not brick) and you can reflash over USB-C.
+##############################################################################
+
+esp32_hosted:
+  type: sdio
+  variant: ESP32C6
+  reset_pin:
+    number: ${wifi_c6_reset_pin}
+    mode: output
+  active_high: true
+  clk_pin: ${wifi_sdio_clk_pin}
+  cmd_pin: ${wifi_sdio_cmd_pin}
+  d0_pin:  ${wifi_sdio_d0_pin}
+  d1_pin:  ${wifi_sdio_d1_pin}
+  d2_pin:  ${wifi_sdio_d2_pin}
+  d3_pin:  ${wifi_sdio_d3_pin}
+  bus_width: 4
+  sdio_frequency: 10MHz   # Start conservatively; increase to 40MHz once verified
+  use_psram: true         # Buffer pool in PSRAM — required given LVGL footprint
+
+##############################################################################
+# WiFi — multi-network with captive-portal fallback for provisioning
+#
+# When no configured network is reachable the device starts an AP named
+# "CoolroomP4-Setup". Connect to it then browse to 192.168.4.1 to:
+#   • Scan available networks
+#   • Enter SSID and password
+#   • Persist credentials and reconnect
+##############################################################################
+
+wifi:
+  # Primary network from secrets
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+      priority: 10
+
+  # Fallback access point — triggers captive portal
+  ap:
+    ssid: "CoolroomP4-Setup"
+    password: !secret ap_password
+
+  # Fast connect: try last-known channel/BSSID before full scan
+  fast_connect: false
+
+  # Publish WiFi signal strength diagnostic
+  on_connect:
+    - lambda: |-
+        ESP_LOGI("wifi", "Connected: SSID=%s RSSI=%d IP=%s",
+                 WiFi.SSID().c_str(),
+                 WiFi.RSSI(),
+                 WiFi.localIP().toString().c_str());
+
+# Captive portal: served when in AP mode for network provisioning/scanning
+captive_portal:
+
+##############################################################################
+# Home Assistant Integration
+##############################################################################
+
+# Native API — encrypted transport for HA discovery and entity control
+api:
+  encryption:
+    key: !secret api_encryption_key
+  reboot_timeout: 0s   # Never reboot due to API disconnect (coolroom must run)
+  on_client_connected:
+    - lambda: |-
+        ESP_LOGI("ha", "Home Assistant client connected: %s",
+                 client_info.c_str());
+
+# OTA with HA integration
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# mDNS for HA auto-discovery
+mdns:
+  disabled: false
+
+##############################################################################
+# Time
+##############################################################################
+
+time:
+  - platform: sntp
+    id: ntp_time
+    timezone: ${timezone}
+    servers:
+      - ${ntp_server_1}
+      - ${ntp_server_2}
+    on_time_sync:
+      - lambda: |-
+          ESP_LOGI("time", "NTP synced");
+
+##############################################################################
+# Logging
+##############################################################################
+
+logger:
+  level: INFO
+  # P4 uses USB Serial/JTAG for debug output (USB-C Type-C port, item 15)
+  hardware_uart: USB_SERIAL_JTAG
+  logs:
+    # Quiet noisy polling that doesn't need INFO-level noise in production:
+    modbus_controller: WARN
+    modbus: WARN
+    sensor: WARN
+    text_sensor: WARN
+
+##############################################################################
+# Safe Mode — automatic rollback guard
+##############################################################################
+
+safe_mode:
+  # Boot is declared healthy after 60 s of successful operation.
+  # If the device crashes before that the bootloader rolls back to prior OTA.
+  boot_is_good_after: 60s
+  num_attempts: 3
+
+##############################################################################
+# Web Server (v3)
+# Provides a browser UI for entities, diagnostics, and settings.
+# Authenticated via web_server_username/web_server_password in secrets.
+##############################################################################
+
+web_server:
+  port: 80
+  version: 3
+  auth:
+    username: !secret web_server_username
+    password: !secret web_server_password
+  # Sorting groups for logical UI organisation (Phase 2+ will populate these)
+  sorting_groups:
+    - id: group_system_info
+      name: "System"
+      sorting_weight: -200
+    - id: group_network
+      name: "Network & Connectivity"
+      sorting_weight: -190
+    - id: group_control
+      name: "Temperature Control"
+      sorting_weight: -100
+    - id: group_compressor
+      name: "Compressor"
+      sorting_weight: -80
+    - id: group_defrost
+      name: "Defrost"
+      sorting_weight: -60
+    - id: group_probes
+      name: "Probes & Sensors"
+      sorting_weight: -40
+    - id: group_alarms
+      name: "Alarms"
+      sorting_weight: -20
+    - id: group_diagnostics
+      name: "Diagnostics"
+      sorting_weight: 100
+
+##############################################################################
+# I2C Bus (CONFIRMED GPIO7/GPIO8)
+# Used by: SHT31 reference sensor (Phase 2), GT911 touch (Phase 4),
+#          any other I2C sensors on the external header.
+##############################################################################
+
+i2c:
+  - id: i2c_bus
+    sda: ${i2c_sda_pin}
+    scl: ${i2c_scl_pin}
+    scan: true
+    frequency: 400kHz
+
+##############################################################################
+# RS485 / Modbus
+# ⚠️  UART PINS UNCONFIRMED — verify rs485_tx_pin / rs485_rx_pin from schematic
+# before Phase 2 testing. Wrong pins here will not damage hardware but will
+# prevent Modbus communication.
+##############################################################################
+
+uart:
+  - id: rs485_uart
+    tx_pin: ${rs485_tx_pin}
+    rx_pin: ${rs485_rx_pin}
+    baud_rate: 9600
+    stop_bits: 1
+    data_bits: 8
+    parity: NONE
+
+modbus:
+  - id: rs485_modbus
+    uart_id: rs485_uart
+    send_wait_time: 250ms
+
+##############################################################################
+# Phase 1: System Sensors & Diagnostics
+##############################################################################
+
+sensor:
+  # WiFi signal strength
+  - platform: wifi_signal
+    name: "WiFi Signal Strength"
+    id: wifi_rssi
+    update_interval: 60s
+    web_server:
+      sorting_group_id: group_network
+      sorting_weight: 1
+
+  # ESP32-P4 internal temperature (HP core die temperature)
+  - platform: internal_temperature
+    name: "Chip Temperature"
+    id: chip_temp
+    update_interval: 30s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 10
+
+  # Free heap (PSRAM-aware; P4 reports both DRAM and PSRAM heaps via IDF)
+  - platform: template
+    name: "Free Heap (KB)"
+    id: free_heap_kb
+    lambda: 'return (float)heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024.0f;'
+    unit_of_measurement: "KB"
+    update_interval: 30s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 11
+
+  # System uptime in seconds
+  - platform: uptime
+    name: "System Uptime"
+    id: system_uptime
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 2
+
+text_sensor:
+  # WiFi SSID for diagnostics
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      id: ip_address
+      web_server:
+        sorting_group_id: group_network
+        sorting_weight: 2
+    ssid:
+      name: "WiFi SSID"
+      id: wifi_ssid_text
+      web_server:
+        sorting_group_id: group_network
+        sorting_weight: 3
+    mac_address:
+      name: "MAC Address"
+      id: mac_address
+      web_server:
+        sorting_group_id: group_network
+        sorting_weight: 4
+
+  # Firmware version exposed to HA
+  - platform: version
+    name: "ESPHome Version"
+    id: esphome_version
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 1
+
+  # Status text (used to report firmware events to web UI)
+  - platform: template
+    name: "Status"
+    id: status_text
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 3
+
+  # Current local time
+  - platform: template
+    name: "Current Time"
+    id: current_time
+    lambda: |-
+      auto t = id(ntp_time).now();
+      if (!t.is_valid()) return std::string{"--:--:--"};
+      char buf[24];
+      struct tm tm = t.to_c_tm();
+      strftime(buf, sizeof(buf), "%d-%m-%Y %H:%M:%S", &tm);
+      return std::string{buf};
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 4
+
+binary_sensor:
+  # WiFi connectivity status for HA automations
+  - platform: status
+    name: "Controller Online"
+    id: controller_online
+    web_server:
+      sorting_group_id: group_network
+      sorting_weight: 1
+
+##############################################################################
+# System Buttons
+##############################################################################
+
+button:
+  - platform: restart
+    id: restart_btn
+    name: "Restart Controller"
+    icon: "mdi:restart"
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 10
+
+  - platform: factory_reset
+    id: factory_reset_btn
+    name: "Factory Reset"
+    icon: "mdi:restore"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 11
+
+##############################################################################
+# Globals (Phase 1 subset — control globals added in Phase 2)
+##############################################################################
+
+globals:
+  # Persistent setpoint (restored from NVS across reboots)
+  - id: ctl_setpoint
+    type: float
+    restore_value: yes
+    initial_value: ${default_setpoint_c}
+
+  - id: ctl_comp_diff
+    type: float
+    restore_value: yes
+    initial_value: ${default_comp_diff_c}
+
+  - id: ctl_alarm_high_delta
+    type: float
+    restore_value: yes
+    initial_value: ${default_alarm_high_c}
+
+  - id: ctl_alarm_low_delta
+    type: float
+    restore_value: yes
+    initial_value: ${default_alarm_low_c}
+
+  # Boot timestamp for uptime calculations
+  - id: ctl_boot_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  # WiFi connected flag
+  - id: ctl_wifi_connected
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+##############################################################################
+# Startup
+##############################################################################
+
+esphome:
+  on_boot:
+    - priority: 600
+      then:
+        - lambda: |-
+            id(ctl_boot_ms) = millis();
+            ESP_LOGI("boot", "ESP32-P4 Coolroom Controller starting");
+            ESP_LOGI("boot", "Chip: RISC-V HP dual-core @ %d MHz",
+                     (int)(esp_clk_cpu_freq() / 1000000));
+            ESP_LOGI("boot", "PSRAM: %u KB total / %u KB free",
+                     (unsigned)(heap_caps_get_total_size(MALLOC_CAP_SPIRAM) / 1024),
+                     (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+    - priority: -100
+      then:
+        - lambda: |-
+            id(status_text).publish_state("Booting…");
+
+  on_loop:
+    - lambda: |-
+        static uint32_t last_loop_ms = 0;
+        const uint32_t now = millis();
+        if (now - last_loop_ms > 5000) {
+          last_loop_ms = now;
+          id(current_time).update();
+        }
+
+##############################################################################
+# WiFi event hooks
+##############################################################################
+# (wifi on_connect lambda is defined in the wifi: block above)

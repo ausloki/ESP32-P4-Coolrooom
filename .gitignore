@@ -1,0 +1,27 @@
+# ESPHome build artifacts
+.esphome/
+*.bin
+*.elf
+*.map
+
+# Secrets — never commit
+secrets.yaml
+
+# Python virtualenv
+.venv/
+
+# Code-review graph database (large binary, rebuilt locally)
+.code-review-graph/graph.db
+.code-review-graph/graph.html
+
+# macOS
+.DS_Store
+
+# VS Code local workspace overrides
+.vscode/*.code-workspace
+
+# Logs
+logs/*.log
+logs/*.jsonl
+logs/*.txt
+logs/**/*.log
