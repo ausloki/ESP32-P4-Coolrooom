@@ -2283,6 +2283,22 @@ lvgl:
                   text: "Coolroom"
                   text_font: font_medium
                   text_color: col_text
+              - button:
+                  id: btn_light_toggle
+                  align: RIGHT_MID
+                  x: -70
+                  width: 48
+                  height: 36
+                  bg_color: col_blue
+                  radius: 6
+                  border_width: 0
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text: "💡"
+                        text_font: font_small
+                  on_click:
+                    - switch.toggle: relay_light
               - label:
                   id: lbl_clock
                   align: RIGHT_MID
