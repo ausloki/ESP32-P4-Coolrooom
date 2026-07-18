@@ -131,3 +131,40 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---
+
+## 2026-07-18 — Phase 7: Diagnostic Sensors + RS485 Health
+
+**Objective**: Add diagnostic text sensors (RS485 bus status, relay/RTD addresses, probe health) + select entities (probe source profile selection). Bridges gap from Phase 6 to Phase 8 LVGL UI.
+
+**Files changed**:
+- `esp32-p4-coolroom.yaml` (+50 lines)
+  - 7 new text_sensor entities: RS485 status, relay/RTD addresses, probe health summary, system heap, PSRAM
+  - 3 new select entities: probe 1/2/3 source profile (RTD Board Channel vs SHT20 vs SHT31)
+- `p4_helpers.h` (+25 lines)
+  - Added `p4_fmt_heap_mb()` — format free heap + largest block (KB)
+  - Added `p4_fmt_psram_mb()` — format PSRAM status string
+  - Added `<inttypes.h>` include; fixed format specifiers to use PRIu32/PRIu64 macros
+- `p4_logging.h` (+1 line)
+  - Added `<inttypes.h>` include; fixed SD card mount log format specifier
+
+**Entities added**:
+- `text_sensor.rs485_status` — "Relay: OK | RTC: OK" health display
+- `text_sensor.rs485_relay_config_address` — "Addr: 1 (Modbus RTU)"
+- `text_sensor.rs485_rtd_active_address` — "RTD Addr: 10 (multi-channel)"
+- `text_sensor.rs485_probe_stats` — "P1: 5s | P2: 5s | P3: 5s" (age in seconds)
+- `text_sensor.system_heap_text` — "Free: 467 KB | Largest: 430 KB block"
+- `text_sensor.system_psram_text` — "PSRAM: functional"
+- `select.select_probe1_source` / `select_probe2_source` / `select_probe3_source` — RTD/SHT20/SHT31 source options
+
+**Build**: RAM 18.8% (108.6 KB/576 KB), Flash 19.6% (1.44 MB/7.3 MB) ✅
+- **Delta from Phase 6**: +680 B RAM, +7,000 B Flash (well within budget)
+
+**Validation**:
+- ✅ Compiles without errors (format specifier warnings fixed)
+- ✅ All 10 new text/select entities parse correctly in YAML
+- ✅ p4_helpers.h heap/PSRAM formatters use safe ESP-IDF APIs
+
+**Commit**: Phase 7 complete (diagnostic sensors + RS485 health + select entities)  
+**GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
+
+---

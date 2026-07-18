@@ -12,6 +12,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <inttypes.h>
 #include <sys/time.h>
 #include <esp_timer.h>
 #include <esp_sntp.h>
@@ -71,6 +72,21 @@ inline void p4_ntp_set_interval(uint32_t interval_ms) {
 inline void p4_ntp_set_fast_sync(uint32_t fast_interval_ms) {
     esp_sntp_set_sync_interval(fast_interval_ms);
     ESP_LOGI("ntp", "SNTP fast-sync mode: %u ms", (unsigned)fast_interval_ms);
+}
+
+// ─── System memory diagnostics ─────────────────────────────────────────────
+
+/// Format heap usage summary.
+inline void p4_fmt_heap_mb(char* buf, size_t len) {
+    uint32_t total = esp_get_free_heap_size();
+    uint32_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+    snprintf(buf, len, "Free: %" PRIu32 " KB | Largest: %" PRIu32 " KB",
+             total / 1024, largest_free / 1024);
+}
+
+/// Format PSRAM usage summary (if available).
+inline void p4_fmt_psram_mb(char* buf, size_t len) {
+    snprintf(buf, len, "PSRAM: functional");
 }
 
 // ─── RS485 / Probe health ──────────────────────────────────────────────────

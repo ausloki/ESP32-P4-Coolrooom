@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <inttypes.h>
 #include <sys/stat.h>
 #include <sys/unistd.h>
 #include <dirent.h>
@@ -74,7 +75,7 @@ inline bool p4_sd_mount() {
     // Ensure log directory exists
     mkdir("/sdcard/logs", 0755);
 
-    ESP_LOGI(TAG_SD, "SD card mounted. Name: %s, Speed: %u kHz, Size: %llu MB",
+    ESP_LOGI(TAG_SD, "SD card mounted. Name: %s, Speed: %" PRIu32 " kHz, Size: %" PRIu64 " MB",
              p4_sd_card->cid.name,
              p4_sd_card->max_freq_khz,
              ((uint64_t)p4_sd_card->csd.capacity) * p4_sd_card->csd.sector_size / (1024 * 1024));

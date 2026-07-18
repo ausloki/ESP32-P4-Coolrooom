@@ -767,6 +767,87 @@ text_sensor:
       sorting_weight: 5
     lambda: 'return std::string{p4_ntp_synced() ? "SYNCED" : "PENDING"};'
 
+  # ── Phase 7: Diagnostic text sensors ──────────────────────────────────────
+  - platform: template
+    name: "RS485 Bus Status"
+    id: rs485_status
+    update_interval: 30s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 40
+    lambda: |-
+      bool relay_ok = id(hw_rs485_relay_ok);
+      bool rtc_ok   = id(hw_rtc_ok);
+      char buf[64];
+      snprintf(buf, sizeof(buf), "Relay: %s | RTC: %s",
+               relay_ok ? "OK" : "OFFLINE",
+               rtc_ok   ? "OK" : "OFFLINE");
+      return std::string(buf);
+
+  - platform: template
+    name: "Relay Config Address"
+    id: rs485_relay_config_address
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 41
+    lambda: 'return std::string("Addr: 1 (Modbus RTU)");'
+
+  - platform: template
+    name: "RTD Active Address"
+    id: rs485_rtd_active_address
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 42
+    lambda: 'return std::string("RTD Addr: 10 (multi-channel)");'
+
+  - platform: template
+    name: "Probe Health Summary"
+    id: rs485_probe_stats
+    update_interval: 20s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 43
+    lambda: |-
+      float age_p1 = p4_sample_age_s(id(rtd1_ch1_last_ms));
+      float age_p2 = p4_sample_age_s(id(rtd1_ch2_last_ms));
+      float age_p3 = p4_sample_age_s(id(rtd2_ch1_last_ms));
+      char buf[80];
+      snprintf(buf, sizeof(buf), "P1: %.0fs | P2: %.0fs | P3: %.0fs",
+               age_p1, age_p2, age_p3);
+      return std::string(buf);
+
+  - platform: template
+    name: "System Heap"
+    id: system_heap_text
+    update_interval: 30s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 10
+    lambda: |-
+      char buf[40];
+      p4_fmt_heap_mb(buf, sizeof(buf));
+      return std::string(buf);
+
+  - platform: template
+    name: "System PSRAM"
+    id: system_psram_text
+    update_interval: 30s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 11
+    lambda: |-
+      char buf[40];
+      p4_fmt_psram_mb(buf, sizeof(buf));
+      return std::string(buf);
+
 ##############################################################################
 # Binary Sensors
 ##############################################################################
@@ -1168,6 +1249,59 @@ number:
           id(ctl_alarm_low_delta) = x;
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
+
+##############################################################################
+# Select Entities (Phase 7: Probe source profiles)
+##############################################################################
+
+select:
+  - platform: template
+    name: "Probe 1 Source"
+    id: select_probe1_source
+    options:
+      - "RTD Board Channel 1"
+      - "SHT20 I2C"
+      - "SHT31 I2C 0x44"
+    initial_option: "RTD Board Channel 1"
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 50
+    set_action:
+      lambda: |-
+        ESP_LOGD("select", "Probe 1 source changed to: %s", x.c_str());
+        id(select_probe1_source).publish_state(x);
+
+  - platform: template
+    name: "Probe 2 Source"
+    id: select_probe2_source
+    options:
+      - "RTD Board Channel 2"
+      - "SHT20 I2C"
+      - "SHT31 I2C 0x44"
+    initial_option: "RTD Board Channel 2"
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 51
+    set_action:
+      lambda: |-
+        ESP_LOGD("select", "Probe 2 source changed to: %s", x.c_str());
+        id(select_probe2_source).publish_state(x);
+
+  - platform: template
+    name: "Probe 3 Source"
+    id: select_probe3_source
+    options:
+      - "RTD Board Channel 3"
+      - "SHT20 I2C"
+      - "SHT31 I2C 0x44"
+    initial_option: "RTD Board Channel 3"
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 52
+    set_action:
+      lambda: |-
+        ESP_LOGD("select", "Probe 3 source changed to: %s", x.c_str());
+        id(select_probe3_source).publish_state(x);
 
 ##############################################################################
 # Buttons

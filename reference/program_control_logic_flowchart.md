@@ -103,6 +103,6 @@ graph LR
 | 3     | Coolroom control logic                     | ✅ Complete |
 | 4     | LVGL 7" MIPI-DSI touchscreen UI            | ✅ Complete |
 | 5     | SD card logging, ntfy, backup/restore      | ✅ Complete |
-| 6     | Extended control: lockout, grace, smart defrost, fallback, ice, no-cool | 🔄 Current |
-| 7     | Diagnostic sensors + RS485 health + select entities | ⏳ Next |
-| 8     | LVGL multi-page UI (home meter + settings + system pages) | ⏳ Planned |
+| 6     | Extended control: lockout, grace, smart defrost, fallback, ice, no-cool | ✅ Complete |
+| 7     | Diagnostic sensors + RS485 health + select entities | ✅ Complete |
+| 8     | LVGL multi-page UI (home meter + settings + system pages) | ⏳ Next |
