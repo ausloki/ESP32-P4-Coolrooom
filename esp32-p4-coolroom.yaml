@@ -73,6 +73,21 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
+  on_boot:
+    - priority: 600
+      then:
+        - lambda: |-
+            id(ctl_boot_ms) = millis();
+            ESP_LOGI("boot", "ESP32-P4 Coolroom Controller starting");
+            ESP_LOGI("boot", "Chip: RISC-V HP dual-core @ %d MHz (configured)",
+                     CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
+            ESP_LOGI("boot", "PSRAM: %u KB total / %u KB free",
+                     (unsigned)(heap_caps_get_total_size(MALLOC_CAP_SPIRAM) / 1024),
+                     (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+    - priority: -100
+      then:
+        - lambda: |-
+            id(status_text).publish_state("Booting...");
 
 esp32:
   variant: esp32p4
@@ -90,14 +105,15 @@ esp32:
       CONFIG_LWIP_TCP_WND_DEFAULT: "65535"
       CONFIG_LWIP_TCP_RECVMBOX_SIZE: "16"
     advanced:
-      execute_from_psram: true   # P4 + DMA-capable PSRAM — valid here
+      execute_from_psram: true           # P4 + DMA-capable PSRAM — valid here
+      enable_idf_experimental_features: true  # Required for OTA with 32MB flash
   # engineering_sample: false    # Set true only if chip revision < 3.0
   flash_size: 32MB
   partitions: partitions_custom.csv
   cpu_frequency: 360MHz          # 400MHz available; start conservatively
 
 psram:
-  mode: ocpi   # Octal PSRAM mode for ESP32-P4
+  mode: hex   # ESP32-P4 stacked 32 MB Hex-SPI PSRAM — only valid mode for this chip
 
 ##############################################################################
 # WiFi via ESP32-C6 co-processor (ESP-Hosted SDIO)
@@ -110,9 +126,7 @@ psram:
 esp32_hosted:
   type: sdio
   variant: ESP32C6
-  reset_pin:
-    number: ${wifi_c6_reset_pin}
-    mode: output
+  reset_pin: ${wifi_c6_reset_pin}   # bare pin number required by esp32_hosted
   active_high: true
   clk_pin: ${wifi_sdio_clk_pin}
   cmd_pin: ${wifi_sdio_cmd_pin}
@@ -149,13 +163,10 @@ wifi:
   # Fast connect: try last-known channel/BSSID before full scan
   fast_connect: false
 
-  # Publish WiFi signal strength diagnostic
+  # Log connect event using ESPHome's network info (ESP-IDF only — no Arduino WiFi object)
   on_connect:
     - lambda: |-
-        ESP_LOGI("wifi", "Connected: SSID=%s RSSI=%d IP=%s",
-                 WiFi.SSID().c_str(),
-                 WiFi.RSSI(),
-                 WiFi.localIP().toString().c_str());
+        ESP_LOGI("wifi", "WiFi connected");
 
 # Captive portal: served when in AP mode for network provisioning/scanning
 captive_portal:
@@ -468,36 +479,5 @@ globals:
     initial_value: "false"
 
 ##############################################################################
-# Startup
+# Startup (on_boot lives here — merged into the single esphome: block above)
 ##############################################################################
-
-esphome:
-  on_boot:
-    - priority: 600
-      then:
-        - lambda: |-
-            id(ctl_boot_ms) = millis();
-            ESP_LOGI("boot", "ESP32-P4 Coolroom Controller starting");
-            ESP_LOGI("boot", "Chip: RISC-V HP dual-core @ %d MHz",
-                     (int)(esp_clk_cpu_freq() / 1000000));
-            ESP_LOGI("boot", "PSRAM: %u KB total / %u KB free",
-                     (unsigned)(heap_caps_get_total_size(MALLOC_CAP_SPIRAM) / 1024),
-                     (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
-    - priority: -100
-      then:
-        - lambda: |-
-            id(status_text).publish_state("Booting…");
-
-  on_loop:
-    - lambda: |-
-        static uint32_t last_loop_ms = 0;
-        const uint32_t now = millis();
-        if (now - last_loop_ms > 5000) {
-          last_loop_ms = now;
-          id(current_time).update();
-        }
-
-##############################################################################
-# WiFi event hooks
-##############################################################################
-# (wifi on_connect lambda is defined in the wifi: block above)
