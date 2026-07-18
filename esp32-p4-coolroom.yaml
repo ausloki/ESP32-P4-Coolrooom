@@ -30,9 +30,9 @@
 # PHASE STATUS
 #   Phase 1: WiFi, HA native API, web server, OTA            ✓
 #   Phase 2: RS485 Modbus — relays + 3x RTD probes           ✓
-#   Phase 3: Coolroom control logic                          ← CURRENT
-#   Phase 4: LVGL 7" MIPI-DSI touchscreen UI
-#   Phase 5: SD card logging, ntfy, backup/restore
+#   Phase 3: Coolroom control logic                          ✓
+#   Phase 4: LVGL 7" MIPI-DSI touchscreen UI                ✓
+#   Phase 5: SD card logging, ntfy, backup/restore           ← CURRENT
 ##############################################################################
 
 substitutions:
@@ -101,6 +101,12 @@ substitutions:
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
   probe_stale_ms:      "30000"  # probe 1 declared stale after this many ms
 
+  # ── Phase 5: SD logging & ntfy ──────────────────────────────
+  log_interval_min:    "5"      # temperature log interval (minutes)
+  ntfy_server:         "https://ntfy.sh"   # ntfy server URL
+  ntfy_topic:          "coolroom-alerts"   # ntfy topic name
+  ntfy_priority:       "high"              # default ntfy message priority
+
 ##############################################################################
 # Platform
 ##############################################################################
@@ -111,6 +117,7 @@ esphome:
   includes:
     - p4_helpers.h
     - p4_control.h
+    - p4_logging.h
   on_boot:
     - priority: 600
       then:
@@ -118,6 +125,31 @@ esphome:
             id(ctl_boot_ms) = millis();
             p4_log_boot();
             p4_ntp_set_fast_sync(${ntp_fast_sync_ms});
+    - priority: -200
+      then:
+        - lambda: |-
+            // Phase 5: mount SD card after all peripherals are up
+            if (p4_sd_mount()) {
+                id(sd_card_ok) = true;
+                // Attempt param restore only if NVS is at defaults
+                float sp = id(ctl_setpoint);
+                float cd = id(ctl_comp_diff);
+                float ah = id(ctl_alarm_high_delta);
+                float al = id(ctl_alarm_low_delta);
+                if (p4_sd_restore_params(sp, cd, ah, al)) {
+                    id(ctl_setpoint)         = sp;
+                    id(ctl_comp_diff)        = cd;
+                    id(ctl_alarm_high_delta) = ah;
+                    id(ctl_alarm_low_delta)  = al;
+                    ESP_LOGI("sd", "Control params restored from SD backup");
+                    p4_sd_log_event("BOOT_RESTORE", "params loaded from SD");
+                } else {
+                    p4_sd_log_event("BOOT", "SD mounted, no restore needed");
+                }
+            } else {
+                id(sd_card_ok) = false;
+                ESP_LOGW("sd", "SD card not found or mount failed");
+            }
     - priority: -100
       then:
         - lambda: id(status_text).publish_state("Booting...");
@@ -132,6 +164,9 @@ esp32:
       CONFIG_LWIP_TCP_SND_BUF_DEFAULT: "65535"
       CONFIG_LWIP_TCP_WND_DEFAULT: "65535"
       CONFIG_LWIP_TCP_RECVMBOX_SIZE: "16"
+      # Phase 5: FATFS for SD card (long filename support)
+      CONFIG_FATFS_LFN_HEAP: "y"
+      CONFIG_FATFS_MAX_LFN: "255"
     advanced:
       execute_from_psram: true
       enable_idf_experimental_features: true
@@ -639,6 +674,18 @@ sensor:
       sorting_weight: 22
     lambda: 'return p4_sample_age_s(id(rtd2_ch1_last_ms));'
 
+  # ── Phase 5: SD card free space ───────────────────────────────────────────
+  - platform: template
+    name: "SD Card Free (MB)"
+    id: sd_free_mb
+    unit_of_measurement: "MB"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 25
+    lambda: 'return p4_sd_free_mb();'
+
 ##############################################################################
 # Text Sensors
 ##############################################################################
@@ -779,7 +826,7 @@ binary_sensor:
 
   - platform: template
     id: probe_fault_active
-    name: "Probe Fault (Stale / Invalid)"
+    name: "Probe Fault - Stale or Invalid"
     device_class: problem
     web_server:
       sorting_group_id: group_diagnostics
@@ -792,6 +839,17 @@ binary_sensor:
       - lvgl.label.update:
           id: lbl_status_msg
           text: !lambda 'return x ? std::string("PROBE FAULT — check RS485 connection") : std::string("OK");'
+
+  # ── Phase 5: SD card health ──────────────────────────────────────────────
+  - platform: template
+    id: sd_card_online
+    name: "SD Card Mounted"
+    device_class: connectivity
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 36
+    lambda: 'return id(sd_card_ok);'
 
 ##############################################################################
 # Number Entities — NVS-persistent control parameters
@@ -904,6 +962,55 @@ button:
       sorting_group_id: group_system_info
       sorting_weight: 11
 
+  # ── Phase 5: SD card management buttons ─────────────────────────────────
+  - platform: template
+    id: btn_sd_backup
+    name: "Backup Params to SD"
+    icon: "mdi:content-save"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 20
+    on_press:
+      - lambda: |-
+          bool ok = p4_sd_backup_params(
+              id(ctl_setpoint), id(ctl_comp_diff),
+              id(ctl_alarm_high_delta), id(ctl_alarm_low_delta));
+          ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
+          if (ok) p4_sd_log_event("BACKUP", "manual");
+
+  - platform: template
+    id: btn_sd_restore
+    name: "Restore Params from SD"
+    icon: "mdi:restore"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 21
+    on_press:
+      - lambda: |-
+          float sp = id(ctl_setpoint);
+          float cd = id(ctl_comp_diff);
+          float ah = id(ctl_alarm_high_delta);
+          float al = id(ctl_alarm_low_delta);
+          if (p4_sd_restore_params(sp, cd, ah, al)) {
+              id(ctl_setpoint)         = sp;
+              id(ctl_comp_diff)        = cd;
+              id(ctl_alarm_high_delta) = ah;
+              id(ctl_alarm_low_delta)  = al;
+              if (esphome::global_preferences != nullptr)
+                  esphome::global_preferences->sync();
+              p4_sd_log_event("RESTORE", "manual");
+          }
+
+##############################################################################
+# Phase 5: HTTP request component for ntfy push notifications
+##############################################################################
+
+http_request:
+  verify_ssl: false
+  timeout: 10s
+
 ##############################################################################
 # Phase 3: 10-second control loop
 # All decision logic lives in p4_control.h. This lambda is the orchestrator.
@@ -968,7 +1075,58 @@ interval:
                   ESP_LOGI("ctl", "Defrost complete (timeout %u min)", (unsigned)${defrost_max_min});
                   id(relay_defrost).turn_off();
                   id(ctl_defrost_last_end_ms) = millis();
+                  p4_sd_log_event("DEFROST_END", "timeout");
               }
+          }
+
+          // ── 5. Phase 5: SD temperature logging ──────────────────────────
+          // Log every log_interval_min minutes (10s ticks)
+          const uint32_t log_every_ticks = (uint32_t)(${log_interval_min}) * 6U;
+          id(log_tick_count) = id(log_tick_count) + 1U;
+          if (id(sd_card_ok) && id(log_tick_count) >= log_every_ticks) {
+              id(log_tick_count) = 0;
+              p4_sd_log_temps(
+                  id(probe1_temp).state,
+                  id(probe2_temp).state,
+                  id(probe3_temp).state,
+                  id(ctl_setpoint),
+                  id(relay_compressor).state,
+                  id(relay_defrost).state,
+                  id(ctl_alarm_high_active),
+                  id(ctl_alarm_low_active),
+                  id(ctl_probe_fault));
+          }
+
+          // ── 6. Phase 5: ntfy push notifications (edge-triggered) ────────
+          // High alarm: send once on rising edge, clear on falling
+          bool ntfy_hi  = id(ctl_alarm_high_active);
+          bool ntfy_lo  = id(ctl_alarm_low_active);
+          bool ntfy_pf  = id(ctl_probe_fault);
+          if (ntfy_hi && !id(ntfy_alarm_hi_sent)) {
+              id(ntfy_alarm_hi_sent) = true;
+              id(ntfy_high_alarm_request).trigger();
+              p4_sd_log_event("ALARM_HI", id(probe1_temp).state == id(probe1_temp).state ? std::to_string((int)id(probe1_temp).state).c_str() : "---");
+          } else if (!ntfy_hi && id(ntfy_alarm_hi_sent)) {
+              id(ntfy_alarm_hi_sent) = false;
+              id(ntfy_alarm_clear_request).trigger();
+              p4_sd_log_event("ALARM_HI_CLEAR", "");
+          }
+          if (ntfy_lo && !id(ntfy_alarm_lo_sent)) {
+              id(ntfy_alarm_lo_sent) = true;
+              id(ntfy_low_alarm_request).trigger();
+              p4_sd_log_event("ALARM_LO", "");
+          } else if (!ntfy_lo && id(ntfy_alarm_lo_sent)) {
+              id(ntfy_alarm_lo_sent) = false;
+              id(ntfy_alarm_clear_request).trigger();
+              p4_sd_log_event("ALARM_LO_CLEAR", "");
+          }
+          if (ntfy_pf && !id(ntfy_probe_fault_sent)) {
+              id(ntfy_probe_fault_sent) = true;
+              id(ntfy_probe_fault_request).trigger();
+              p4_sd_log_event("PROBE_FAULT", "");
+          } else if (!ntfy_pf && id(ntfy_probe_fault_sent)) {
+              id(ntfy_probe_fault_sent) = false;
+              p4_sd_log_event("PROBE_FAULT_CLEAR", "");
           }
 
   # ── Phase 4: 1s LVGL display updates ─────────────────────────────────────
@@ -1101,6 +1259,34 @@ globals:
     initial_value: "0"
 
   - id: ctl_defrost_last_end_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  # ── Phase 5: SD card state ─────────────────────────────────────────────
+  - id: sd_card_ok
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Alarm state tracking for ntfy edge detection (avoid repeat notifications)
+  - id: ntfy_alarm_hi_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_alarm_lo_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_probe_fault_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Log tick counter (incremented every 10s, log when reaches interval)
+  - id: log_tick_count
     type: uint32_t
     restore_value: no
     initial_value: "0"
@@ -1525,3 +1711,64 @@ lvgl:
 ##############################################################################
 # Phase 4: LVGL update automations — merged into interval: above
 ##############################################################################
+
+##############################################################################
+# Phase 5: ntfy notification scripts (triggered from 10s control loop)
+# Uses ESPHome http_request component. Each script sends one POST to ntfy.
+##############################################################################
+
+script:
+  - id: ntfy_high_alarm_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return std::string("${ntfy_server}/${ntfy_topic}");
+          request_headers:
+            Title: "Coolroom HIGH TEMP Alarm"
+            Priority: "${ntfy_priority}"
+            Tags: "thermometer,rotating_light"
+          body: !lambda |-
+            char buf[80];
+            snprintf(buf, sizeof(buf), "Coolroom %.1f°C — setpoint %.1f°C",
+                     id(probe1_temp).state, id(ctl_setpoint));
+            return std::string(buf);
+
+  - id: ntfy_low_alarm_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return std::string("${ntfy_server}/${ntfy_topic}");
+          request_headers:
+            Title: "Coolroom LOW TEMP Alarm"
+            Priority: "${ntfy_priority}"
+            Tags: "snowflake,rotating_light"
+          body: !lambda |-
+            char buf[80];
+            snprintf(buf, sizeof(buf), "Coolroom %.1f°C — setpoint %.1f°C",
+                     id(probe1_temp).state, id(ctl_setpoint));
+            return std::string(buf);
+
+  - id: ntfy_alarm_clear_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return std::string("${ntfy_server}/${ntfy_topic}");
+          request_headers:
+            Title: "Coolroom Alarm CLEARED"
+            Priority: "low"
+            Tags: "white_check_mark"
+          body: !lambda |-
+            char buf[60];
+            snprintf(buf, sizeof(buf), "Temperature normal: %.1f°C", id(probe1_temp).state);
+            return std::string(buf);
+
+  - id: ntfy_probe_fault_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return std::string("${ntfy_server}/${ntfy_topic}");
+          request_headers:
+            Title: "Coolroom PROBE FAULT"
+            Priority: "urgent"
+            Tags: "warning,thermometer"
+          body: "Probe 1 stale or invalid — check RS485 connection."

@@ -56,3 +56,39 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---
+
+## 2026-07-18 — Phase 5: SD Logging, ntfy, Backup/Restore
+
+### What changed
+
+**p4_logging.h (new)**:
+- `p4_sd_mount()` / `p4_sd_unmount()` / `p4_sd_is_ready()` — SDMMC slot 1 (GPIO 39-44), FATFS/VFS
+- `p4_sd_log_temps()` — daily CSV at `/sdcard/logs/YYYY-MM-DD.csv`, header auto-created
+- `p4_sd_log_event()` — timestamped events at `/sdcard/events.csv`
+- `p4_sd_backup_params()` — JSON dump to `/sdcard/backup.json`
+- `p4_sd_restore_params()` — JSON parse from SD, updates NVS globals
+- `p4_sd_free_mb()` — FATFS f_getfree() → MB
+
+**esp32-p4-coolroom.yaml**:
+- Phase status header updated: Phase 5 ← CURRENT
+- New substitutions: `log_interval_min`, `ntfy_server`, `ntfy_topic`, `ntfy_priority`
+- `p4_logging.h` added to includes
+- `on_boot priority -200`: SD mount + optional param restore from backup.json
+- FATFS sdkconfig options: `CONFIG_FATFS_LFN_HEAP`, `CONFIG_FATFS_MAX_LFN`
+- `http_request:` component (IDF, no SSL verify, 10s timeout)
+- New globals: `sd_card_ok`, `ntfy_alarm_hi/lo_sent`, `ntfy_probe_fault_sent`, `log_tick_count`
+- New sensors: `sd_free_mb`, `sd_card_online` binary sensor
+- New buttons: `btn_sd_backup`, `btn_sd_restore` (HA + web UI)
+- 10s control loop extended with steps 5 (SD temperature log) and 6 (ntfy edge-triggered push)
+- 4 ntfy scripts: `ntfy_high_alarm_request`, `ntfy_low_alarm_request`, `ntfy_alarm_clear_request`, `ntfy_probe_fault_request`
+
+**References updated**:
+- `control_logic_ns_diagram.md` — Phase 5 globals added to state flag table
+- `program_control_logic_flowchart.md` — Phase 5 marked current, Phase 4 complete
+
+**Build**: RAM 18.3% (105.6 KB/576 KB), Flash 19.4% (1.43 MB/7.3 MB) ✅
+
+**Commit**: Phase 5 complete  
+**GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
+
+---

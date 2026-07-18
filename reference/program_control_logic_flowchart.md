@@ -101,5 +101,5 @@ graph LR
 | 1     | WiFi, HA API, web server, OTA              | ✅ Complete |
 | 2     | RS485 Modbus: relays + 3x RTD probes, RTC  | ✅ Complete |
 | 3     | Coolroom control logic                     | ✅ Complete |
-| 4     | LVGL 7" MIPI-DSI touchscreen UI            | 🔄 Current  |
-| 5     | SD card logging, ntfy, backup/restore      | ⏳ Planned  |
+| 4     | LVGL 7" MIPI-DSI touchscreen UI            | ✅ Complete |
+| 5     | SD card logging, ntfy, backup/restore      | 🔄 Current  |

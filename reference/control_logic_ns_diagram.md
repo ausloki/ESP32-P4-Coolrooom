@@ -112,3 +112,8 @@ Control loop:                  if probe_fault → both OFF immediately
 | `ctl_defrost_last_end_ms`| uint32_t| millis() when last defrost ended      |
 | `hw_rs485_relay_ok`     | bool     | Relay board comms health              |
 | `hw_rtc_ok`             | bool     | PCF8563 RTC health                    |
+| `sd_card_ok`            | bool     | Phase 5: SD card mounted              |
+| `ntfy_alarm_hi_sent`    | bool     | Phase 5: ntfy high alarm edge flag    |
+| `ntfy_alarm_lo_sent`    | bool     | Phase 5: ntfy low alarm edge flag     |
+| `ntfy_probe_fault_sent` | bool     | Phase 5: ntfy probe fault edge flag   |
+| `log_tick_count`        | uint32_t | Phase 5: 10s ticks since last SD log  |
