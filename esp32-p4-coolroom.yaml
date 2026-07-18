@@ -85,6 +85,12 @@ substitutions:
   wifi_c6_reset_pin: GPIO54
   wifi_c6_wakeup_pin: GPIO6
 
+  # ── Phase 4: Display & Touch GPIO (✅ confirmed from board schematic PDF) ─
+  # INT_TP  → NLGPIO23, RESET_TP → NLGPIO33, BL_CTRL → NLGPIO32
+  touch_int_pin:  GPIO23
+  touch_rst_pin:  GPIO33   # shared with LCD reset — ESPHome model handles LCD side
+  display_bl_pin: GPIO32
+
   # ── Control defaults ──────────────────────────────────────────────────────
   default_setpoint_c:   "2.0"
   default_comp_diff_c:  "1.0"
@@ -94,6 +100,7 @@ substitutions:
   defrost_interval_h:  "8"      # hours between defrost cycles
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
   probe_stale_ms:      "30000"  # probe 1 declared stale after this many ms
+
 ##############################################################################
 # Platform
 ##############################################################################
@@ -362,8 +369,14 @@ switch:
       return x;
     on_turn_on:
       - lambda: ESP_LOGI("relay", "Defrost ON");
+      - lvgl.led.update:
+          id: led_defrost
+          brightness: 100%
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Defrost OFF");
+      - lvgl.led.update:
+          id: led_defrost
+          brightness: 0%
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -381,8 +394,14 @@ switch:
       return x;
     on_turn_on:
       - lambda: ESP_LOGI("relay", "Compressor ON");
+      - lvgl.led.update:
+          id: led_compressor
+          brightness: 100%
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Compressor OFF");
+      - lvgl.led.update:
+          id: led_compressor
+          brightness: 0%
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -524,6 +543,29 @@ sensor:
       sorting_group_id: group_probes
       sorting_weight: 1
     lambda: 'return p4_rtd_or_nan(id(rtd1_ch1_raw).state);'
+    on_value:
+      - lvgl.label.update:
+          id: lbl_coolroom_temp
+          text: !lambda 'return p4_fmt_temp(x, false);'
+      - if:
+          condition:
+            lambda: 'return p4_rtd_valid(x) && x > id(ctl_setpoint) + id(ctl_alarm_high_delta);'
+          then:
+            - lvgl.label.update:
+                id: lbl_coolroom_temp
+                text_color: col_red
+          else:
+            - if:
+                condition:
+                  lambda: 'return p4_rtd_valid(x) && x < id(ctl_setpoint) - id(ctl_alarm_low_delta);'
+                then:
+                  - lvgl.label.update:
+                      id: lbl_coolroom_temp
+                      text_color: col_blue
+                else:
+                  - lvgl.label.update:
+                      id: lbl_coolroom_temp
+                      text_color: col_green
 
   - platform: template
     id: probe2_temp
@@ -539,6 +581,10 @@ sensor:
     lambda: |-
       if (!id(input_probe2_enabled)) return NAN;
       return p4_rtd_or_nan(id(rtd1_ch2_raw).state);
+    on_value:
+      - lvgl.label.update:
+          id: lbl_evap_temp
+          text: !lambda 'return p4_fmt_temp(x, false);'
 
   - platform: template
     id: probe3_temp
@@ -554,6 +600,10 @@ sensor:
     lambda: |-
       if (!id(input_probe3_enabled)) return NAN;
       return p4_rtd_or_nan(id(rtd2_ch1_raw).state);
+    on_value:
+      - lvgl.label.update:
+          id: lbl_ambient_temp
+          text: !lambda 'return p4_fmt_temp(x, false);'
 
   # ── Probe staleness diagnostics ────────────────────────────────────────────
   - platform: template
@@ -709,6 +759,10 @@ binary_sensor:
       sorting_group_id: group_alarms
       sorting_weight: 3
     lambda: 'return id(ctl_alarm_high_active);'
+    on_state:
+      - lvgl.led.update:
+          id: led_alarm_hi
+          brightness: !lambda 'return x ? 100.0f : 0.0f;'
 
   - platform: template
     id: alarm_low_active
@@ -718,6 +772,10 @@ binary_sensor:
       sorting_group_id: group_alarms
       sorting_weight: 4
     lambda: 'return id(ctl_alarm_low_active);'
+    on_state:
+      - lvgl.led.update:
+          id: led_alarm_lo
+          brightness: !lambda 'return x ? 100.0f : 0.0f;'
 
   - platform: template
     id: probe_fault_active
@@ -727,6 +785,13 @@ binary_sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 35
     lambda: 'return id(ctl_probe_fault);'
+    on_state:
+      - lvgl.led.update:
+          id: led_probe_fault
+          brightness: !lambda 'return x ? 100.0f : 0.0f;'
+      - lvgl.label.update:
+          id: lbl_status_msg
+          text: !lambda 'return x ? std::string("PROBE FAULT — check RS485 connection") : std::string("OK");'
 
 ##############################################################################
 # Number Entities — NVS-persistent control parameters
@@ -750,6 +815,18 @@ number:
           id(ctl_setpoint) = x;
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
+      - lvgl.label.update:
+          id: lbl_setpoint_val
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_setpoint_display
+          text: !lambda |-
+            char buf[20];
+            snprintf(buf, sizeof(buf), "SP: %.1f°C", x);
+            return std::string(buf);
 
   - platform: template
     id: compressor_differential
@@ -894,6 +971,29 @@ interval:
               }
           }
 
+  # ── Phase 4: 1s LVGL display updates ─────────────────────────────────────
+  - interval: 1s
+    then:
+      - lvgl.label.update:
+          id: lbl_clock
+          text: !lambda |-
+            char buf[24];
+            p4_fmt_time(buf, sizeof(buf));
+            std::string s(buf);
+            return s.size() > 8 ? s.substr(s.size()-8) : s;
+      - lvgl.label.update:
+          id: lbl_heap
+          text: !lambda |-
+            char buf[24];
+            snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
+            return std::string(buf);
+      - lvgl.led.update:
+          id: led_rs485
+          brightness: !lambda 'return (id(hw_rs485_relay_ok) && id(hw_rs485_rtd1_ok)) ? 100.0f : 0.0f;'
+      - lvgl.led.update:
+          id: led_rtc
+          brightness: !lambda 'return id(hw_rtc_ok) ? 100.0f : 0.0f;'
+
 ##############################################################################
 # Globals
 ##############################################################################
@@ -1004,3 +1104,424 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
+
+##############################################################################
+# Phase 4: LDO — MIPI-DSI D-PHY power rail
+# Channel 3 at 2.5V is the standard ESP32-P4 MIPI-DSI configuration.
+# Confirmed: ESP_LDO_VO3 net present in board schematic.
+##############################################################################
+
+esp_ldo:
+  - id: ldo_mipi_dphy
+    channel: 3
+    voltage: 2.5V
+
+##############################################################################
+# Phase 4: MIPI-DSI Display — 7" 1024×600 JD9365, 2-lane DSI
+# Model matches exactly. Reset pin GPIO33 confirmed from schematic.
+##############################################################################
+
+display:
+  - platform: mipi_dsi
+    id: main_display
+    model: WAVESHARE-ESP32-P4-WIFI6-TOUCH-LCD-7B
+    update_interval: never
+    auto_clear_enabled: false
+    on_page_change:
+      - lambda: 'ESP_LOGD("lvgl", "display page changed");'
+
+##############################################################################
+# Phase 4: GT911 Capacitive Touchscreen
+# Shares i2c_bus (GPIO 7/8). INT GPIO23, RST GPIO33 from schematic.
+##############################################################################
+
+touchscreen:
+  - platform: gt911
+    id: touch_panel
+    i2c_id: i2c_bus
+    address: 0x5D
+    interrupt_pin:
+      number: ${touch_int_pin}
+      mode:
+        input: true
+    # reset_pin omitted: GPIO33 is owned by the mipi_dsi model (shared LCD+touch reset line)
+
+##############################################################################
+# Phase 4: Backlight output
+##############################################################################
+
+output:
+  - platform: ledc
+    id: backlight_pwm
+    pin: ${display_bl_pin}
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    id: backlight
+    name: "Display Backlight"
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 500ms
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 20
+
+##############################################################################
+# Phase 4: Fonts for LVGL
+##############################################################################
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_huge
+    size: 64
+    glyphs: "0123456789.-+NA "
+  - file: "gfonts://Roboto"
+    id: font_large
+    size: 28
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%"
+  - file: "gfonts://Roboto"
+    id: font_medium
+    size: 20
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%+"
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 15
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%+"
+
+##############################################################################
+# Phase 4: LVGL Coolroom Dashboard
+##############################################################################
+
+color:
+  - id: col_bg         # Dark background
+    hex: "1C1C1E"
+  - id: col_panel      # Card surface
+    hex: "2C2C2E"
+  - id: col_green      # Compressor ON / good status
+    hex: "30D158"
+  - id: col_blue       # Defrost
+    hex: "0A84FF"
+  - id: col_red        # Alarm
+    hex: "FF453A"
+  - id: col_orange     # Probe fault / warning
+    hex: "FF9F0A"
+  - id: col_text       # Primary text
+    hex: "FFFFFF"
+  - id: col_subtext    # Secondary text
+    hex: "8E8E93"
+
+lvgl:
+  displays:
+    - main_display
+  touchscreens:
+    - touch_panel
+  color_depth: 16
+  bg_color: col_bg
+  text_color: col_text
+  log_level: WARN
+  default_font: font_small
+
+  pages:
+    - id: page_main
+      bg_color: col_bg
+      widgets:
+
+        # ── Top header ─────────────────────────────────────────────────────
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 14
+                  text: "Coolroom Controller"
+                  text_font: font_medium
+                  text_color: col_text
+              - label:
+                  id: lbl_clock
+                  align: RIGHT_MID
+                  x: -16
+                  text: "--:--:--"
+                  text_font: font_small
+                  text_color: col_subtext
+
+        # ── Main temperature card (left) ────────────────────────────────────
+        - obj:
+            x: 8
+            y: 56
+            width: 400
+            height: 240
+            bg_color: col_panel
+            radius: 12
+            border_width: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 12
+                  text: "COOLROOM"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_coolroom_temp
+                  align: CENTER
+                  y: 10
+                  text: "---"
+                  text_font: font_huge
+                  text_color: col_green
+              - label:
+                  id: lbl_setpoint_display
+                  align: BOTTOM_MID
+                  y: -14
+                  text: "SP: 2.0°C"
+                  text_font: font_small
+                  text_color: col_subtext
+
+        # ── Setpoint control card ───────────────────────────────────────────
+        - obj:
+            x: 416
+            y: 56
+            width: 200
+            height: 116
+            bg_color: col_panel
+            radius: 12
+            border_width: 0
+            widgets:
+              - label:
+                  x: 12
+                  y: 10
+                  text: "SETPOINT"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_setpoint_val
+                  x: 12
+                  y: 34
+                  text: "2.0°C"
+                  text_font: font_large
+                  text_color: col_text
+              - button:
+                  id: btn_sp_up
+                  align: RIGHT_MID
+                  x: -10
+                  y: 10
+                  width: 44
+                  height: 44
+                  bg_color: col_blue
+                  radius: 8
+                  border_width: 0
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text: "▲"
+                        text_font: font_small
+                  on_click:
+                    - number.increment:
+                        id: setpoint
+                        cycle: false
+              - button:
+                  id: btn_sp_dn
+                  align: RIGHT_MID
+                  x: -10
+                  y: -10
+                  width: 44
+                  height: 44
+                  bg_color: col_blue
+                  radius: 8
+                  border_width: 0
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text: "▼"
+                        text_font: font_small
+                  on_click:
+                    - number.decrement:
+                        id: setpoint
+                        cycle: false
+
+        # ── Secondary probes card ───────────────────────────────────────────
+        - obj:
+            x: 624
+            y: 56
+            width: 392
+            height: 116
+            bg_color: col_panel
+            radius: 12
+            border_width: 0
+            widgets:
+              - label:
+                  x: 16
+                  y: 10
+                  text: "EVAPORATOR"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_evap_temp
+                  x: 16
+                  y: 32
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+              - label:
+                  x: 210
+                  y: 10
+                  text: "AMBIENT"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_ambient_temp
+                  x: 210
+                  y: 32
+                  text: "---"
+                  text_font: font_large
+                  text_color: col_text
+
+        # ── Status card ─────────────────────────────────────────────────────
+        - obj:
+            x: 416
+            y: 180
+            width: 600
+            height: 116
+            bg_color: col_panel
+            radius: 12
+            border_width: 0
+            widgets:
+              # Compressor
+              - led:
+                  id: led_compressor
+                  x: 16
+                  y: 24
+                  width: 14
+                  height: 14
+                  color: col_green
+                  brightness: 0%
+              - label:
+                  x: 36
+                  y: 18
+                  text: "Compressor"
+                  text_font: font_small
+                  text_color: col_text
+              # Defrost
+              - led:
+                  id: led_defrost
+                  x: 130
+                  y: 24
+                  width: 14
+                  height: 14
+                  color: col_blue
+                  brightness: 0%
+              - label:
+                  x: 150
+                  y: 18
+                  text: "Defrost"
+                  text_font: font_small
+                  text_color: col_text
+              # High alarm
+              - led:
+                  id: led_alarm_hi
+                  x: 230
+                  y: 24
+                  width: 14
+                  height: 14
+                  color: col_red
+                  brightness: 0%
+              - label:
+                  x: 250
+                  y: 18
+                  text: "High Alarm"
+                  text_font: font_small
+                  text_color: col_text
+              # Low alarm
+              - led:
+                  id: led_alarm_lo
+                  x: 360
+                  y: 24
+                  width: 14
+                  height: 14
+                  color: col_red
+                  brightness: 0%
+              - label:
+                  x: 380
+                  y: 18
+                  text: "Low Alarm"
+                  text_font: font_small
+                  text_color: col_text
+              # Probe fault
+              - led:
+                  id: led_probe_fault
+                  x: 490
+                  y: 24
+                  width: 14
+                  height: 14
+                  color: col_orange
+                  brightness: 0%
+              - label:
+                  x: 510
+                  y: 18
+                  text: "Probe Fault"
+                  text_font: font_small
+                  text_color: col_text
+              # Second row: RS485 health
+              - led:
+                  id: led_rs485
+                  x: 16
+                  y: 70
+                  width: 14
+                  height: 14
+                  color: col_green
+                  brightness: 0%
+              - label:
+                  x: 36
+                  y: 64
+                  text: "RS485"
+                  text_font: font_small
+                  text_color: col_text
+              - led:
+                  id: led_rtc
+                  x: 130
+                  y: 70
+                  width: 14
+                  height: 14
+                  color: col_green
+                  brightness: 0%
+              - label:
+                  x: 150
+                  y: 64
+                  text: "RTC"
+                  text_font: font_small
+                  text_color: col_text
+              - label:
+                  id: lbl_heap
+                  x: 260
+                  y: 64
+                  text: "Heap: ---"
+                  text_font: font_small
+                  text_color: col_subtext
+
+        # ── Bottom bar ──────────────────────────────────────────────────────
+        - obj:
+            x: 0
+            y: 304
+            width: 1024
+            height: 296
+            bg_color: col_panel
+            radius: 0
+            border_width: 0
+            pad_top: 8
+            pad_left: 16
+            widgets:
+              - label:
+                  id: lbl_status_msg
+                  text: "Initialising..."
+                  text_font: font_small
+                  text_color: col_subtext
+
+##############################################################################
+# Phase 4: LVGL update automations — merged into interval: above
+##############################################################################

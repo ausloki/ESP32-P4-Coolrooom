@@ -95,55 +95,53 @@ The GT911 communicates via I2C. It may share GPIO7/8 with the external I2C heade
 
 ---
 
-## 🚫 RESERVED / OCCUPIED GPIO (DO NOT USE)
-
-| GPIO Range | Used By                            |
-|------------|------------------------------------|
-| 9–13       | On-board I2S audio (ES8311 / mics) |
-| 39–44      | TF card SDMMC (slot 1)             |
-| 53         | Audio amplifier enable             |
-| 7–8        | External I2C header                |
-
----
-
 ## Available GPIO Header Pins (2×12, 17 programmable — item 24)
 
-The GPIO header exposes 17 remaining programmable GPIOs and power pins.  
-Exact assignments depend on the schematic. Avoid GPIOs in the reserved table above.
+The GPIO header exposes programmable GPIOs and power pins. Avoid all GPIOs in the reserved table.
 
 ---
 
-## ⚠️ UNCONFIRMED PINS — VERIFY FROM SCHEMATIC
+## ✅ CONFIRMED PINS (from board schematic PDF)
+
+Source: `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` — net labels NLGPIO23/33/32 confirmed adjacent to GT911 and backlight driver.
 
 ### Touch Controller (GT911 — item 7)
-The GT911 communicates via I2C. It may share GPIO7/8 with the external I2C header, or use dedicated lines.
+Shares I2C bus with external header (GPIO 7/8). GT911 default I2C address: 0x5D.
 
-| Signal    | GPIO  | Status                |
-|-----------|-------|-----------------------|
-| SDA       | 7?    | Likely shared — VERIFY|
-| SCL       | 8?    | Likely shared — VERIFY|
-| INT       | ?     | Interrupt — VERIFY    |
-| RST       | ?     | Reset — VERIFY        |
+| Signal | GPIO | Status |
+|--------|------|--------|
+| SDA    | 7    | ✅ Shared with I2C bus |
+| SCL    | 8    | ✅ Shared with I2C bus |
+| INT    | 23   | ✅ CONFIRMED (NLGPIO23 → INT_TP) |
+| RST    | 33   | ✅ CONFIRMED (NLGPIO33 → RESET_TP, shared with LCD reset) |
 
-### Status LED (item 13)
-| Signal    | GPIO  | Status                |
-|-----------|-------|-----------------------|
-| LED       | ?     | VERIFY FROM SCHEMATIC |
+### MIPI-DSI Display (7" 1024×600, JD9365 — items 6/7)
+| Signal        | GPIO | Status |
+|---------------|------|--------|
+| LCD RESET     | 33   | ✅ CONFIRMED (schematic + ESPHome model) |
+| Backlight BL  | 32   | ✅ CONFIRMED (NLGPIO32 → BL_CTRL) |
+
+ESPHome model: `WAVESHARE-ESP32-P4-WIFI6-TOUCH-LCD-7B`  
+LDO channel 3 at 2.5V required for MIPI D-PHY power.
 
 ---
 
 ## 🚫 RESERVED / OCCUPIED GPIO (DO NOT USE)
 
-| GPIO Range | Used By                            |
-|------------|---------------------------------|
+| GPIO       | Used By                            |
+|------------|------------------------------------|
+| 6          | ESP32-C6 wakeup                    |
+| 7–8        | I2C bus (RTC, GT911, external hdr) |
 | 9–13       | On-board I2S audio (ES8311 / mics) |
+| 14–19      | ESP32-C6 SDIO co-processor         |
+| 23         | GT911 touch INT                    |
+| 26         | RS485 UART RX                      |
+| 27         | RS485 UART TX                      |
+| 32         | Display backlight BL_CTRL          |
+| 33         | LCD + touch RST (shared)           |
 | 39–44      | TF card SDMMC (slot 1)             |
 | 53         | Audio amplifier enable             |
-| 7–8        | External I2C header + onboard RTC  |
-| 14–19      | ESP32-C6 SDIO co-processor         |
-| 26–27      | RS485 UART                         |
 | 54         | ESP32-C6 reset                     |
-| 6          | ESP32-C6 wakeup                    |
 
 ---
 
