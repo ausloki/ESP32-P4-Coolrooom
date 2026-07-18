@@ -5,6 +5,14 @@
 - 🔒 Follow rules in `copilot-rules.md`.
 - 📝 On "/update memory bank", refresh activeContext.md & progress.md.
 
+**⭐ CRITICAL SESSION PROTOCOL:**
+- **At session START:** Always read files in `memory-bank/` to understand past context, previous patterns, and current state
+  - `memory-bank/memory-bank-instructions.md` — Structure and usage rules
+  - `memory-bank/activeContext.md` — What was just finished, what's pending, immediate next steps
+  - `memory-bank/progress.md` — Phase completion tracking, build metrics, known limitations
+  - Feature-specific folders (e.g., `memory-bank/phase-4/`) — Implementation patterns and lessons learned
+- **Before session CLOSE:** Update `memory-bank/` files with completion status, new patterns discovered, and explicit next steps for following session
+
 ---
 
 # ESP32-P4 Coolroom Controller — Hardware-First Design Rules
