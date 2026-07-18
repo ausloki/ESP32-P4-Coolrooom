@@ -23,8 +23,26 @@
             border-radius: 8px;
             margin-bottom: 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-        header h1 { font-size: 28px; margin-bottom: 5px; }
+        header .left h1 { font-size: 28px; margin-bottom: 5px; }
+        header .right {
+            text-align: right;
+        }
+        header .role-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        header .role-badge.superadmin { background: #d4af37; color: #000; }
+        header .role-badge.admin { background: #4CAF50; }
+        header .role-badge.guest { background: #FF9800; }
         header .timestamp { font-size: 12px; opacity: 0.8; }
         
         .metrics-grid {
@@ -91,6 +109,56 @@
         .alert-warning { background: #fff3cd; color: #856404; border-left: 4px solid #856404; }
         .alert-info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #0c5460; }
         
+        .section-restricted {
+            opacity: 0.5;
+            pointer-events: none;
+            position: relative;
+        }
+        .section-restricted::after {
+            content: "🔒 Restricted Access";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        button {
+            background: #003d82;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background: #002555;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover:not(:disabled) {
+            background: #c82333;
+        }
+        
         footer {
             text-align: center;
             color: #666;
@@ -99,13 +167,21 @@
             padding-top: 20px;
             border-top: 1px solid #ddd;
         }
+        
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🧊 Coolroom Controller Dashboard</h1>
-            <div class="timestamp">Last update: <span id="lastUpdate">---</span></div>
+            <div class="left">
+                <h1>🧊 Coolroom Controller Dashboard</h1>
+                <div class="timestamp">Last update: <span id="lastUpdate">---</span></div>
+            </div>
+            <div class="right">
+                <div class="role-badge" id="roleBadge">Loading...</div>
+                <div style="font-size: 12px; margin-top: 8px;">User: <span id="currentUser">---</span></div>
+            </div>
         </header>
 
         <!-- System Status Alerts -->
@@ -142,6 +218,35 @@
             </div>
         </div>
 
+        <!-- Settings Section (ADMIN + SUPERADMIN only) -->
+        <div id="settingsSection" class="chart-section hidden">
+            <h2>⚙️ Operational Settings</h2>
+            <div id="settingsContent">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                    <div>
+                        <label for="setpointInput">Setpoint (°C)</label>
+                        <input type="number" id="setpointInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
+                        <button onclick="updateSetpoint()" style="margin-top: 10px;">Update Setpoint</button>
+                    </div>
+                    <div>
+                        <label for="alarmHighInput">Alarm High Delta (°C)</label>
+                        <input type="number" id="alarmHighInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
+                        <button onclick="updateAlarmHigh()" style="margin-top: 10px;">Update</button>
+                    </div>
+                    <div>
+                        <label for="alarmLowInput">Alarm Low Delta (°C)</label>
+                        <input type="number" id="alarmLowInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
+                        <button onclick="updateAlarmLow()" style="margin-top: 10px;">Update</button>
+                    </div>
+                    <div>
+                        <label for="compDiffInput">Compressor Hysteresis (°C)</label>
+                        <input type="number" id="compDiffInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
+                        <button onclick="updateCompDiff()" style="margin-top: 10px;">Update</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Health Status -->
         <div class="chart-section">
             <h2>System Health</h2>
@@ -161,6 +266,28 @@
             </div>
         </div>
 
+        <!-- System Administration (SUPERADMIN only) -->
+        <div id="adminSection" class="chart-section hidden">
+            <h2>🔐 System Administration</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div>
+                    <h3>Backup & Restore</h3>
+                    <button onclick="backupSettings()" class="danger">📦 Backup Settings</button>
+                    <button onclick="restoreSettings()" class="danger" style="margin-left: 5px;">📥 Restore Settings</button>
+                </div>
+                <div>
+                    <h3>Logs Management</h3>
+                    <button onclick="deleteLogs()" class="danger">🗑️ Delete Old Logs</button>
+                    <button onclick="downloadLogs()" style="margin-left: 5px;">📥 Download Logs</button>
+                </div>
+                <div>
+                    <h3>Network & Hardware</h3>
+                    <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
+                    <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Temperature Chart (Placeholder) -->
         <div class="chart-section">
             <h2>Temperature Trend (Last 24 hours)</h2>
@@ -168,14 +295,111 @@
         </div>
 
         <footer>
-            <p>Coolroom Controller &mdash; Phase 11 Web Dashboard</p>
-            <p>Refresh: <span id="autoRefresh">enabled (10s)</span></p>
+            <p>Coolroom Controller &mdash; Phase 12 Web Dashboard with Role-Based Access Control</p>
+            <p>Role: <span id="roleLabel">Loading...</span> | Auto-refresh: <span id="autoRefresh">enabled (10s)</span></p>
         </footer>
     </div>
 
     <script>
-        const API_URL = '/api/states'; // ESPHome native API
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // ROLE-BASED ACCESS CONTROL
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        const ROLE_PERMISSIONS = {
+            guest: {
+                name: 'Guest',
+                canView: ['main_display', 'health_status'],
+                canModify: [],
+                canAdmin: false
+            },
+            admin: {
+                name: 'Administrator',
+                canView: ['main_display', 'health_status', 'settings'],
+                canModify: ['setpoint', 'alarms', 'defrost', 'hysteresis'],
+                canAdmin: false
+            },
+            superadmin: {
+                name: 'Super Administrator',
+                canView: ['main_display', 'health_status', 'settings', 'admin'],
+                canModify: ['setpoint', 'alarms', 'defrost', 'hysteresis', 'all'],
+                canAdmin: true
+            }
+        };
+        
+        let currentRole = 'guest';
+        let currentUser = 'unknown';
+        const API_URL = '/api/states';
         let tempChart = null;
+
+        // Initialize: Determine user role from localStorage or URL params
+        function initializeRole() {
+            // Try to get role from URL parameter (for testing)
+            const params = new URLSearchParams(window.location.search);
+            const roleParam = params.get('role');
+            
+            if (roleParam && ROLE_PERMISSIONS[roleParam]) {
+                currentRole = roleParam;
+            } else {
+                // Default to guest
+                currentRole = 'guest';
+            }
+            
+            // Get username (from localStorage or default)
+            currentUser = localStorage.getItem('currentUser') || 'guest';
+            
+            // Update UI
+            updateRoleDisplay();
+            updateUIForRole();
+        }
+
+        function updateRoleDisplay() {
+            const roleInfo = ROLE_PERMISSIONS[currentRole];
+            const roleBadge = document.getElementById('roleBadge');
+            const roleLabel = document.getElementById('roleLabel');
+            const userDisplay = document.getElementById('currentUser');
+            
+            roleBadge.className = `role-badge ${currentRole}`;
+            roleBadge.textContent = `🔑 ${roleInfo.name}`;
+            roleLabel.textContent = roleInfo.name;
+            userDisplay.textContent = currentUser;
+        }
+
+        function updateUIForRole() {
+            const roleInfo = ROLE_PERMISSIONS[currentRole];
+            
+            // Show/hide settings section
+            const settingsSection = document.getElementById('settingsSection');
+            if (roleInfo.canView.includes('settings')) {
+                settingsSection.classList.remove('hidden');
+            } else {
+                settingsSection.classList.add('hidden');
+            }
+            
+            // Show/hide admin section
+            const adminSection = document.getElementById('adminSection');
+            if (roleInfo.canAdmin) {
+                adminSection.classList.remove('hidden');
+            } else {
+                adminSection.classList.add('hidden');
+            }
+            
+            // Disable buttons for non-admin
+            if (currentRole !== 'admin' && currentRole !== 'superadmin') {
+                disableAllButtons();
+            }
+        }
+
+        function disableAllButtons() {
+            document.querySelectorAll('button:not(#roleSwitch)').forEach(btn => {
+                btn.disabled = true;
+                btn.title = 'Insufficient permissions';
+            });
+        }
+
+        function canPerformAction(action) {
+            const roleInfo = ROLE_PERMISSIONS[currentRole];
+            return roleInfo.canModify.includes(action) || roleInfo.canModify.includes('all');
+        }
 
         async function fetchStatus() {
             try {
@@ -183,7 +407,6 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const states = await response.json();
                 
-                // Parse ESPHome states into dashboard format
                 const data = parseStates(states);
                 updateDashboard(data);
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
@@ -199,7 +422,6 @@
                 const id = entity.entity_id;
                 const state = entity.state;
                 
-                // Map ESPHome entity IDs to dashboard data
                 if (id === 'sensor.probe1_temp') data.temperature = parseFloat(state);
                 if (id === 'number.ctl_setpoint') data.setpoint = parseFloat(state);
                 if (id === 'binary_sensor.relay_compressor') data.compressor_on = state === 'on';
@@ -217,15 +439,11 @@
                 if (id === 'text_sensor.wifi_ssid_text') data.wifi_ssid = state;
                 if (id === 'binary_sensor.ctl_probe_fault') data.probe_fault = state === 'on';
                 if (id === 'sensor.free_heap') data.heap_free_kb = parseInt(state);
-                
-                // Try to extract uptime in seconds (this might be stored in a custom sensor)
-                if (id === 'sensor.uptime' || id === 'text_sensor.system_uptime') {
-                    // If available, use it; otherwise calculate from boot time
-                    data.uptime_seconds = parseInt(state) || 0;
-                }
+                if (id === 'number.ctl_alarm_high_delta') data.alarm_high = parseFloat(state);
+                if (id === 'number.ctl_alarm_low_delta') data.alarm_low = parseFloat(state);
+                if (id === 'number.ctl_comp_diff') data.comp_diff = parseFloat(state);
             });
             
-            // Provide defaults for any missing values
             if (!data.uptime_seconds) data.uptime_seconds = Math.floor(Date.now() / 1000);
             if (data.psram_ok === undefined) data.psram_ok = true;
             
@@ -233,24 +451,19 @@
         }
 
         function updateDashboard(data) {
-            // Temperature
             document.getElementById('tempValue').textContent = (data.temperature || '--').toFixed(1);
             document.getElementById('setpointValue').textContent = (data.setpoint || '--').toFixed(1);
 
-            // Compressor
             const compStatus = data.compressor_on 
                 ? '<span class="status-badge status-ok">🔴 RUNNING</span>' 
                 : '<span class="status-badge">⚪ OFF</span>';
             document.getElementById('compressorStatus').innerHTML = compStatus;
-            document.getElementById('compDutyValue').textContent = (data.compressor_duty_pct || 0).toFixed(0);
 
-            // Defrost
             const defStatus = data.defrost_phase
                 ? '<span class="status-badge status-warning">🔥 ACTIVE</span>'
                 : '<span class="status-badge">⏸ IDLE</span>';
             document.getElementById('defrostStatus').innerHTML = defStatus;
 
-            // Alarms
             let alarmBadges = '';
             if (data.alarm_high_active) alarmBadges += '<span class="status-badge status-error">⚠️ HI TEMP</span>';
             if (data.alarm_low_active) alarmBadges += '<span class="status-badge status-error">❄️ LO TEMP</span>';
@@ -258,38 +471,40 @@
             if (!alarmBadges) alarmBadges = '<span class="status-badge status-ok">✓ OK</span>';
             document.getElementById('alarmStatus').innerHTML = alarmBadges;
 
-            // WiFi
             document.getElementById('signalValue').textContent = data.wifi_rssi || '--';
             document.getElementById('ssidValue').textContent = data.wifi_ssid || '---';
 
-            // Uptime
             const uptime = data.uptime_seconds || 0;
             const days = Math.floor(uptime / 86400);
             const hours = Math.floor((uptime % 86400) / 3600);
             document.getElementById('uptimeValue').textContent = `${days}d ${hours}h`;
 
-            // RS485 Status
             let rs485Html = '';
             rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;
             rs485Html += `RTD: <span class="status-badge ${data.rs485_rtd_ok ? 'status-ok' : 'status-error'}">${data.rs485_rtd_ok ? '✓' : '✗'}</span>`;
             rs485Html += `RTC: <span class="status-badge ${data.rtc_ok ? 'status-ok' : 'status-error'}">${data.rtc_ok ? '✓' : '✗'}</span>`;
             document.getElementById('rs485Status').innerHTML = rs485Html;
 
-            // Memory
-            const memHtml = `
-                Heap: ${data.heap_free_kb || '--'} KB free<br>
-                PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}
-            `;
+            const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
             document.getElementById('memoryStatus').innerHTML = memHtml;
 
-            // Probe Status
-            const probeHtml = `
-                P1: <span class="status-badge ${data.probe1_ok ? 'status-ok' : 'status-error'}">${data.probe1_ok ? '✓' : '✗'}</span>
-                P2: <span class="status-badge ${data.probe2_ok ? 'status-ok' : 'status-error'}">${data.probe2_ok ? '✓' : '✗'}</span>
-            `;
+            const probeHtml = `P1: <span class="status-badge ${data.probe1_ok ? 'status-ok' : 'status-error'}">${data.probe1_ok ? '✓' : '✗'}</span>P2: <span class="status-badge ${data.probe2_ok ? 'status-ok' : 'status-error'}">${data.probe2_ok ? '✓' : '✗'}</span>`;
             document.getElementById('probeStatus').innerHTML = probeHtml;
 
-            // Alerts
+            // Update settings inputs
+            if (document.getElementById('setpointInput').value === '') {
+                document.getElementById('setpointInput').value = (data.setpoint || 15).toFixed(1);
+            }
+            if (document.getElementById('alarmHighInput').value === '') {
+                document.getElementById('alarmHighInput').value = (data.alarm_high || 3).toFixed(1);
+            }
+            if (document.getElementById('alarmLowInput').value === '') {
+                document.getElementById('alarmLowInput').value = (data.alarm_low || 3).toFixed(1);
+            }
+            if (document.getElementById('compDiffInput').value === '') {
+                document.getElementById('compDiffInput').value = (data.comp_diff || 1).toFixed(1);
+            }
+
             let alertsHtml = '';
             if (data.probe_fault) alertsHtml += '<div class="alert alert-danger">⚠️ Probe fault detected. Fallback mode active.</div>';
             if (data.wifi_connected === false) alertsHtml += '<div class="alert alert-warning">⚠️ WiFi disconnected.</div>';
@@ -303,9 +518,98 @@
             alertsDiv.innerHTML = alertHtml + alertsDiv.innerHTML;
         }
 
-        // Auto-refresh every 10 seconds
+        // Settings update functions (role-protected)
+        async function updateSetpoint() {
+            if (!canPerformAction('setpoint')) {
+                showAlert('warning', 'Insufficient permissions to change setpoint');
+                return;
+            }
+            const value = document.getElementById('setpointInput').value;
+            showAlert('info', `Setpoint update requested: ${value}°C (would call /api/number/ctl_setpoint/set)`);
+        }
+
+        async function updateAlarmHigh() {
+            if (!canPerformAction('alarms')) {
+                showAlert('warning', 'Insufficient permissions to change alarms');
+                return;
+            }
+            const value = document.getElementById('alarmHighInput').value;
+            showAlert('info', `Alarm high update requested: ${value}°C`);
+        }
+
+        async function updateAlarmLow() {
+            if (!canPerformAction('alarms')) {
+                showAlert('warning', 'Insufficient permissions to change alarms');
+                return;
+            }
+            const value = document.getElementById('alarmLowInput').value;
+            showAlert('info', `Alarm low update requested: ${value}°C`);
+        }
+
+        async function updateCompDiff() {
+            if (!canPerformAction('hysteresis')) {
+                showAlert('warning', 'Insufficient permissions to change hysteresis');
+                return;
+            }
+            const value = document.getElementById('compDiffInput').value;
+            showAlert('info', `Hysteresis update requested: ${value}°C`);
+        }
+
+        // Admin functions (superadmin-only)
+        async function backupSettings() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can backup settings');
+                return;
+            }
+            showAlert('info', 'Backup requested - would call /api/backup endpoint');
+        }
+
+        async function restoreSettings() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can restore settings');
+                return;
+            }
+            showAlert('info', 'Restore requested - would upload backup.json');
+        }
+
+        async function deleteLogs() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can delete logs');
+                return;
+            }
+            if (confirm('Are you sure? This will delete all old log files.')) {
+                showAlert('info', 'Log deletion requested');
+            }
+        }
+
+        async function downloadLogs() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can download logs');
+                return;
+            }
+            showAlert('info', 'Log download requested');
+        }
+
+        async function configureWiFi() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can configure WiFi');
+                return;
+            }
+            showAlert('info', 'WiFi configuration page would open');
+        }
+
+        async function hardwareSettings() {
+            if (currentRole !== 'superadmin') {
+                showAlert('danger', 'Only SuperAdmin can access hardware settings');
+                return;
+            }
+            showAlert('info', 'Hardware configuration page would open');
+        }
+
+        // Initialize and start auto-refresh
+        initializeRole();
         setInterval(fetchStatus, 10000);
-        fetchStatus(); // Initial load
+        fetchStatus();
     </script>
 </body>
 </html>

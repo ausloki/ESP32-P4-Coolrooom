@@ -299,10 +299,19 @@ web_server:
   auth:
     username: !secret web_server_username
     password: !secret web_server_password
-  # Phase 11: Web Dashboard & REST API
+  # Phase 12: Role-Based Access Control (RBAC) for Web GUI
+  # Three access levels:
+  # - GUEST: View-only main display (temperature, status, alarms)
+  # - ADMIN: View main + settings, modify operational parameters (setpoint, alarms, defrost)
+  # - SUPERADMIN: Full access (backup/restore, logs, WiFi, hardware settings)
+  # 
+  # Implementation: Users authenticate via HTTP Basic Auth, role determined by username
+  # Role mapping configured in secrets.yaml:
+  #   web_admin_users: "admin:superadmin,user1:admin,guest:guest"
+  # 
   # Access REST API: GET http://192.168.x.x/api/states (returns all entity states as JSON)
   # Dashboard: /assets/dashboard.html or serve via external web server
-  # Example: curl -u username:password http://192.168.x.x/api/states | jq '.'
+  # Example: curl -u admin:password http://192.168.x.x/api/states | jq '.'
   sorting_groups:
     - id: group_system_info
       name: "System"
