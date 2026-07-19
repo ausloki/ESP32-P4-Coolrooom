@@ -528,13 +528,86 @@
         let currentRole = 'guest';
         let currentUser = 'unknown';
         let authToken = null;
-        const API_URL = '/api/states';
+        const HA_LAN_IP = '192.168.37.136';
+        const API_PATH = '/api/states';
+        let activeApiUrl = null;
         let tempChart = null;
         
         // Session timeout tracking
         const SESSION_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
         let inactivityTimer = null;
         let lastActivityTime = Date.now();
+
+        function isPrivateHostname(hostname) {
+            if (!hostname) return false;
+            if (hostname === 'localhost') return true;
+            if (hostname.endsWith('.local')) return true;
+            if (/^10\./.test(hostname)) return true;
+            if (/^192\.168\./.test(hostname)) return true;
+            if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) return true;
+            return false;
+        }
+
+        function buildApiCandidates() {
+            const candidates = [];
+            const host = window.location.hostname;
+            const protocol = window.location.protocol || 'http:';
+            const params = new URLSearchParams(window.location.search);
+            const overrideHost = params.get('ha_host');
+
+            // Try same-origin first when browsing the dashboard from a local subnet.
+            if (isPrivateHostname(host)) {
+                candidates.push(`${protocol}//${host}${API_PATH}`);
+                if (protocol !== 'http:') {
+                    candidates.push(`http://${host}${API_PATH}`);
+                }
+            }
+
+            // Relative path still works for direct device hosting.
+            candidates.push(API_PATH);
+
+            // Primary routed target through the inter-site VPN.
+            candidates.push(`http://${HA_LAN_IP}${API_PATH}`);
+
+            // Optional runtime override: ?ha_host=192.168.37.136 (or DNS name)
+            if (overrideHost) {
+                candidates.unshift(`http://${overrideHost}${API_PATH}`);
+            }
+
+            // De-duplicate while preserving order.
+            return [...new Set(candidates)];
+        }
+
+        async function fetchWithTimeout(url, timeoutMs = 2500) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { signal: controller.signal });
+            } finally {
+                clearTimeout(timeout);
+            }
+        }
+
+        async function fetchStatesWithFallback() {
+            const candidates = buildApiCandidates();
+            let lastError = null;
+
+            for (const url of candidates) {
+                try {
+                    const response = await fetchWithTimeout(url);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const states = await response.json();
+                    activeApiUrl = url;
+                    return states;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw new Error(lastError ? lastError.message : 'No API endpoints reachable');
+        }
 
         // ═══════════════════════════════════════════════════════════════════════════════
         // INACTIVITY TIMEOUT MANAGEMENT
@@ -796,13 +869,16 @@
 
         async function fetchStatus() {
             try {
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const states = await response.json();
+                const states = await fetchStatesWithFallback();
                 
                 const data = parseStates(states);
                 updateDashboard(data);
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+
+                const autoRefresh = document.getElementById('autoRefresh');
+                if (autoRefresh) {
+                    autoRefresh.textContent = `enabled (10s) - source: ${activeApiUrl || 'unknown'}`;
+                }
             } catch (error) {
                 console.error('Error fetching status:', error);
                 showAlert('error', `Failed to fetch status: ${error.message}`);

@@ -233,6 +233,10 @@ wifi:
 captive_portal:
 
 api:
+  # NOTE: ESPHome native API is inbound (Home Assistant connects to this device).
+  # Endpoint selection (for web dashboards or proxies) must be handled by the
+  # connecting client. In this project we now target HA's LAN IP over VPN
+  # routing between sites instead of using a public IP fallback.
   encryption:
     key: !secret api_encryption_key
   reboot_timeout: 0s

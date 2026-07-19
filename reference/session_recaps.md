@@ -4,6 +4,47 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-19 — Connectivity Hardening: Public IP Removed, LAN-over-VPN Targeting
+
+**Session scope**: Replace public-IP Home Assistant access assumptions with routed LAN-IP access across site-to-site VPN; validate auth behavior and document deployment requirements.
+
+### What Changed
+
+- Removed public IP fallback endpoint from dashboard API source selection.
+- Set HA target to LAN IP `192.168.37.136` for VPN-routed environments.
+- Added optional dashboard runtime override `?ha_host=<ip-or-hostname>` to support commissioning and migration.
+- Updated firmware-side API comments to clarify architecture:
+  - ESPHome native API remains inbound (`Home Assistant -> device`).
+  - Endpoint selection is client-side (dashboard/proxy), now LAN-over-VPN first.
+- Updated README with a dedicated site-to-site VPN section:
+  - Route requirements on both routers.
+  - Firewall/port guidance for `8123/TCP` and `6053/TCP` over tunnel.
+  - Validation commands for HA reachability and ESPHome API reachability.
+
+### Connectivity Tests Performed
+
+- Public endpoint `202.130.221.122` was reachable but fronted by UniFi OS.
+- HA REST paths on that public endpoint returned `401 Unauthorized` under tested auth variants.
+- Result confirmed decision to scrap public-IP dependency for this project flow.
+
+### Code-Review Graph Workflow
+
+- Installed `code-review-graph` into project venv to restore tooling availability.
+- Ran graph update and status via venv python module.
+- Current graph status reported:
+  - Nodes: 17
+  - Edges: 61
+  - Files: 2
+  - Languages: bash, c
+
+### Outcome
+
+- Project connectivity model is now aligned with two-router VPN topology.
+- External port exposure is no longer required for normal HA-to-device operations.
+- Documentation and implementation now match the same LAN-over-VPN assumption.
+
+---
+
 ## 2026-07-18 (Final) — Phase 4 Complete: Icon Control Logic Integration
 
 **Session scope**: Finalize icon visual feedback by binding all status icons to appropriate control signals (relay state or control logic flags).

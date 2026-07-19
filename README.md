@@ -64,6 +64,38 @@ Connect to that AP and navigate to **192.168.4.1** to:
 3. Set the API encryption key in `secrets.yaml` to match whatever HA expects.
 4. All entities appear under the device in HA with their web-server sorting group names.
 
+## Site-to-Site VPN Routing (Preferred)
+
+This project now targets Home Assistant via LAN IP over router-to-router VPN routing,
+not public IP fallback.
+
+- **HA LAN target**: `192.168.37.136`
+- **Transport model**: two routers maintain tunnel routes between sites (WireGuard preferred)
+- **Security model**: keep ESPHome device services private to LAN/VPN
+
+Minimum routing and firewall requirements:
+
+1. Add a route on each router for the remote site subnet via the VPN tunnel.
+2. Allow inter-site traffic from the project subnet to `192.168.37.136` on HA port `8123/TCP`.
+3. Allow Home Assistant to reach project-site ESPHome nodes on `6053/TCP` over VPN.
+4. Keep `6053/TCP` closed on WAN (do not expose publicly).
+5. Prefer closing public `8123/TCP` once VPN path is verified.
+
+Validation checks:
+
+```bash
+# From project site (or dashboard host over VPN), verify HA endpoint reachability
+curl -I --connect-timeout 5 http://192.168.37.136:8123/
+
+# From HA site, verify ESPHome API reachability to a project node
+nc -vz <project-device-lan-ip> 6053
+```
+
+Notes:
+
+- ESPHome native API is inbound (`Home Assistant -> device`).
+- The firmware does not establish a VPN session itself; VPN is handled by site routers.
+
 ## Development Environment
 
 ```bash
