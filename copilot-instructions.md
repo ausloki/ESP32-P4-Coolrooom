@@ -142,6 +142,7 @@ When firmware changes, **always update in same commit**:
 - `reference/control_logic_ns_diagram.md` — if control loop or LVGL feedback changes
 - `reference/HANDOVER_2026-07-18.md` — if display architecture changes
 - `reference/session_recaps.md` — dated recap at every phase boundary
+- `HANDOVER_NOTES_YYYY-MM-DD.md` and/or `reference/HANDOVER_YYYY-MM-DD.md` — handover notes at every change
 
 ## Phase Status
 
@@ -177,10 +178,11 @@ This workflow is mandatory after every code or documentation change, no exceptio
   - `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph status`
 2. Update all impacted docs in the same pass.
 3. Append a dated recap entry to `reference/session_recaps.md`.
-4. Create a compact commit with code + docs together:
+4. Update handover notes (`HANDOVER_NOTES_YYYY-MM-DD.md` and/or `reference/HANDOVER_YYYY-MM-DD.md`).
+5. Create a compact commit with code + docs together:
   - `/usr/bin/git add -A`
   - `/usr/bin/git commit -m "<clear scoped message>"`
-5. Verify clean working tree:
+6. Verify clean working tree:
   - `/usr/bin/git status --short`
 
 If any step fails, task closeout is blocked until fixed.
@@ -205,6 +207,7 @@ If any step fails, task closeout is blocked until fixed.
 
 ### 3. Session Recaps & Handover Files
 * Create or update `reference/session_recaps.md` with new dated entry (one per phase boundary)
+* Create or update handover notes for each change (`HANDOVER_NOTES_YYYY-MM-DD.md` and/or `reference/HANDOVER_YYYY-MM-DD.md`)
 * Document in recap:
   - **What was changed** — Features, bug fixes, architecture updates
   - **Why it was changed** — Requirements, design rationale, constraints addressed
@@ -230,6 +233,7 @@ Before marking a task complete, verify ALL of the following:
 - [ ] RAM usage reported (should be ≤ 25%)
 - [ ] Flash usage reported (should be ≤ 20%)
 - [ ] All relevant reference files updated
+- [ ] Handover notes updated for this change
 - [ ] `reference/session_recaps.md` entry added (if phase boundary)
 - [ ] Git commit created with clear message
 - [ ] Build artifact paths documented (e.g., `firmware.factory.bin` location)

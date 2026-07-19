@@ -4,6 +4,30 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-19 (Policy Update) — Handover Notes Mandatory On Every Change
+
+**Session scope**: Extend mandatory post-change workflow to require handover updates every time.
+
+### What Changed
+
+- Updated mandatory workflow in both instruction files to include handover notes as required closeout artifacts.
+- Documentation rules now explicitly require updating:
+  - `HANDOVER_NOTES_YYYY-MM-DD.md` and/or
+  - `reference/HANDOVER_YYYY-MM-DD.md`
+- Added dated addendum blocks in both handover notes to record this policy.
+
+### Outcome
+
+- Every future change now requires:
+  - graph update
+  - impacted docs update
+  - recap update
+  - handover update
+  - compact commit
+  - clean working tree verification
+
+---
+
 ## 2026-07-19 (Policy Update) — Mandatory Post-Change Compact Workflow
 
 **Session scope**: Enforce mandatory closeout workflow after every change.

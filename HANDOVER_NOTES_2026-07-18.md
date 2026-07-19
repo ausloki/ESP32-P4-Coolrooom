@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-07-19 Addendum — Documentation Workflow Policy
+
+- Project closeout workflow now requires handover note updates for every change.
+- Mandatory closeout now includes: graph update, impacted docs update, recap update, handover update, compact commit, clean-tree check.
+- Applies to both instruction files:
+   - `.github/copilot-instructions.md`
+   - `copilot-instructions.md`
+
+---
+
 ## Executive Summary
 
 The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 12 phases. All phases have been implemented, compiled successfully, documented, and committed to git. The project uses 19.3% RAM and 20.0% Flash with comfortable headroom for future enhancements. Phase 12 adds comprehensive role-based access control (RBAC) for the web GUI with three distinct access levels.
