@@ -4,6 +4,26 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
+
+**Session scope**: Document project DIN power-supply allocation and grounding requirements.
+
+### What Changed
+
+- Updated `reference/hardware_pins.md` with explicit project power architecture notes.
+- Recorded two-supply model:
+  - 5V DIN PSU -> controller on PH2.0 12PIN (`Core_5V`/`GND`)
+  - 12V DIN PSU -> RS485 RTU-4 relay and RTD PT100 modules
+- Added explicit requirement to bond 5V and 12V PSU negatives to a common ground reference.
+- Added practical wiring note to use a control-panel star-point ground bond.
+
+### Outcome
+
+- Documentation now clearly states supply assignment and grounding expectations.
+- RS485 reliability risk from floating supply references is now explicitly addressed.
+
+---
+
 ## 2026-07-19 — GPIO Header Mapping + Power/Voltage Notes
 
 **Session scope**: Map PH2.0 12PIN GPIO header nets and document supported power rails/voltages.

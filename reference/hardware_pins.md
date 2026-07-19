@@ -125,6 +125,25 @@ This is a **net availability map** for the 2x12 expansion header. Physical pin-n
 - Use `Core_5V` only when the attached module requires 5V power and has 3.3V-compatible I/O (or proper level shifting).
 - For digital inputs (e.g. door reed on GPIO20), wire the switch between GPIO and GND when using `INPUT_PULLUP`.
 
+### Project Power Architecture (DIN PSU)
+
+This project uses two DIN-mounted power supplies:
+
+| Supply | Primary Loads |
+| --- | --- |
+| 5V DIN PSU | ESP32-P4 controller via PH2.0 12PIN header (`Core_5V` + `GND`) |
+| 12V DIN PSU | RS485 RTU-4 relay module and RS485 RTD PT100 modules |
+
+#### Grounding Requirement
+
+Yes, the supplies should share a **common ground reference** for reliable RS485/UART-referenced communication in this architecture.
+
+- Bond 5V PSU negative and 12V PSU negative together at one control-panel star point.
+- Tie that common point to controller `GND` and RS485 device `GND`.
+- Keep power returns tidy (avoid long daisy-chain ground loops).
+
+Without a common ground, RS485 transceiver common-mode can drift and produce intermittent or unstable communication.
+
 ---
 
 ## ✅ CONFIRMED PINS (from board schematic PDF)

@@ -23,6 +23,14 @@
 - Added guidance that GPIO signal level is 3.3V logic and should not be driven above 3.3V.
 - Clarified map scope as net-availability; physical connector pin-number order must still be verified against board silk/schematic view when building harnesses.
 
+## 2026-07-19 Addendum — Dual DIN PSU + Common Ground Rule
+
+- Documented project power model using two DIN supplies:
+   - 5V DIN PSU feeds controller via PH2.0 12PIN (`Core_5V` + `GND`).
+   - 12V DIN PSU feeds RS485 RTU-4 relay and RTD PT100 modules.
+- Added grounding requirement: 5V PSU negative and 12V PSU negative must be bonded to a common reference point for stable RS485 communications.
+- Added wiring guidance to use a star-point ground bond in the control panel.
+
 ---
 
 ## Executive Summary
