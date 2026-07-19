@@ -13,6 +13,16 @@
    - `.github/copilot-instructions.md`
    - `copilot-instructions.md`
 
+## 2026-07-19 Addendum — GPIO Header Pin/Voltage Mapping
+
+- Updated `reference/hardware_pins.md` with an explicit PH2.0 12PIN GPIO-header net map.
+- Added supported power rail and voltage notes for header usage:
+   - `ESP_3V3` (3.3V)
+   - `Core_5V` (5.0V)
+   - `GND` (0V reference)
+- Added guidance that GPIO signal level is 3.3V logic and should not be driven above 3.3V.
+- Clarified map scope as net-availability; physical connector pin-number order must still be verified against board silk/schematic view when building harnesses.
+
 ---
 
 ## Executive Summary

@@ -4,6 +4,34 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-19 — GPIO Header Mapping + Power/Voltage Notes
+
+**Session scope**: Map PH2.0 12PIN GPIO header nets and document supported power rails/voltages.
+
+### What Changed
+
+- Updated `reference/hardware_pins.md` section for item 24 (2x12 GPIO header).
+- Added header net-availability map including documented GPIO nets used for expansion.
+- Added power/voltage table for supported header rails:
+  - `ESP_3V3` (3.3V)
+  - `Core_5V` (5.0V)
+  - `GND` (0V)
+- Added electrical guidance that header GPIO is 3.3V logic.
+- Added wiring notes for safe 3.3V sensor use and 5V-powered peripheral scenarios.
+
+### Notes
+
+- Mapping is recorded as a net map from schematic labels and project wiring context.
+- Physical connector pin-number order should be verified directly in schematic viewer/board silk before final harness manufacture.
+
+### Outcome
+
+- Project docs now answer both questions directly:
+  - which header nets are available
+  - which power rails/voltages are supported
+
+---
+
 ## 2026-07-19 (Policy Update) — Handover Notes Mandatory On Every Change
 
 **Session scope**: Extend mandatory post-change workflow to require handover updates every time.

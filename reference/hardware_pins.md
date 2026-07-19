@@ -99,6 +99,32 @@ The GT911 communicates via I2C. It may share GPIO7/8 with the external I2C heade
 
 The GPIO header exposes programmable GPIOs and power pins. Avoid all GPIOs in the reserved table.
 
+### PH2.0 12PIN Header Map (item 24)
+
+Source: board schematic PDF net labels (`reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf`) + project wiring validation.
+
+This is a **net availability map** for the 2x12 expansion header. Physical pin-number order on the connector should be verified against the board silk/schematic viewer during harness build.
+
+| Group | Nets available on PH2.0 12PIN header |
+| --- | --- |
+| GPIO signals | GPIO2, GPIO3, GPIO4, GPIO5, GPIO20, GPIO28, GPIO29, GPIO30, GPIO31, GPIO34, GPIO49, GPIO50, GPIO51, GPIO52 |
+| Power rails | ESP_3V3, Core_5V, GND |
+
+### Supported Header Voltages
+
+| Rail / Signal Type | Nominal Voltage | Notes |
+| --- | --- | --- |
+| ESP_3V3 | 3.3V | Logic rail for ESP32-P4 GPIO domain |
+| Core_5V | 5.0V | Power rail only (peripheral supply) |
+| GPIO signal level | 3.3V logic | Treat GPIO as 3.3V-only; do not drive above 3.3V |
+| GND | 0V | Common reference |
+
+### Wiring Guidance
+
+- Use `ESP_3V3` for 3.3V sensors/logic interfaces.
+- Use `Core_5V` only when the attached module requires 5V power and has 3.3V-compatible I/O (or proper level shifting).
+- For digital inputs (e.g. door reed on GPIO20), wire the switch between GPIO and GND when using `INPUT_PULLUP`.
+
 ---
 
 ## ✅ CONFIRMED PINS (from board schematic PDF)
