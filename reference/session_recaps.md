@@ -4,6 +4,28 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-19 (Policy Update) — Mandatory Post-Change Compact Workflow
+
+**Session scope**: Enforce mandatory closeout workflow after every change.
+
+### What Changed
+
+- Updated both instruction files to make post-change closeout mandatory with no exceptions:
+  - `.github/copilot-instructions.md`
+  - `copilot-instructions.md`
+- Required sequence now explicitly includes:
+  - code-review graph update + status checks
+  - documentation updates in same pass
+  - dated recap update in `reference/session_recaps.md`
+  - compact commit and clean-tree verification
+
+### Outcome
+
+- Workflow requirement is now explicit and enforced in project instructions.
+- Future sessions should run compact/graph/recap/commit after each change set.
+
+---
+
 ## 2026-07-19 — Connectivity Hardening: Public IP Removed, LAN-over-VPN Targeting
 
 **Session scope**: Replace public-IP Home Assistant access assumptions with routed LAN-IP access across site-to-site VPN; validate auth behavior and document deployment requirements.

@@ -71,6 +71,23 @@ When firmware changes, **always update in the same commit**:
 - Append a dated recap block to `reference/session_recaps.md` summarising what changed
 - Push `session_recaps.md` together with the diagram updates in the same commit
 
+## Mandatory After Every Change
+
+This workflow is mandatory after every code or documentation change, no exceptions.
+
+1. Update code-review graph:
+	- `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph update --repo .`
+	- `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph status`
+2. Update documentation impacted by the change (at minimum include any required reference files).
+3. Append a dated entry to `reference/session_recaps.md` summarising scope, changes, and outcome.
+4. Create a compact commit containing code + docs together:
+	- `/usr/bin/git add -A`
+	- `/usr/bin/git commit -m "<clear scoped message>"`
+5. Verify clean working tree:
+	- `/usr/bin/git status --short`
+
+If any step fails, treat the task as incomplete and resolve before closeout.
+
 ## Phase Status
 
 | Phase | Description | Status |

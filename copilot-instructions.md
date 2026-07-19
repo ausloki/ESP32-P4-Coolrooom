@@ -168,6 +168,23 @@ When firmware changes, **always update in same commit**:
 
 On the completion of ANY task, sub-task, or feature, you MUST execute the following four steps before declaring the task finished:
 
+## Mandatory After Every Change
+
+This workflow is mandatory after every code or documentation change, no exceptions.
+
+1. Update code-review graph:
+  - `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph update --repo .`
+  - `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph status`
+2. Update all impacted docs in the same pass.
+3. Append a dated recap entry to `reference/session_recaps.md`.
+4. Create a compact commit with code + docs together:
+  - `/usr/bin/git add -A`
+  - `/usr/bin/git commit -m "<clear scoped message>"`
+5. Verify clean working tree:
+  - `/usr/bin/git status --short`
+
+If any step fails, task closeout is blocked until fixed.
+
 ### 1. Compilation & Code Review
 * Compile firmware and verify zero errors/warnings: `esphome compile esp32-p4-coolroom.yaml`
 * Review RAM/Flash metrics — ensure within target constraints (RAM < 25%, Flash < 20%)
