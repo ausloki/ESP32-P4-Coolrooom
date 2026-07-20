@@ -135,7 +135,7 @@ Notes:
 
 ### Git Hook Dependency Checker (cross-machine)
 
-Set up versioned repository hooks so dependency checks run automatically after checkout and merge:
+Set up versioned repository hooks so dependency checks run automatically after checkout, merge, and before local commits:
 
 ```bash
 # Configure repo to use versioned hooks in .githooks
@@ -157,7 +157,22 @@ python3 tools/dependency_check.py --install
 
 Hook behavior:
 - `.githooks/post-checkout` and `.githooks/post-merge` run non-blocking checks.
+- `.githooks/pre-commit` runs a non-blocking dependency warning before each commit.
 - If dependencies are missing, hooks print remediation commands for macOS/Linux and Windows.
+
+### Windows One-Step Bootstrap
+
+For first-time setup on Windows, run the bootstrap script from PowerShell:
+
+```powershell
+./tools/bootstrap_windows.ps1
+```
+
+This script:
+- Creates `.venv` if missing
+- Installs project tooling from `requirements.txt` using `tools/dependency_check.py --install`
+- Configures `core.hooksPath=.githooks` via `tools/setup_git_hooks.py`
+- Runs a final quick dependency verification
 
 ## No-USB Operations
 

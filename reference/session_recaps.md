@@ -82,6 +82,23 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-21 — Windows Bootstrap + Pre-Commit Dependency Warning
+
+**Session scope**: Complete cross-machine onboarding with a one-step Windows bootstrap and add pre-commit dependency warnings.
+
+### What Changed
+
+- Added `tools/bootstrap_windows.ps1` for first-time Windows setup automation.
+- Added `.githooks/pre-commit` to run a non-blocking dependency check before each commit.
+- Updated hook setup messaging and README usage notes to include pre-commit behavior and bootstrap flow.
+
+### Outcome
+
+- Windows onboarding is now one command for venv, dependency install, hook setup, and verification.
+- Local commits now surface dependency drift early without blocking developer workflow.
+
+---
+
 ## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
 
 **Session scope**: Document project DIN power-supply allocation and grounding requirements.

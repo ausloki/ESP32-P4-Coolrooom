@@ -62,6 +62,12 @@
 - Added `requirements.txt` for deterministic tooling installs (`esphome`, `code-review-graph`, `certifi`).
 - Hooks are warning-only (non-blocking) and print remediation commands if checks fail.
 
+## 2026-07-21 Addendum — Windows Bootstrap + Pre-Commit Warning Hook
+
+- Added `tools/bootstrap_windows.ps1` for one-step Windows environment bootstrap.
+- Bootstrap flow now covers `.venv` creation, dependency install, hook setup, and quick validation.
+- Added `.githooks/pre-commit` as a warning-only dependency check before local commits.
+
 ---
 
 ## Executive Summary

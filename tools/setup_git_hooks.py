@@ -45,7 +45,7 @@ def main() -> int:
                 hook.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     print("Configured core.hooksPath=.githooks")
-    print("Hooks will run on checkout/merge and validate local dependencies.")
+    print("Hooks will run on checkout/merge/pre-commit and validate local dependencies.")
     return 0
 
 
