@@ -41,6 +41,24 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-21 — Compile Environment Hardening
+
+**Session scope**: Make firmware compile prerequisites repeatable and self-checking.
+
+### What Changed
+
+- Added `tools/esphome_env_check.sh` to validate `.venv` tooling (`esphome`, `certifi`), system binaries, and ESP-IDF penv architecture.
+- Added `tools/esphome_compile.sh` to enforce stable compile environment setup (`SSL_CERT_FILE`, PATH) before running `esphome compile`.
+- Added optional `--fix-arm64-penv` path to apply the documented Apple Silicon penv architecture workaround.
+- Updated README with helper-script usage examples for future sessions.
+
+### Outcome
+
+- Compile can now be launched consistently through one repo command.
+- Environment drift and SSL/PATH regressions are easier to detect and recover.
+
+---
+
 ## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
 
 **Session scope**: Document project DIN power-supply allocation and grounding requirements.

@@ -46,6 +46,12 @@
 - The 1s LVGL update loop now hides the animation widgets when alarms or probe faults are active.
 - Readability remains the priority: the animation stays behind the meter, labels, and status icons.
 
+## 2026-07-21 Addendum — Compile Environment Helpers
+
+- Added `tools/esphome_env_check.sh` to verify local compile prerequisites (`.venv`, python modules, system tools) and report ESP-IDF penv architecture.
+- Added `tools/esphome_compile.sh` to run compile with repo-safe `SSL_CERT_FILE` and PATH setup.
+- Added optional `--fix-arm64-penv` mode for Apple Silicon to apply the documented arm64 penv workaround when architecture mismatch recurs.
+
 ---
 
 ## Executive Summary

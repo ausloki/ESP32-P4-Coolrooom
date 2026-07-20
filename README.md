@@ -114,6 +114,25 @@ python3 -m venv .venv
 .venv/bin/esphome upload --device esp32-p4-coolroom.local esp32-p4-coolroom.yaml
 ```
 
+### Compile Helpers (recommended)
+
+Use the repo helper scripts to avoid recurring PATH/certificate/toolchain issues:
+
+```bash
+# Validate environment and report IDF penv architecture details
+./tools/esphome_env_check.sh
+
+# Compile with project-safe SSL cert + PATH setup
+./tools/esphome_compile.sh
+
+# Optional: force arm64-only IDF penv python on Apple Silicon if mismatch recurs
+./tools/esphome_compile.sh --fix-arm64-penv
+```
+
+Notes:
+- `tools/esphome_compile.sh` exports `SSL_CERT_FILE` from `certifi` and prepends standard system paths.
+- `tools/esphome_env_check.sh` verifies `esphome` and `certifi` in `.venv` and checks ESP-IDF penv python architecture.
+
 ## No-USB Operations
 
 Once WiFi is live, all diagnostics can be done without USB:
