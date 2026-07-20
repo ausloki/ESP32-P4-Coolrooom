@@ -64,6 +64,18 @@ Connect to that AP and navigate to **192.168.4.1** to:
 3. Set the API encryption key in `secrets.yaml` to match whatever HA expects.
 4. All entities appear under the device in HA with their web-server sorting group names.
 
+## Offline Autonomous Operation (No Wi-Fi / No HA)
+
+Main control logic is designed to run locally even when there is no Wi-Fi or Home Assistant connection.
+
+- Compressor, defrost, alarm, sensor-fault handling, and SD logging run from the 10s local control loop.
+- Wi-Fi/API disconnect does not reboot firmware (`wifi.reboot_timeout: 0s`, `api.reboot_timeout: 0s`).
+- Time sync (SNTP) and push notifications (ntfy) are treated as optional network features.
+- While offline, ntfy requests are skipped; notification edge flags reset so active alarms can notify after reconnect.
+
+Operational note:
+- Probe validity and RS485 health still determine safe operation; network presence is not part of compressor/defrost decisions.
+
 ## Site-to-Site VPN Routing (Preferred)
 
 This project now targets Home Assistant via LAN IP over router-to-router VPN routing,

@@ -92,6 +92,12 @@ graph LR
     CTL --> REL3["relay_siren\nCoil 3"]
 ```
 
+## Offline Operation Notes
+
+- Main control decisions are local and run from the 10s loop regardless of Wi-Fi/HA state.
+- Wi-Fi/API disconnect is non-fatal (`reboot_timeout: 0s`) and must not restart firmware.
+- Network push notifications are best-effort and only attempted when Wi-Fi is connected.
+
 ---
 
 ## Phase Summary

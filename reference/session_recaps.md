@@ -99,6 +99,25 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-21 — Offline Autonomous Control Hardening
+
+**Session scope**: Ensure refrigeration control logic remains operational without Wi-Fi or Home Assistant connectivity.
+
+### What Changed
+
+- Set `wifi.reboot_timeout: 0s` in firmware configuration so Wi-Fi loss cannot trigger reboot.
+- Kept `api.reboot_timeout: 0s` as non-fatal network behavior for HA disconnect.
+- Updated 10s control-loop notification block so ntfy network requests run only when Wi-Fi is connected.
+- Reset ntfy edge flags while offline so active alarms can still notify after reconnect.
+- Updated control-logic documentation and flowchart notes to explicitly mark network features as optional.
+
+### Outcome
+
+- Compressor/defrost/alarm safety logic remains fully local and autonomous when offline.
+- Network outages no longer introduce reboot risk or repeated failing notification attempts.
+
+---
+
 ## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
 
 **Session scope**: Document project DIN power-supply allocation and grounding requirements.

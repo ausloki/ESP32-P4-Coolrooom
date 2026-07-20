@@ -4,6 +4,8 @@
 Usage:
   python tools/dependency_check.py
   python tools/dependency_check.py --install
+    python tools/dependency_check.py --install-offline
+    python tools/dependency_check.py --check-offline
   python tools/dependency_check.py --quick
 """
 
@@ -21,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VENV_DIR = ROOT / ".venv"
 REQUIRED_MODULES = ["esphome", "code_review_graph", "certifi"]
 REQUIREMENTS_FILE = ROOT / "requirements.txt"
+OFFLINE_WHEEL_DIR = ROOT / "tools" / "offline" / "wheels"
 
 if os.name != "nt":
     os.environ["PATH"] = f"/usr/bin:/bin:/usr/sbin:/sbin:{os.environ.get('PATH', '')}"
@@ -59,7 +62,7 @@ def venv_python() -> Path:
     return VENV_DIR / "bin" / "python"
 
 
-def ensure_venv(host_python: str) -> tuple[bool, list[str]]:
+def ensure_venv(host_python: str, offline: bool = False) -> tuple[bool, list[str]]:
     notes: list[str] = []
     created = False
 
@@ -73,14 +76,21 @@ def ensure_venv(host_python: str) -> tuple[bool, list[str]]:
     if not py.exists():
         raise RuntimeError(f"Virtualenv python not found at {py}")
 
-    cp = run([str(py), "-m", "pip", "install", "--upgrade", "pip"])
-    if cp.returncode != 0:
-        raise RuntimeError(cp.stderr.strip() or "pip upgrade failed")
+    if not offline:
+        cp = run([str(py), "-m", "pip", "install", "--upgrade", "pip"])
+        if cp.returncode != 0:
+            raise RuntimeError(cp.stderr.strip() or "pip upgrade failed")
+
+    pip_cmd = [str(py), "-m", "pip", "install"]
+    if offline:
+        if not OFFLINE_WHEEL_DIR.exists():
+            raise RuntimeError(f"Offline wheel cache missing: {OFFLINE_WHEEL_DIR}")
+        pip_cmd.extend(["--no-index", "--find-links", str(OFFLINE_WHEEL_DIR)])
 
     if REQUIREMENTS_FILE.exists():
-        cp = run([str(py), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)])
+        cp = run(pip_cmd + ["-r", str(REQUIREMENTS_FILE)])
     else:
-        cp = run([str(py), "-m", "pip", "install", *REQUIRED_MODULES])
+        cp = run(pip_cmd + REQUIRED_MODULES)
     if cp.returncode != 0:
         raise RuntimeError(cp.stderr.strip() or "dependency installation failed")
 
@@ -120,6 +130,13 @@ def check_quick() -> tuple[bool, list[str], list[str]]:
     else:
         notes.append("No requirements.txt found; using built-in module list")
 
+    if OFFLINE_WHEEL_DIR.exists():
+        wheel_count = len(list(OFFLINE_WHEEL_DIR.glob("*.whl")))
+        sdist_count = len(list(OFFLINE_WHEEL_DIR.glob("*.tar.gz")))
+        notes.append(f"Offline cache present: {wheel_count} wheel(s), {sdist_count} sdist archive(s)")
+    else:
+        notes.append("Offline wheel cache not prepared (tools/offline/wheels)")
+
     py = venv_python()
     if not py.exists():
         errors.append("Virtual environment missing. Run: python tools/dependency_check.py --install")
@@ -155,9 +172,34 @@ def print_report(ok: bool, errors: list[str], notes: list[str]) -> None:
     print("Status: PASS" if ok else "Status: FAIL")
 
 
+def check_offline_assets() -> tuple[bool, list[str], list[str]]:
+    ok, errors, notes = check_quick()
+    _ = ok
+
+    if not OFFLINE_WHEEL_DIR.exists():
+        errors.append(
+            "Offline wheel cache missing. Run: ./tools/offline_prepare.sh"
+        )
+    else:
+        wheels = list(OFFLINE_WHEEL_DIR.glob("*.whl"))
+        sdists = list(OFFLINE_WHEEL_DIR.glob("*.tar.gz"))
+        if not wheels and not sdists:
+            errors.append(
+                "Offline wheel cache is empty. Run: ./tools/offline_prepare.sh"
+            )
+        else:
+            notes.append(
+                f"Offline cache verified: {len(wheels)} wheel(s), {len(sdists)} sdist archive(s)"
+            )
+
+    return len(errors) == 0, errors, notes
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--install", action="store_true", help="Create .venv and install required modules")
+    parser.add_argument("--install-offline", action="store_true", help="Install from local offline wheel cache")
+    parser.add_argument("--check-offline", action="store_true", help="Validate offline cache and environment readiness")
     parser.add_argument("--quick", action="store_true", help="Run quick checks only")
     args = parser.parse_args()
 
@@ -173,6 +215,24 @@ def main() -> int:
         except Exception as exc:  # pragma: no cover
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
+
+    if args.install_offline:
+        host_python = find_host_python()
+        if not host_python:
+            print("ERROR: No Python 3 executable found (py/python3/python)", file=sys.stderr)
+            return 2
+        try:
+            _, notes = ensure_venv(host_python, offline=True)
+            for n in notes:
+                print(n)
+        except Exception as exc:  # pragma: no cover
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+
+    if args.check_offline:
+        ok, errors, notes = check_offline_assets()
+        print_report(ok, errors, notes)
+        return 0 if ok else 1
 
     ok, errors, notes = check_quick()
     print_report(ok, errors, notes)

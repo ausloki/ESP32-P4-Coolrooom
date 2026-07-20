@@ -220,6 +220,8 @@ wifi:
     - ssid: !secret wifi_ssid
       password: !secret wifi_password
       priority: 10
+  # Keep control logic autonomous if Wi-Fi/AP is unavailable.
+  reboot_timeout: 0s
   ap:
     ssid: "CoolroomP4-Setup"
     password: !secret ap_password
@@ -1782,36 +1784,44 @@ interval:
                   id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_probe_fault));
           }
 
-          // ── 9. ntfy push notifications — edge-triggered (Phase 5) ───────
-          bool ntfy_hi = id(ctl_alarm_high_active);
-          bool ntfy_lo = id(ctl_alarm_low_active);
-          bool ntfy_pf = id(ctl_probe_fault);
-          if (ntfy_hi && !id(ntfy_alarm_hi_sent)) {
-              id(ntfy_alarm_hi_sent) = true;
-              id(ntfy_high_alarm_request).trigger();
-              p4_sd_log_event("ALARM_HI", "");
-          } else if (!ntfy_hi && id(ntfy_alarm_hi_sent)) {
+            // ── 9. ntfy push notifications — edge-triggered (Phase 5) ───────
+            // Network delivery is optional; local control/alarm logic stays autonomous.
+            if (id(ctl_wifi_connected)) {
+              bool ntfy_hi = id(ctl_alarm_high_active);
+              bool ntfy_lo = id(ctl_alarm_low_active);
+              bool ntfy_pf = id(ctl_probe_fault);
+              if (ntfy_hi && !id(ntfy_alarm_hi_sent)) {
+                id(ntfy_alarm_hi_sent) = true;
+                id(ntfy_high_alarm_request).trigger();
+                p4_sd_log_event("ALARM_HI", "");
+              } else if (!ntfy_hi && id(ntfy_alarm_hi_sent)) {
+                id(ntfy_alarm_hi_sent) = false;
+                id(ntfy_alarm_clear_request).trigger();
+                p4_sd_log_event("ALARM_HI_CLEAR", "");
+              }
+              if (ntfy_lo && !id(ntfy_alarm_lo_sent)) {
+                id(ntfy_alarm_lo_sent) = true;
+                id(ntfy_low_alarm_request).trigger();
+                p4_sd_log_event("ALARM_LO", "");
+              } else if (!ntfy_lo && id(ntfy_alarm_lo_sent)) {
+                id(ntfy_alarm_lo_sent) = false;
+                id(ntfy_alarm_clear_request).trigger();
+                p4_sd_log_event("ALARM_LO_CLEAR", "");
+              }
+              if (ntfy_pf && !id(ntfy_probe_fault_sent)) {
+                id(ntfy_probe_fault_sent) = true;
+                id(ntfy_probe_fault_request).trigger();
+                p4_sd_log_event("PROBE_FAULT", "");
+              } else if (!ntfy_pf && id(ntfy_probe_fault_sent)) {
+                id(ntfy_probe_fault_sent) = false;
+                p4_sd_log_event("PROBE_FAULT_CLEAR", "");
+              }
+            } else {
+              // Keep edge flags reset while offline so active alarms can notify after reconnect.
               id(ntfy_alarm_hi_sent) = false;
-              id(ntfy_alarm_clear_request).trigger();
-              p4_sd_log_event("ALARM_HI_CLEAR", "");
-          }
-          if (ntfy_lo && !id(ntfy_alarm_lo_sent)) {
-              id(ntfy_alarm_lo_sent) = true;
-              id(ntfy_low_alarm_request).trigger();
-              p4_sd_log_event("ALARM_LO", "");
-          } else if (!ntfy_lo && id(ntfy_alarm_lo_sent)) {
               id(ntfy_alarm_lo_sent) = false;
-              id(ntfy_alarm_clear_request).trigger();
-              p4_sd_log_event("ALARM_LO_CLEAR", "");
-          }
-          if (ntfy_pf && !id(ntfy_probe_fault_sent)) {
-              id(ntfy_probe_fault_sent) = true;
-              id(ntfy_probe_fault_request).trigger();
-              p4_sd_log_event("PROBE_FAULT", "");
-          } else if (!ntfy_pf && id(ntfy_probe_fault_sent)) {
               id(ntfy_probe_fault_sent) = false;
-              p4_sd_log_event("PROBE_FAULT_CLEAR", "");
-          }
+            }
 
   # ── Phase 4: 1s LVGL display updates ─────────────────────────────────────
   - interval: 1s

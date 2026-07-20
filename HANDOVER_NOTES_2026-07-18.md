@@ -68,6 +68,13 @@
 - Bootstrap flow now covers `.venv` creation, dependency install, hook setup, and quick validation.
 - Added `.githooks/pre-commit` as a warning-only dependency check before local commits.
 
+## 2026-07-21 Addendum — Offline Autonomous Control Mode
+
+- Added `wifi.reboot_timeout: 0s` so Wi-Fi disconnect cannot reboot the controller.
+- Confirmed `api.reboot_timeout: 0s` remains in place for HA disconnect tolerance.
+- Updated control loop notification handling so ntfy network POSTs only run when Wi-Fi is connected.
+- While offline, ntfy edge flags are reset so active alarms can still generate notifications after reconnect.
+
 ---
 
 ## Executive Summary

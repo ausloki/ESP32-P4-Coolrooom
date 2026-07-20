@@ -11,6 +11,11 @@
 Each `10s interval` tick runs the full control loop in sequence.
 All decisions are made in `p4_control.h` C++ functions; YAML lambda orchestrates.
 
+Network behavior is optional:
+- Wi-Fi and HA connectivity do not gate compressor/defrost/alarm logic.
+- `wifi.reboot_timeout` and `api.reboot_timeout` are set to `0s` to avoid connectivity-triggered reboots.
+- ntfy push delivery is only attempted when Wi-Fi is connected.
+
 ---
 
 ## Control Loop (10 s interval)

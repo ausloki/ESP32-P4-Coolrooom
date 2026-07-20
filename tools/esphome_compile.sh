@@ -23,10 +23,22 @@ if [[ -x "$ESPHOME_CMAKE_BIN/cmake" ]]; then
 fi
 
 FIX_ARM64_PENV="false"
-if [[ "${1:-}" == "--fix-arm64-penv" ]]; then
-  FIX_ARM64_PENV="true"
-  shift
-fi
+OFFLINE_MODE="false"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --fix-arm64-penv)
+      FIX_ARM64_PENV="true"
+      shift
+      ;;
+    --offline)
+      OFFLINE_MODE="true"
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 CONFIG_PATH="${1:-esp32-p4-coolroom.yaml}"
 
@@ -39,6 +51,10 @@ if [[ "$FIX_ARM64_PENV" == "true" ]]; then
   "$ROOT_DIR/tools/esphome_env_check.sh" --fix-arm64-penv
 else
   "$ROOT_DIR/tools/esphome_env_check.sh"
+fi
+
+if [[ "$OFFLINE_MODE" == "true" ]]; then
+  "$ROOT_DIR/tools/offline_verify.sh"
 fi
 
 export SSL_CERT_FILE
