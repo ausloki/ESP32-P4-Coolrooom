@@ -52,6 +52,16 @@
 - Added `tools/esphome_compile.sh` to run compile with repo-safe `SSL_CERT_FILE` and PATH setup.
 - Added optional `--fix-arm64-penv` mode for Apple Silicon to apply the documented arm64 penv workaround when architecture mismatch recurs.
 
+## 2026-07-21 Addendum — Git Hook Dependency Checker
+
+- Added versioned repo hooks in `.githooks/`:
+   - `post-checkout`
+   - `post-merge`
+- Added `tools/setup_git_hooks.py` to configure `git config --local core.hooksPath .githooks`.
+- Added `tools/dependency_check.py` for cross-platform dependency validation and bootstrap.
+- Added `requirements.txt` for deterministic tooling installs (`esphome`, `code-review-graph`, `certifi`).
+- Hooks are warning-only (non-blocking) and print remediation commands if checks fail.
+
 ---
 
 ## Executive Summary

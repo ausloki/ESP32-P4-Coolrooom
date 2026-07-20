@@ -59,6 +59,29 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-21 — Git Hook Dependency Checker (Cross-Machine)
+
+**Session scope**: Add a Git-integrated dependency checker that works across macOS and Windows when the repo is opened or updated.
+
+### What Changed
+
+- Added `.githooks/post-checkout` and `.githooks/post-merge` to run non-blocking dependency checks on branch switch and merge.
+- Added `tools/setup_git_hooks.py` to configure `core.hooksPath=.githooks` in local repo config.
+- Added `tools/dependency_check.py` as a cross-platform checker with:
+  - quick validation mode (`--quick`)
+  - install/bootstrap mode (`--install`) for `.venv` creation and package install
+  - PATH hardening for stripped shell environments
+- Added `requirements.txt` as dependency source of truth for tooling packages.
+- Updated README with hook setup and Windows/macOS usage commands.
+
+### Outcome
+
+- New machines now get immediate dependency-health feedback after checkout/merge.
+- Developers can self-heal environment drift with one install command.
+- Hook behavior is versioned in-repo, improving consistency across team systems.
+
+---
+
 ## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
 
 **Session scope**: Document project DIN power-supply allocation and grounding requirements.

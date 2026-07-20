@@ -1,0 +1,42 @@
+#!/bin/sh
+# Dependency check on merge (non-blocking warning mode).
+
+ROOT_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$ROOT_DIR" ]; then
+  exit 0
+fi
+
+cd "$ROOT_DIR" || exit 0
+
+if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+  "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/tools/dependency_check.py" --quick >/dev/null 2>&1 || {
+    echo "[post-merge] Dependency check failed."
+    echo "Run: python tools/dependency_check.py --install"
+  }
+  exit 0
+fi
+
+if command -v py >/dev/null 2>&1; then
+  py -3 "$ROOT_DIR/tools/dependency_check.py" --quick >/dev/null 2>&1 || {
+    echo "[post-merge] Dependency check failed."
+    echo "Run: py -3 tools/dependency_check.py --install"
+  }
+  exit 0
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$ROOT_DIR/tools/dependency_check.py" --quick >/dev/null 2>&1 || {
+    echo "[post-merge] Dependency check failed."
+    echo "Run: python3 tools/dependency_check.py --install"
+  }
+  exit 0
+fi
+
+if command -v python >/dev/null 2>&1; then
+  python "$ROOT_DIR/tools/dependency_check.py" --quick >/dev/null 2>&1 || {
+    echo "[post-merge] Dependency check failed."
+    echo "Run: python tools/dependency_check.py --install"
+  }
+fi
+
+exit 0

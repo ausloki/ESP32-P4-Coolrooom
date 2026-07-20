@@ -133,6 +133,32 @@ Notes:
 - `tools/esphome_compile.sh` exports `SSL_CERT_FILE` from `certifi` and prepends standard system paths.
 - `tools/esphome_env_check.sh` verifies `esphome` and `certifi` in `.venv` and checks ESP-IDF penv python architecture.
 
+### Git Hook Dependency Checker (cross-machine)
+
+Set up versioned repository hooks so dependency checks run automatically after checkout and merge:
+
+```bash
+# Configure repo to use versioned hooks in .githooks
+python3 tools/setup_git_hooks.py
+
+# On Windows (PowerShell / Command Prompt)
+py -3 tools\setup_git_hooks.py
+```
+
+Run the checker manually at any time:
+
+```bash
+# Quick validation
+python3 tools/dependency_check.py --quick
+
+# Create .venv and install required Python packages from requirements.txt
+python3 tools/dependency_check.py --install
+```
+
+Hook behavior:
+- `.githooks/post-checkout` and `.githooks/post-merge` run non-blocking checks.
+- If dependencies are missing, hooks print remediation commands for macOS/Linux and Windows.
+
 ## No-USB Operations
 
 Once WiFi is live, all diagnostics can be done without USB:
