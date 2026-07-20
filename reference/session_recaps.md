@@ -23,6 +23,24 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-21 — Animated State Visuals Implemented
+
+**Session scope**: Build the approved background animation into the live LVGL home display.
+
+### What Changed
+
+- Added a display-level `bottom_layer` in `esp32-p4-coolroom.yaml` with subtle snowflake widgets and a defrost border widget.
+- Wired the 1s LVGL update loop to advance a small animation counter and refresh the background widgets.
+- Made the animation self-suppressing during probe faults and alarm states so the screen stays readable.
+- Kept the effect behind the main meter, labels, and sidebar icons.
+
+### Outcome
+
+- The snowflake and flame effects are now part of the actual UI, not just the spec.
+- Motion remains intentionally light so the display still reads as an industrial control panel.
+
+---
+
 ## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
 
 **Session scope**: Document project DIN power-supply allocation and grounding requirements.

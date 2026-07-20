@@ -1829,6 +1829,82 @@ interval:
             char buf[24];
             snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
             return std::string(buf);
+      - lambda: |-
+          const bool motion_suppressed =
+              id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
+              id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active);
+          const bool snow_active = !motion_suppressed && id(relay_compressor).state && !id(relay_defrost).state;
+          const bool flame_active = !motion_suppressed && id(relay_defrost).state;
+          if (snow_active || flame_active) {
+            id(fx_anim_tick) = (id(fx_anim_tick) + 1U) % 240U;
+          } else {
+            id(fx_anim_tick) = 0U;
+          }
+      - lvgl.widget.update:
+          id: bg_fx_defrost_border
+          hidden: !lambda 'return !(id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          border_width: !lambda |-
+            if (!id(relay_defrost).state || id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active))
+              return 0;
+            switch (id(fx_anim_tick) % 4U) {
+              case 0: return 3;
+              case 1: return 6;
+              case 2: return 4;
+              default: return 7;
+            }
+          border_opa: !lambda |-
+            if (!id(relay_defrost).state || id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active))
+              return 0;
+            switch (id(fx_anim_tick) % 4U) {
+              case 0: return 55;
+              case 1: return 90;
+              case 2: return 70;
+              default: return 100;
+            }
+          border_color: !lambda |-
+            return (id(fx_anim_tick) % 2U == 0U) ? id(col_orange) : lv_color_hex(0xFFCF33);
+      - lvgl.widget.update:
+          id: bg_fx_snow_1
+          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          x: !lambda |-
+            return 120 + (int)((id(fx_anim_tick) * 7U + 11U) % 760U);
+          y: !lambda |-
+            return 60 + (int)((id(fx_anim_tick) * 13U + 19U) % 470U);
+      - lvgl.widget.update:
+          id: bg_fx_snow_2
+          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          x: !lambda |-
+            return 250 + (int)((id(fx_anim_tick) * 9U + 29U) % 660U);
+          y: !lambda |-
+            return 80 + (int)((id(fx_anim_tick) * 11U + 37U) % 450U);
+      - lvgl.widget.update:
+          id: bg_fx_snow_3
+          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          x: !lambda |-
+            return 390 + (int)((id(fx_anim_tick) * 5U + 53U) % 560U);
+          y: !lambda |-
+            return 100 + (int)((id(fx_anim_tick) * 15U + 71U) % 430U);
+      - lvgl.widget.update:
+          id: bg_fx_snow_4
+          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          x: !lambda |-
+            return 530 + (int)((id(fx_anim_tick) * 8U + 97U) % 460U);
+          y: !lambda |-
+            return 70 + (int)((id(fx_anim_tick) * 17U + 23U) % 460U);
+      - lvgl.widget.update:
+          id: bg_fx_snow_5
+          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          x: !lambda |-
+            return 690 + (int)((id(fx_anim_tick) * 6U + 131U) % 360U);
+          y: !lambda |-
+            return 90 + (int)((id(fx_anim_tick) * 12U + 41U) % 440U);
+      - lvgl.widget.update:
+          id: bg_fx_snow_6
+          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          x: !lambda |-
+            return 840 + (int)((id(fx_anim_tick) * 10U + 173U) % 220U);
+          y: !lambda |-
+            return 110 + (int)((id(fx_anim_tick) * 14U + 59U) % 420U);
       # Phase 10: Update info page diagnostics
       - lvgl.label.update:
           id: lbl_info_heap
@@ -1995,6 +2071,11 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
+
+  - id: fx_anim_tick
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
 
   - id: ctl_defrost_on_since_ms
     type: uint32_t
@@ -2381,6 +2462,94 @@ lvgl:
   text_color: col_text
   log_level: WARN
   default_font: font_small
+
+  bottom_layer:
+    bg_opa: TRANSP
+    widgets:
+      - obj:
+          id: bg_fx_defrost_border
+          x: 0
+          y: 0
+          width: 1024
+          height: 600
+          bg_opa: TRANSP
+          border_side:
+            - TOP
+            - BOTTOM
+            - LEFT
+            - RIGHT
+          border_width: 0
+          border_opa: 0%
+          border_color: col_orange
+          radius: 0
+          clickable: false
+          hidden: true
+
+      - label:
+          id: bg_fx_snow_1
+          x: 120
+          y: 80
+          text: "❄"
+          text_font: font_small
+          text_color: col_blue
+          text_opa: 45%
+          clickable: false
+          hidden: true
+
+      - label:
+          id: bg_fx_snow_2
+          x: 250
+          y: 120
+          text: "❄"
+          text_font: font_small
+          text_color: col_blue
+          text_opa: 45%
+          clickable: false
+          hidden: true
+
+      - label:
+          id: bg_fx_snow_3
+          x: 390
+          y: 100
+          text: "❄"
+          text_font: font_small
+          text_color: col_blue
+          text_opa: 45%
+          clickable: false
+          hidden: true
+
+      - label:
+          id: bg_fx_snow_4
+          x: 530
+          y: 90
+          text: "❄"
+          text_font: font_small
+          text_color: col_blue
+          text_opa: 45%
+          clickable: false
+          hidden: true
+
+      - label:
+          id: bg_fx_snow_5
+          x: 690
+          y: 110
+          text: "❄"
+          text_font: font_small
+          text_color: col_blue
+          text_opa: 45%
+          clickable: false
+          hidden: true
+
+      - label:
+          id: bg_fx_snow_6
+          x: 840
+          y: 130
+          text: "❄"
+          text_font: font_small
+          text_color: col_blue
+          text_opa: 45%
+          clickable: false
+          hidden: true
 
   pages:
     # Home page - Horseshoe Arc Design

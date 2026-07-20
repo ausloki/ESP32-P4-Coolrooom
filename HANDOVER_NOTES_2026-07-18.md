@@ -39,6 +39,13 @@
 - The spec prioritizes readability, low visual noise, and state suppression during faults/alarms.
 - The animation layer is defined as background-only, behind temperature labels and status icons.
 
+## 2026-07-21 Addendum — Animated State Visuals Implemented
+
+- Implemented the approved background animation in `esp32-p4-coolroom.yaml` using LVGL `bottom_layer` widgets.
+- Snowflake labels now drift while the compressor is on, and the defrost border flickers while defrost is active.
+- The 1s LVGL update loop now hides the animation widgets when alarms or probe faults are active.
+- Readability remains the priority: the animation stays behind the meter, labels, and status icons.
+
 ---
 
 ## Executive Summary

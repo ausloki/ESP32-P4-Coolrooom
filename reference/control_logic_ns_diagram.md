@@ -145,6 +145,8 @@ Control loop:                  if probe_fault → both OFF immediately
 **Update Rates:** Probe1 2s, Probe3 10s, Setpoint on-change  
 **Layout:** Left sidebar (status icons) + center meter + right sidebar (secondary readings)
 
+The background motion layer is driven from the same 1s LVGL update path as the clock and diagnostics. It reads compressor/defrost/alarm flags, increments a small animation counter, and then updates the bottom-layer snowflake and flame widgets. Fault or alarm states suppress the motion by hiding those widgets.
+
 ### Display Loop Execution
 
 ```

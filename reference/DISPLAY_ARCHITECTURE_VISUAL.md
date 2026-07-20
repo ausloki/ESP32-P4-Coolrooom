@@ -402,6 +402,8 @@ This section defines the approved background-animation language for state feedba
 - Keep the animation layer separate from the existing text and arc widget hierarchy.
 - Avoid large MP4 backgrounds for the core status view unless used only as a decorative panel.
 - If both effects are used, they should be easy to disable during tuning or low-resource modes.
+- The current implementation uses `bottom_layer` widgets in `esp32-p4-coolroom.yaml` so the motion stays behind the main LVGL pages.
+- Snowflake and flame widgets are updated from the 1s LVGL loop and are hidden whenever fault/alarm suppression is active.
 
 ---
 
