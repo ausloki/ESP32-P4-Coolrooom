@@ -31,6 +31,14 @@
 - Added grounding requirement: 5V PSU negative and 12V PSU negative must be bonded to a common reference point for stable RS485 communications.
 - Added wiring guidance to use a star-point ground bond in the control panel.
 
+## 2026-07-21 Addendum — Animated State Visual Spec
+
+- Added a formal visual spec in `reference/DISPLAY_ARCHITECTURE_VISUAL.md` for state-based background motion.
+- Compressor-running state uses a subtle falling-snowflake background.
+- Defrost state uses a flickering orange/red flame border effect.
+- The spec prioritizes readability, low visual noise, and state suppression during faults/alarms.
+- The animation layer is defined as background-only, behind temperature labels and status icons.
+
 ---
 
 ## Executive Summary

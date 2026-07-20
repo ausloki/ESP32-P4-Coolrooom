@@ -334,6 +334,77 @@ Build Status (as of 2026-07-18 21:40 UTC+8):
 
 ---
 
+## Animated State Visual Spec
+
+This section defines the approved background-animation language for state feedback on the home display. The goal is to add motion without compromising readability or control responsiveness.
+
+### Animation Principles
+
+- Animations must remain behind the temperature meter, labels, and status icons.
+- Use subtle motion only; the control UI remains the primary visual layer.
+- Prefer low-count, low-opacity accents over dense full-screen motion.
+- If the system is in a fault or alarm state, animation intensity should reduce rather than increase.
+
+### Compressor Running: Falling Snowflakes
+
+**Intent:** communicate active cooling without distracting from the center gauge.
+
+**Visual Treatment:**
+
+- 3 to 6 small snowflakes drift downward at slow speed.
+- Snowflakes appear in the background field around the center meter.
+- Motion should be gentle and continuous, not jittery or random.
+- Color palette should stay within cool tones, using the existing blue/cyan family where possible.
+
+**Recommended Parameters:**
+
+| Parameter | Target |
+| --- | --- |
+| Count | 3–6 flakes |
+| Opacity | Low to medium |
+| Speed | Slow |
+| Direction | Downward, slight lateral drift allowed |
+| Layer | Background only |
+
+### Defrost Active: Flickering Flame Border
+
+**Intent:** communicate heat/defrost activity using the outer frame of the display.
+
+**Visual Treatment:**
+
+- A thin orange/red glow appears around the display or the main meter frame.
+- Border flicker should be soft and irregular, like a subtle flame shimmer.
+- The effect should not overpower the center temperature or alarm text.
+- If compressor animation is also active, defrost visuals take priority.
+
+**Recommended Parameters:**
+
+| Parameter | Target |
+| --- | --- |
+| Border width | Thin to moderate |
+| Opacity | Low |
+| Flicker speed | Slow, irregular |
+| Color family | Orange/red |
+| Layer | Outer frame accent |
+
+### State Priority
+
+| Priority | State | Visual Behavior |
+| --- | --- | --- |
+| 1 | Fault / alarm | Suppress most motion; keep alert UI clear |
+| 2 | Defrost active | Flame border flicker enabled |
+| 3 | Compressor running | Falling snowflakes enabled |
+| 4 | Idle / stable | Static background |
+
+### Implementation Guidance
+
+- Use LVGL object animation or frame-swapped assets for the moving elements.
+- Keep the animation layer separate from the existing text and arc widget hierarchy.
+- Avoid large MP4 backgrounds for the core status view unless used only as a decorative panel.
+- If both effects are used, they should be easy to disable during tuning or low-resource modes.
+
+---
+
 **Last Updated:** 2026-07-18 21:40 UTC+8  
 **Build ID:** 0x8d2fcea9  
 **Device:** Waveshare ESP32-P4-WIFI6-Touch-LCD-7B

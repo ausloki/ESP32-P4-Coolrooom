@@ -222,6 +222,22 @@ All arcs:
 - y=180: Evaporator temperature (15pt small font)
 - y=280: Heap memory info (15pt subtext color)
 
+### Background Animation State Feedback
+
+The home display may use a restrained background animation layer to reinforce the current control state. This does not change the control logic; it only reflects it visually.
+
+| Control State | Visual Feedback | Priority |
+|---|---|---|
+| Compressor ON | Falling snowflakes drifting behind the meter | Lower than labels/icons |
+| Defrost active | Flickering flame border around the display frame | Overrides compressor animation |
+| Fault / alarm active | Reduce or suppress motion | Highest priority |
+
+Guidance:
+
+- Keep motion behind labels, icons, and arcs.
+- Use low-count, low-opacity accents so the control UI remains readable.
+- Treat animation as feedback only; the control decisions remain in `p4_control.h`.
+
 ### Color Palette (Phase 4 Additions)
 
 ```yaml

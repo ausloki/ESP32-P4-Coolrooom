@@ -4,6 +4,25 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-21 — Animated State Visual Spec
+
+**Session scope**: Define background animation language for compressor and defrost state feedback.
+
+### What Changed
+
+- Added an animated state visual spec to `reference/DISPLAY_ARCHITECTURE_VISUAL.md`.
+- Compressor-running state is specified as a low-noise falling-snowflake background.
+- Defrost state is specified as a subtle orange/red flickering flame border.
+- Added state priority rules so alarm/fault conditions suppress most motion.
+- Defined the animation layer as background-only beneath gauges, labels, and icons.
+
+### Outcome
+
+- The project now has a clear visual language for state animation.
+- The spec is restrained enough to stay readable on the 7" control display.
+
+---
+
 ## 2026-07-19 — Dual PSU Allocation + Common Ground Guidance
 
 **Session scope**: Document project DIN power-supply allocation and grounding requirements.
