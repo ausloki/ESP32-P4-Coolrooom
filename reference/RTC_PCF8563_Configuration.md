@@ -5,31 +5,38 @@
 **Board:** Waveshare ESP32-P4-WIFI6-Touch-LCD-7B  
 **Item:** 11 (onboard RTC holder)  
 **Interface:** I2C (GPIO 7/8, shared with external I2C header)  
-**Chip ID:** ⚠️ **UNCONFIRMED — assumed PCF8563 based on Waveshare conventions**  
+**Chip ID:** ⚠️ **UNCONFIRMED — local schematic text extraction did not reveal a part number; PCF8563 remains the working assumption**  
 **Battery backup:** Yes (CR2032 or equivalent)
 
 ### Chip Identification
 
-The RTC chip is NOT identified in the Waveshare official docs or schematic downloads (as of 2026-07-18).  
+The RTC chip is NOT identified in the Waveshare official docs, and the local schematic PDF text extraction only exposed `RTC BAT` rather than a readable RTC part number.  
 Based on Waveshare's typical engineering practices:
 
 | Chip | Probability | Notes |
-|------|-------------|-------|
+| ---- | ----------- | ----- |
 | **PCF8563** | 85% | Most common, low-cost, I2C, ±3 min/year accuracy |
 | DS3231 | 10% | More expensive, higher accuracy (±2 ppm), would indicate premium board variant |
 | Other (MCP7940, etc.) | 5% | Unlikely — Waveshare rarely uses obscure RTC chips |
 
-**Verification:** Download the full board schematic from:  
-https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf
+**Current local evidence:**
 
-Search PDF for "Item 11", "RTC", "PCF", or "DS32" to confirm the exact chip part number and I2C address.
+- Local schematic text extraction found `RTC BAT`.
+- Local schematic text extraction did **not** reveal `PCF8563`, `DS3231`, `0x51`, or `0x68`.
+
+**Required confirmation when hardware is available:**
+
+1. Run an I2C scan on GPIO 7/8.
+2. If the RTC responds at `0x51`, that supports `PCF8563`.
+3. If the RTC responds at `0x68`, that supports `DS3231`.
+4. If still ambiguous, inspect the physical chip marking near the RTC battery holder.
 
 ---
 
 ## I2C Address
 
 | Chip | Address | Notes |
-|------|---------|-------|
+| ---- | ------- | ----- |
 | PCF8563 | `0x51` | Fixed (no address pins) |
 | DS3231 | `0x68` | Fixed (no address pins) |
 
@@ -68,6 +75,7 @@ time:
 ```
 
 **Behavior:**
+
 1. SNTP syncs the ESP32 internal RTC from NTP servers (configurable interval via `ntp_fast_sync_ms` and `ntp_normal_sync_ms`)
 2. Once NTP syncs, ESPHome automatically syncs the PCF8563 chip from the ESP32 internal RTC
 3. The PCF8563 battery backup preserves time across power cycles
@@ -136,16 +144,19 @@ lambda: |-
 ## Troubleshooting
 
 ### PCF8563 not detected
+
 - Verify I2C address `0x51` is responding (use `i2c: scan: true` in ESPHome config)
 - Confirm GPIO 7/8 pins are correct and not pulled HIGH abnormally
 - Check board solder joints on the RTC module (item 11)
 - Battery may need replacement if board sat for years without power
 
 ### Time jumps after NTP sync
+
 - Normal behavior: the PCF8563 is synced from the ESP32 internal RTC once NTP completes
 - The first sync may show a jump if the PCF8563 was significantly off
 
 ### Time lost after power cycle
+
 - Battery is dead or disconnected — replace CR2032 (or equivalent) in the RTC holder
 - Verify battery contacts (item 11) are clean and seated
 
@@ -156,4 +167,4 @@ lambda: |-
 - [ESPHome PCF8563 component](https://esphome.io/components/time.html#pcf8563)
 - [PCF8563 datasheet](https://www.nxp.com/products/clocks-and-timers/real-time-clocks:~/media/Files/en/datasheets/PCF8563.pdf)
 - [Waveshare ESP32-P4-WIFI6-Touch-LCD-7B Board](https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-7B)
-- **[⚠️ CONFIRM RTC CHIP FROM SCHEMATIC](https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf)**
+- **[⚠️ CONFIRM RTC CHIP ON PHYSICAL HARDWARE](https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf)**

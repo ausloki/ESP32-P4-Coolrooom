@@ -121,6 +121,12 @@
 - Secondary UI pages (settings panel, diagnostics, event log)
 - OTA firmware update from web dashboard
 
+### 2026-07-23 Static Audit Notes
+
+- Implemented now: SD mount, daily CSV logging, event logging, SD free-space reporting, SD backup/restore buttons, boot-time restore attempt, ntfy high/low/clear/probe-fault notifications.
+- Updated now: backup/restore expanded to all configurable settings (core setpoints, extended control floats, and feature toggles).
+- Not present now: web-based log export workflow and OTA firmware update flow from the dashboard.
+
 **Estimated Complexity:** Medium  
 **Estimated Timeline:** 2-3 weeks
 

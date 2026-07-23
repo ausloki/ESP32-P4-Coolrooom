@@ -16,7 +16,8 @@
 # TEMPERATURE SENSOR ARCHITECTURE
 # All temperature probes are RS485 RTD (Waveshare BRT-PT100AD or equivalent).
 # There are NO I2C temperature sensors. I2C is reserved for the onboard RTC
-# (chip identity ⚠️ VERIFY FROM SCHEMATIC — likely PCF8563 or DS3231).
+# (chip identity not confirmed from local schematic text extraction; verify on
+# physical hardware, with PCF8563 currently treated as the working assumption).
 #
 # PROBE MAP
 #   Probe 1 (coolroom primary)  — RTD board 1, CH1, addr 100
@@ -154,12 +155,70 @@ esphome:
                 float cd = id(ctl_comp_diff);
                 float ah = id(ctl_alarm_high_delta);
                 float al = id(ctl_alarm_low_delta);
-                if (p4_sd_restore_params(sp, cd, ah, al)) {
+              float lockout = id(ctl_comp_lockout_min);
+              float def_grace = id(ctl_defrost_grace_min);
+              float def_int = id(ctl_defrost_interval_min);
+              float def_dur = id(ctl_defrost_duration_min);
+              float def_drip = id(ctl_defrost_drip_min);
+              float def_end = id(ctl_defrost_end_c);
+              float alarm_persist = id(ctl_alarm_persist_min);
+              float alarm_hyst = id(ctl_alarm_hysteresis_c);
+              float door_delay = id(ctl_door_alarm_delay_s);
+              float no_cool = id(ctl_no_cool_alarm_min);
+              float ice_delta = id(ctl_ice_delta_c);
+              float fb_on = id(ctl_fallback_on_min);
+              float fb_off = id(ctl_fallback_off_min);
+              float smart_delta = id(ctl_smart_delta_c);
+              float smart_dwell = id(ctl_smart_dwell_min);
+              bool probe2_en = id(input_probe2_enabled);
+              bool probe3_en = id(input_probe3_enabled);
+              bool door_mode_nc = id(ctl_door_sensor_mode_is_nc);
+              bool door_en = id(input_door_sensor_enabled);
+              bool siren_en = id(input_siren_enabled);
+              bool defrost_en = id(input_defrost_enabled);
+              bool fallback_en = id(input_fallback_enabled);
+              bool def_term_en = id(input_defrost_term_temp_enabled);
+              bool def_drip_en = id(input_defrost_drip_enabled);
+              bool smart_def_en = id(input_smart_defrost_enabled);
+              if (p4_sd_restore_params(
+                  sp, cd, ah, al,
+                  lockout, def_grace, def_int, def_dur, def_drip, def_end,
+                  alarm_persist, alarm_hyst, door_delay, no_cool, ice_delta,
+                  fb_on, fb_off, smart_delta, smart_dwell,
+                  probe2_en, probe3_en, door_mode_nc, door_en, siren_en,
+                  defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en)) {
                     id(ctl_setpoint)         = sp;
                     id(ctl_comp_diff)        = cd;
                     id(ctl_alarm_high_delta) = ah;
                     id(ctl_alarm_low_delta)  = al;
-                    ESP_LOGI("sd", "Control params restored from SD backup");
+                id(ctl_comp_lockout_min) = lockout;
+                id(ctl_defrost_grace_min) = def_grace;
+                id(ctl_defrost_interval_min) = def_int;
+                id(ctl_defrost_duration_min) = def_dur;
+                id(ctl_defrost_drip_min) = def_drip;
+                id(ctl_defrost_end_c) = def_end;
+                id(ctl_alarm_persist_min) = alarm_persist;
+                id(ctl_alarm_hysteresis_c) = alarm_hyst;
+                id(ctl_door_alarm_delay_s) = door_delay;
+                id(ctl_no_cool_alarm_min) = no_cool;
+                id(ctl_ice_delta_c) = ice_delta;
+                id(ctl_fallback_on_min) = fb_on;
+                id(ctl_fallback_off_min) = fb_off;
+                id(ctl_smart_delta_c) = smart_delta;
+                id(ctl_smart_dwell_min) = smart_dwell;
+                id(input_probe2_enabled) = probe2_en;
+                id(input_probe3_enabled) = probe3_en;
+                id(ctl_door_sensor_mode_is_nc) = door_mode_nc;
+                id(input_door_sensor_enabled) = door_en;
+                id(input_siren_enabled) = siren_en;
+                id(input_defrost_enabled) = defrost_en;
+                id(input_fallback_enabled) = fallback_en;
+                id(input_defrost_term_temp_enabled) = def_term_en;
+                id(input_defrost_drip_enabled) = def_drip_en;
+                id(input_smart_defrost_enabled) = smart_def_en;
+                if (esphome::global_preferences != nullptr)
+                  esphome::global_preferences->sync();
+                ESP_LOGI("sd", "All control settings restored from SD backup");
                     p4_sd_log_event("BOOT_RESTORE", "params loaded from SD");
                 } else {
                     p4_sd_log_event("BOOT", "SD mounted, no restore needed");
@@ -256,7 +315,9 @@ mdns:
 ##############################################################################
 # Time — SNTP with configurable sync intervals via ESP-IDF API
 # The P4 board has a battery-backed RTC holder (item 11).
-# RTC chip identity ⚠️ VERIFY FROM SCHEMATIC (likely PCF8563 or DS3231).
+# RTC chip identity is not confirmed from local schematic text extraction.
+# Use PCF8563 as the working assumption until hardware I2C scan or chip marking
+# inspection confirms the actual RTC device.
 # Fast-sync at boot is set by p4_ntp_set_fast_sync() in on_boot above.
 # Normal interval is restored by p4_ntp_set_interval() in on_time_sync below.
 ##############################################################################
@@ -274,8 +335,9 @@ time:
           p4_ntp_set_interval(${ntp_normal_sync_ms});
 
   # PCF8563 external RTC (battery-backed, synced from NTP via ESP32 internal RTC)
-  # ⚠️ RTC CHIP: PCF8563 assumed from Waveshare convention. See reference/RTC_PCF8563_Configuration.md.
-  #    Verify from board schematic PDF if I2C scan does not show 0x51.
+  # RTC chip is not yet schematic-confirmed from local reference extraction.
+  # This project currently uses PCF8563 as the working assumption; confirm on
+  # physical hardware with I2C scan and, if needed, chip-marking inspection.
   - platform: pcf8563
     id: rtc_pcf8563
     i2c_id: i2c_bus
@@ -1545,7 +1607,19 @@ button:
       - lambda: |-
           bool ok = p4_sd_backup_params(
               id(ctl_setpoint), id(ctl_comp_diff),
-              id(ctl_alarm_high_delta), id(ctl_alarm_low_delta));
+          id(ctl_alarm_high_delta), id(ctl_alarm_low_delta),
+          id(ctl_comp_lockout_min), id(ctl_defrost_grace_min),
+          id(ctl_defrost_interval_min), id(ctl_defrost_duration_min),
+          id(ctl_defrost_drip_min), id(ctl_defrost_end_c),
+          id(ctl_alarm_persist_min), id(ctl_alarm_hysteresis_c),
+          id(ctl_door_alarm_delay_s), id(ctl_no_cool_alarm_min),
+          id(ctl_ice_delta_c), id(ctl_fallback_on_min),
+          id(ctl_fallback_off_min), id(ctl_smart_delta_c), id(ctl_smart_dwell_min),
+          id(input_probe2_enabled), id(input_probe3_enabled),
+          id(ctl_door_sensor_mode_is_nc), id(input_door_sensor_enabled),
+          id(input_siren_enabled), id(input_defrost_enabled),
+          id(input_fallback_enabled), id(input_defrost_term_temp_enabled),
+          id(input_defrost_drip_enabled), id(input_smart_defrost_enabled));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -1563,11 +1637,67 @@ button:
           float cd = id(ctl_comp_diff);
           float ah = id(ctl_alarm_high_delta);
           float al = id(ctl_alarm_low_delta);
-          if (p4_sd_restore_params(sp, cd, ah, al)) {
+          float lockout = id(ctl_comp_lockout_min);
+          float def_grace = id(ctl_defrost_grace_min);
+          float def_int = id(ctl_defrost_interval_min);
+          float def_dur = id(ctl_defrost_duration_min);
+          float def_drip = id(ctl_defrost_drip_min);
+          float def_end = id(ctl_defrost_end_c);
+          float alarm_persist = id(ctl_alarm_persist_min);
+          float alarm_hyst = id(ctl_alarm_hysteresis_c);
+          float door_delay = id(ctl_door_alarm_delay_s);
+          float no_cool = id(ctl_no_cool_alarm_min);
+          float ice_delta = id(ctl_ice_delta_c);
+          float fb_on = id(ctl_fallback_on_min);
+          float fb_off = id(ctl_fallback_off_min);
+          float smart_delta = id(ctl_smart_delta_c);
+          float smart_dwell = id(ctl_smart_dwell_min);
+          bool probe2_en = id(input_probe2_enabled);
+          bool probe3_en = id(input_probe3_enabled);
+          bool door_mode_nc = id(ctl_door_sensor_mode_is_nc);
+          bool door_en = id(input_door_sensor_enabled);
+          bool siren_en = id(input_siren_enabled);
+          bool defrost_en = id(input_defrost_enabled);
+          bool fallback_en = id(input_fallback_enabled);
+          bool def_term_en = id(input_defrost_term_temp_enabled);
+          bool def_drip_en = id(input_defrost_drip_enabled);
+          bool smart_def_en = id(input_smart_defrost_enabled);
+          if (p4_sd_restore_params(
+              sp, cd, ah, al,
+              lockout, def_grace, def_int, def_dur, def_drip, def_end,
+              alarm_persist, alarm_hyst, door_delay, no_cool, ice_delta,
+              fb_on, fb_off, smart_delta, smart_dwell,
+              probe2_en, probe3_en, door_mode_nc, door_en, siren_en,
+              defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en)) {
               id(ctl_setpoint)         = sp;
               id(ctl_comp_diff)        = cd;
               id(ctl_alarm_high_delta) = ah;
               id(ctl_alarm_low_delta)  = al;
+            id(ctl_comp_lockout_min) = lockout;
+            id(ctl_defrost_grace_min) = def_grace;
+            id(ctl_defrost_interval_min) = def_int;
+            id(ctl_defrost_duration_min) = def_dur;
+            id(ctl_defrost_drip_min) = def_drip;
+            id(ctl_defrost_end_c) = def_end;
+            id(ctl_alarm_persist_min) = alarm_persist;
+            id(ctl_alarm_hysteresis_c) = alarm_hyst;
+            id(ctl_door_alarm_delay_s) = door_delay;
+            id(ctl_no_cool_alarm_min) = no_cool;
+            id(ctl_ice_delta_c) = ice_delta;
+            id(ctl_fallback_on_min) = fb_on;
+            id(ctl_fallback_off_min) = fb_off;
+            id(ctl_smart_delta_c) = smart_delta;
+            id(ctl_smart_dwell_min) = smart_dwell;
+            id(input_probe2_enabled) = probe2_en;
+            id(input_probe3_enabled) = probe3_en;
+            id(ctl_door_sensor_mode_is_nc) = door_mode_nc;
+            id(input_door_sensor_enabled) = door_en;
+            id(input_siren_enabled) = siren_en;
+            id(input_defrost_enabled) = defrost_en;
+            id(input_fallback_enabled) = fallback_en;
+            id(input_defrost_term_temp_enabled) = def_term_en;
+            id(input_defrost_drip_enabled) = def_drip_en;
+            id(input_smart_defrost_enabled) = smart_def_en;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");

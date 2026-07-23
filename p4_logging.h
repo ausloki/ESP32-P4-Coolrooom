@@ -194,7 +194,32 @@ inline bool p4_sd_backup_params(
     float setpoint,
     float comp_diff,
     float alarm_high,
-    float alarm_low
+    float alarm_low,
+    float comp_lockout_min,
+    float defrost_grace_min,
+    float defrost_interval_min,
+    float defrost_duration_min,
+    float defrost_drip_min,
+    float defrost_end_c,
+    float alarm_persist_min,
+    float alarm_hysteresis_c,
+    float door_alarm_delay_s,
+    float no_cool_alarm_min,
+    float ice_delta_c,
+    float fallback_on_min,
+    float fallback_off_min,
+    float smart_delta_c,
+    float smart_dwell_min,
+    bool  probe2_enabled,
+    bool  probe3_enabled,
+    bool  door_sensor_mode_is_nc,
+    bool  door_sensor_enabled,
+    bool  siren_enabled,
+    bool  defrost_enabled,
+    bool  fallback_enabled,
+    bool  defrost_term_temp_enabled,
+    bool  defrost_drip_enabled,
+    bool  smart_defrost_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -212,9 +237,50 @@ inline bool p4_sd_backup_params(
         "  \"setpoint\":   %.1f,\n"
         "  \"comp_diff\":  %.1f,\n"
         "  \"alarm_high\": %.1f,\n"
-        "  \"alarm_low\":  %.1f\n"
+        "  \"alarm_low\":  %.1f,\n"
+        "  \"comp_lockout_min\": %.1f,\n"
+        "  \"defrost_grace_min\": %.1f,\n"
+        "  \"defrost_interval_min\": %.1f,\n"
+        "  \"defrost_duration_min\": %.1f,\n"
+        "  \"defrost_drip_min\": %.1f,\n"
+        "  \"defrost_end_c\": %.1f,\n"
+        "  \"alarm_persist_min\": %.1f,\n"
+        "  \"alarm_hysteresis_c\": %.1f,\n"
+        "  \"door_alarm_delay_s\": %.1f,\n"
+        "  \"no_cool_alarm_min\": %.1f,\n"
+        "  \"ice_delta_c\": %.1f,\n"
+        "  \"fallback_on_min\": %.1f,\n"
+        "  \"fallback_off_min\": %.1f,\n"
+        "  \"smart_delta_c\": %.1f,\n"
+        "  \"smart_dwell_min\": %.1f,\n"
+        "  \"probe2_enabled\": %s,\n"
+        "  \"probe3_enabled\": %s,\n"
+        "  \"door_sensor_mode_is_nc\": %s,\n"
+        "  \"door_sensor_enabled\": %s,\n"
+        "  \"siren_enabled\": %s,\n"
+        "  \"defrost_enabled\": %s,\n"
+        "  \"fallback_enabled\": %s,\n"
+        "  \"defrost_term_temp_enabled\": %s,\n"
+        "  \"defrost_drip_enabled\": %s,\n"
+        "  \"smart_defrost_enabled\": %s\n"
         "}\n",
-        ts, setpoint, comp_diff, alarm_high, alarm_low);
+        ts,
+        setpoint, comp_diff, alarm_high, alarm_low,
+        comp_lockout_min, defrost_grace_min, defrost_interval_min,
+        defrost_duration_min, defrost_drip_min, defrost_end_c,
+        alarm_persist_min, alarm_hysteresis_c, door_alarm_delay_s,
+        no_cool_alarm_min, ice_delta_c, fallback_on_min,
+        fallback_off_min, smart_delta_c, smart_dwell_min,
+        probe2_enabled ? "true" : "false",
+        probe3_enabled ? "true" : "false",
+        door_sensor_mode_is_nc ? "true" : "false",
+        door_sensor_enabled ? "true" : "false",
+        siren_enabled ? "true" : "false",
+        defrost_enabled ? "true" : "false",
+        fallback_enabled ? "true" : "false",
+        defrost_term_temp_enabled ? "true" : "false",
+        defrost_drip_enabled ? "true" : "false",
+        smart_defrost_enabled ? "true" : "false");
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              setpoint, comp_diff, alarm_high, alarm_low);
@@ -228,7 +294,32 @@ inline bool p4_sd_restore_params(
     float& setpoint,
     float& comp_diff,
     float& alarm_high,
-    float& alarm_low
+    float& alarm_low,
+    float& comp_lockout_min,
+    float& defrost_grace_min,
+    float& defrost_interval_min,
+    float& defrost_duration_min,
+    float& defrost_drip_min,
+    float& defrost_end_c,
+    float& alarm_persist_min,
+    float& alarm_hysteresis_c,
+    float& door_alarm_delay_s,
+    float& no_cool_alarm_min,
+    float& ice_delta_c,
+    float& fallback_on_min,
+    float& fallback_off_min,
+    float& smart_delta_c,
+    float& smart_dwell_min,
+    bool&  probe2_enabled,
+    bool&  probe3_enabled,
+    bool&  door_sensor_mode_is_nc,
+    bool&  door_sensor_enabled,
+    bool&  siren_enabled,
+    bool&  defrost_enabled,
+    bool&  fallback_enabled,
+    bool&  defrost_term_temp_enabled,
+    bool&  defrost_drip_enabled,
+    bool&  smart_defrost_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -245,6 +336,20 @@ inline bool p4_sd_restore_params(
 
     // Simple sscanf-based parse (no external JSON library needed)
     float sp = NAN, cd = NAN, ah = NAN, al = NAN;
+    float lockout = NAN, def_grace = NAN, def_int = NAN, def_dur = NAN;
+    float def_drip = NAN, def_end = NAN, alarm_persist = NAN, alarm_hyst = NAN;
+    float door_delay = NAN, no_cool = NAN, ice_delta = NAN;
+    float fb_on = NAN, fb_off = NAN, smart_delta = NAN, smart_dwell = NAN;
+    bool b_probe2 = probe2_enabled;
+    bool b_probe3 = probe3_enabled;
+    bool b_mode_nc = door_sensor_mode_is_nc;
+    bool b_door_en = door_sensor_enabled;
+    bool b_siren_en = siren_enabled;
+    bool b_defrost_en = defrost_enabled;
+    bool b_fallback_en = fallback_enabled;
+    bool b_def_term_en = defrost_term_temp_enabled;
+    bool b_def_drip_en = defrost_drip_enabled;
+    bool b_smart_def_en = smart_defrost_enabled;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
         const char* p = strstr(buf, key);
@@ -253,13 +358,58 @@ inline bool p4_sd_restore_params(
             if (p) out = strtof(p + 1, nullptr);
         }
     };
+    auto parse_bool = [&](const char* key, bool& out) {
+        const char* p = strstr(buf, key);
+        if (!p) return;
+        p = strchr(p, ':');
+        if (!p) return;
+        p += 1;
+        while (*p == ' ' || *p == '\t') ++p;
+        if (strncmp(p, "true", 4) == 0) out = true;
+        else if (strncmp(p, "false", 5) == 0) out = false;
+    };
+
     parse_field("\"setpoint\"", sp);
     parse_field("\"comp_diff\"", cd);
     parse_field("\"alarm_high\"", ah);
     parse_field("\"alarm_low\"", al);
+    parse_field("\"comp_lockout_min\"", lockout);
+    parse_field("\"defrost_grace_min\"", def_grace);
+    parse_field("\"defrost_interval_min\"", def_int);
+    parse_field("\"defrost_duration_min\"", def_dur);
+    parse_field("\"defrost_drip_min\"", def_drip);
+    parse_field("\"defrost_end_c\"", def_end);
+    parse_field("\"alarm_persist_min\"", alarm_persist);
+    parse_field("\"alarm_hysteresis_c\"", alarm_hyst);
+    parse_field("\"door_alarm_delay_s\"", door_delay);
+    parse_field("\"no_cool_alarm_min\"", no_cool);
+    parse_field("\"ice_delta_c\"", ice_delta);
+    parse_field("\"fallback_on_min\"", fb_on);
+    parse_field("\"fallback_off_min\"", fb_off);
+    parse_field("\"smart_delta_c\"", smart_delta);
+    parse_field("\"smart_dwell_min\"", smart_dwell);
+
+    parse_bool("\"probe2_enabled\"", b_probe2);
+    parse_bool("\"probe3_enabled\"", b_probe3);
+    parse_bool("\"door_sensor_mode_is_nc\"", b_mode_nc);
+    parse_bool("\"door_sensor_enabled\"", b_door_en);
+    parse_bool("\"siren_enabled\"", b_siren_en);
+    parse_bool("\"defrost_enabled\"", b_defrost_en);
+    parse_bool("\"fallback_enabled\"", b_fallback_en);
+    parse_bool("\"defrost_term_temp_enabled\"", b_def_term_en);
+    parse_bool("\"defrost_drip_enabled\"", b_def_drip_en);
+    parse_bool("\"smart_defrost_enabled\"", b_smart_def_en);
 
     if (!std::isfinite(sp) || !std::isfinite(cd) ||
-        !std::isfinite(ah) || !std::isfinite(al)) {
+        !std::isfinite(ah) || !std::isfinite(al) ||
+        !std::isfinite(lockout) || !std::isfinite(def_grace) ||
+        !std::isfinite(def_int) || !std::isfinite(def_dur) ||
+        !std::isfinite(def_drip) || !std::isfinite(def_end) ||
+        !std::isfinite(alarm_persist) || !std::isfinite(alarm_hyst) ||
+        !std::isfinite(door_delay) || !std::isfinite(no_cool) ||
+        !std::isfinite(ice_delta) || !std::isfinite(fb_on) ||
+        !std::isfinite(fb_off) || !std::isfinite(smart_delta) ||
+        !std::isfinite(smart_dwell)) {
         ESP_LOGE(TAG_SD, "backup.json parse failed");
         return false;
     }
@@ -268,6 +418,31 @@ inline bool p4_sd_restore_params(
     comp_diff  = cd;
     alarm_high = ah;
     alarm_low  = al;
+    comp_lockout_min   = lockout;
+    defrost_grace_min  = def_grace;
+    defrost_interval_min = def_int;
+    defrost_duration_min = def_dur;
+    defrost_drip_min   = def_drip;
+    defrost_end_c      = def_end;
+    alarm_persist_min  = alarm_persist;
+    alarm_hysteresis_c = alarm_hyst;
+    door_alarm_delay_s = door_delay;
+    no_cool_alarm_min  = no_cool;
+    ice_delta_c        = ice_delta;
+    fallback_on_min    = fb_on;
+    fallback_off_min   = fb_off;
+    smart_delta_c      = smart_delta;
+    smart_dwell_min    = smart_dwell;
+    probe2_enabled     = b_probe2;
+    probe3_enabled     = b_probe3;
+    door_sensor_mode_is_nc = b_mode_nc;
+    door_sensor_enabled = b_door_en;
+    siren_enabled      = b_siren_en;
+    defrost_enabled    = b_defrost_en;
+    fallback_enabled   = b_fallback_en;
+    defrost_term_temp_enabled = b_def_term_en;
+    defrost_drip_enabled = b_def_drip_en;
+    smart_defrost_enabled = b_smart_def_en;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

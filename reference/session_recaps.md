@@ -4,6 +4,52 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-23 — Phase 5 Static Audit And Doc Reconciliation
+
+**Session scope**: Review the current non-hardware Phase 5 implementation and reconcile obvious documentation drift.
+
+### What Changed
+
+- Audited the live Phase 5 firmware surfaces in `esp32-p4-coolroom.yaml` and `p4_logging.h`.
+- Added `reference/PHASE5_STATIC_AUDIT_2026-07-23.md` to record what is implemented, partial, and not present.
+- Confirmed the current SD daily log path is `/sdcard/YYYY-MM-DD.csv`.
+- Corrected the older recap text that still referred to `/sdcard/logs/YYYY-MM-DD.csv`.
+- Recorded that backup/restore currently covers only four control values, not the full Phase 6 parameter set.
+- Recorded that ntfy coverage is currently limited to high alarm, low alarm, clear, and probe fault.
+
+### Outcome
+
+- The current Phase 5 status is clearer without needing physical hardware.
+- Remaining local work is now separated from board-only validation work.
+
+## 2026-07-23 — Full Settings Backup/Restore (Phase 5 Scope Update)
+
+**Session scope**: Expand SD backup/restore to include all configurable settings, not only the original four control values.
+
+### What Changed
+
+- Expanded `p4_sd_backup_params()` / `p4_sd_restore_params()` in `p4_logging.h` to include full settings coverage.
+- Backup JSON now persists:
+  - core setpoints (`setpoint`, `comp_diff`, `alarm_high`, `alarm_low`)
+  - extended control floats (lockout, defrost timing, alarm persist/hysteresis, door delay, no-cool, ice, fallback, smart-defrost)
+  - feature toggles and probe options (`input_*` and probe enable flags)
+  - door sensor mode flag (`ctl_door_sensor_mode_is_nc`)
+- Updated boot-time restore path in `esp32-p4-coolroom.yaml` to restore and apply all settings.
+- Updated manual backup and restore button handlers to read/write all settings fields.
+- Preserved `global_preferences->sync()` after restore to persist restored values to NVS.
+
+### Outcome
+
+- Backup/restore now aligns with the requirement that it include all settings.
+- Compile validation passed with the expanded schema and call signatures.
+- Build metrics after this change:
+  - RAM: `19.5%` (112,176 / 576,464 bytes)
+  - Flash: `20.3%` (1,491,912 / 7,340,032 bytes)
+
+---
+
+---
+
 ## 2026-07-23 — Compile Helper Auto-Retry For ESPHome IDF Reconfigure Bug
 
 **Session scope**: Make the local compile flow resilient to the current ESPHome native-IDF `src` `REQUIRES` omission.
@@ -625,7 +671,7 @@ Build Time: 2026-07-18 21:40:14 +0800
 
 **p4_logging.h (new)**:
 - `p4_sd_mount()` / `p4_sd_unmount()` / `p4_sd_is_ready()` — SDMMC slot 1 (GPIO 39-44), FATFS/VFS
-- `p4_sd_log_temps()` — daily CSV at `/sdcard/logs/YYYY-MM-DD.csv`, header auto-created
+- `p4_sd_log_temps()` — daily CSV at `/sdcard/YYYY-MM-DD.csv`, header auto-created
 - `p4_sd_log_event()` — timestamped events at `/sdcard/events.csv`
 - `p4_sd_backup_params()` — JSON dump to `/sdcard/backup.json`
 - `p4_sd_restore_params()` — JSON parse from SD, updates NVS globals
@@ -650,7 +696,7 @@ Build Time: 2026-07-18 21:40:14 +0800
 
 **Build**: RAM 18.3% (105.6 KB/576 KB), Flash 19.4% (1.43 MB/7.3 MB) ✅
 
-**Commit**: Phase 5 complete  
+**Commit label at the time**: Phase 5 complete  
 **GitHub**: https://github.com/ausloki/ESP32-P4-Coolrooom/tree/main
 
 ---

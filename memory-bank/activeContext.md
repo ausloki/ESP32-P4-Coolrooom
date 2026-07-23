@@ -39,8 +39,12 @@ Warning level: only generic ESP-IDF experimental-features warning remains
    - no reboot on Wi-Fi loss
    - local control loop remains active
    - ntfy suppression/recovery behaves correctly
-3. Identify any remaining SD logging / backup-restore gaps before starting new feature expansion.
-4. Decide whether to keep the generated-build workaround local only or pursue an upstream ESPHome bug report/fix.
+3. Confirm RTC identity on physical hardware:
+   - run an I2C scan on GPIO 7/8
+   - verify whether the RTC responds at `0x51` or `0x68`
+   - inspect chip markings if the bus scan is ambiguous
+4. Identify any remaining SD logging / backup-restore gaps before starting new feature expansion.
+5. Decide whether to keep the generated-build workaround local only or pursue an upstream ESPHome bug report/fix.
 
 ### Outstanding Items
 

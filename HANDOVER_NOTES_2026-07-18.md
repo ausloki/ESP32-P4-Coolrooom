@@ -10,6 +10,32 @@
 
 ---
 
+## 2026-07-23 Addendum — Backup/Restore Expanded To All Settings
+
+- Updated Phase 5 backup/restore implementation to include all configurable settings rather than only four values.
+- Expanded `p4_sd_backup_params()` / `p4_sd_restore_params()` signatures and JSON schema in `p4_logging.h`.
+- Updated restore call site in `esp32-p4-coolroom.yaml` for boot-time restore (`on_boot`).
+- Updated restore call site in `esp32-p4-coolroom.yaml` for manual restore button behavior.
+- Updated manual backup button to write full settings set.
+- Restored values are synced to NVS via `global_preferences->sync()` after successful restore.
+- Compile validated with expanded schema: RAM `19.5%`, Flash `20.3%`.
+
+---
+
+## 2026-07-23 Addendum — Phase 5 Static Audit (Non-Hardware)
+
+- Audited the current Phase 5 implementation without requiring the physical ESP32-P4 board.
+- Confirmed implemented locally: SD mount / event log / daily temperature log.
+- Confirmed implemented locally: SD free-space and card-online reporting.
+- Confirmed implemented locally: manual backup / restore and boot-time restore attempt.
+- Confirmed implemented locally: ntfy notifications for high alarm, low alarm, clear, and probe fault.
+- Confirmed current SD daily log path is `/sdcard/YYYY-MM-DD.csv`.
+- Confirmed backup/restore is currently limited to four values (`setpoint`, `comp_diff`, `alarm_high`, `alarm_low`), not the wider Phase 6 parameter set.
+- Confirmed no web-based log export flow or dashboard OTA update flow is present in current firmware.
+- Added `reference/PHASE5_STATIC_AUDIT_2026-07-23.md` as the detailed static audit record.
+
+---
+
 ## 2026-07-23 Addendum — Compile Helper Retries Native-IDF REQUIRES Failure
 
 - Confirmed a clean ESPHome native-IDF rebuild can fail during reconfigure because generated `src/CMakeLists.txt` omits required built-in components for `src`.
