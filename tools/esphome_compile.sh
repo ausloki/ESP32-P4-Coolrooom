@@ -61,5 +61,106 @@ export SSL_CERT_FILE
 SSL_CERT_FILE="$($VENV_PY -c 'import certifi; print(certifi.where())')"
 export PATH="$ROOT_DIR/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
+derive_build_root() {
+  local config_name
+  config_name="$1"
+  config_name="$(${ROOT_DIR}/.venv/bin/python - <<'PY' "$config_name"
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).stem)
+PY
+)"
+  printf '%s/.esphome/build/%s' "$ROOT_DIR" "$config_name"
+}
+
+patch_generated_src_cmakelists() {
+  local build_root="$1"
+  local cmake_file="$build_root/src/CMakeLists.txt"
+
+  if [[ ! -f "$cmake_file" ]]; then
+    echo "ERROR: Expected generated CMake file not found: $cmake_file" >&2
+    return 1
+  fi
+
+  if /usr/bin/grep -q 'esp_http_server esp_ringbuf' "$cmake_file"; then
+    return 0
+  fi
+
+  /usr/bin/perl -0pi -e 's/REQUIRES \$\{ESPHOME_PROJECT_BUILTIN_COMPONENTS\}/REQUIRES \$\{ESPHOME_PROJECT_BUILTIN_COMPONENTS\} esp_http_server esp_ringbuf/' "$cmake_file"
+}
+
+retry_known_reconfigure_failure() {
+  local config_path="$1"
+  local compile_log="$2"
+  local build_root build_dir idf_version idf_env_exports ninja_bin
+  local -a ninja_cmd
+
+  if ! /usr/bin/grep -q 'requirements list of "src"' "$compile_log"; then
+    return 1
+  fi
+
+  if ! /usr/bin/grep -Eq 'esp_http_server|esp_ringbuf' "$compile_log"; then
+    return 1
+  fi
+
+  build_root="$(derive_build_root "$config_path")"
+  build_dir="$build_root/build"
+  idf_version="$(${ROOT_DIR}/.venv/bin/python - <<'PY' "$compile_log"
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding='utf-8', errors='ignore')
+match = re.search(r'Checking ESP-IDF\s+([0-9][0-9.]+)', text)
+print(match.group(1) if match else '5.5.4')
+PY
+)"
+  idf_env_exports="$(${ROOT_DIR}/.venv/bin/python - <<'PY' "$idf_version"
+import os
+import shlex
+import sys
+
+from esphome.espidf.framework import get_framework_env
+from esphome.espidf.toolchain import _get_esphome_esp_idf_paths
+
+env = get_framework_env(*_get_esphome_esp_idf_paths(sys.argv[1]), env={"PATH": os.environ.get("PATH", "")})
+for key in ("IDF_PATH", "IDF_TOOLS_PATH", "IDF_PYTHON_ENV_PATH", "ESP_IDF_VERSION", "PATH", "CCACHE_DIR", "OPENOCD_SCRIPTS"):
+    value = env.get(key)
+    if value:
+        print(f'export {key}={shlex.quote(value)}')
+PY
+)"
+  ninja_bin="$(command -v ninja || true)"
+
+  if [[ -z "$ninja_bin" ]]; then
+    echo "ERROR: ninja is required for compile retry but was not found in PATH" >&2
+    return 1
+  fi
+
+  ninja_cmd=("$ninja_bin")
+  if [[ "$(/usr/bin/uname -m)" == "arm64" ]]; then
+    ninja_cmd=(/usr/bin/arch -arm64 "$ninja_bin")
+  fi
+
+  echo "Detected ESPHome native IDF REQUIRES omission during reconfigure; patching generated src/CMakeLists.txt and retrying build..." >&2
+  patch_generated_src_cmakelists "$build_root"
+  eval "$idf_env_exports"
+
+  "${ninja_cmd[@]}" -C "$build_dir" all
+  "${ninja_cmd[@]}" -C "$build_dir" size
+}
+
 cd "$ROOT_DIR"
-esphome compile "$CONFIG_PATH"
+
+COMPILE_LOG="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/esphome_compile.XXXXXX.log")"
+trap '/bin/rm -f "$COMPILE_LOG"' EXIT
+
+if esphome compile "$CONFIG_PATH" 2>&1 | /usr/bin/tee "$COMPILE_LOG"; then
+  exit 0
+fi
+
+if retry_known_reconfigure_failure "$CONFIG_PATH" "$COMPILE_LOG"; then
+  exit 0
+fi
+
+exit 1

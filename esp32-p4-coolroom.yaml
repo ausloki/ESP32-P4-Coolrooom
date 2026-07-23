@@ -303,6 +303,7 @@ web_server:
   port: 80
   version: 3
   auth:
+    type: basic
     username: !secret web_server_username
     password: !secret web_server_password
   # Phase 12: Role-Based Access Control (RBAC) for Web GUI

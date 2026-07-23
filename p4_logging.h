@@ -9,7 +9,7 @@
 // Mount point: /sdcard
 //
 // Log layout on SD card:
-//   /sdcard/logs/YYYY-MM-DD.csv   — daily temperature + state log (appended)
+//   /sdcard/YYYY-MM-DD.csv        — daily temperature + state log (appended)
 //   /sdcard/events.csv            — alarm / fault / defrost events (appended)
 //   /sdcard/backup.json           — last saved control parameters
 //
@@ -72,9 +72,6 @@ inline bool p4_sd_mount() {
         return false;
     }
 
-    // Ensure log directory exists
-    mkdir("/sdcard/logs", 0755);
-
     ESP_LOGI(TAG_SD, "SD card mounted. Name: %s, Speed: %" PRIu32 " kHz, Size: %" PRIu64 " MB",
              p4_sd_card->cid.name,
              p4_sd_card->max_freq_khz,
@@ -97,7 +94,7 @@ inline bool p4_sd_is_ready() { return p4_sd_ready; }
 
 // ─── Temperature logging ───────────────────────────────────────────────────
 
-/// Append one CSV row to the daily log file (/sdcard/logs/YYYY-MM-DD.csv).
+/// Append one CSV row to the daily log file (/sdcard/YYYY-MM-DD.csv).
 /// Creates the file with a header row if it does not exist.
 /// coolroom_c / evap_c / ambient_c: NaN is written as empty field.
 inline bool p4_sd_log_temps(
@@ -120,7 +117,7 @@ inline bool p4_sd_log_temps(
         gettimeofday(&tv, nullptr);
         struct tm t{};
         localtime_r(&tv.tv_sec, &t);
-        snprintf(path, sizeof(path), "/sdcard/logs/%04d-%02d-%02d.csv",
+        snprintf(path, sizeof(path), "/sdcard/%04d-%02d-%02d.csv",
                  t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
     }
 
@@ -143,7 +140,7 @@ inline bool p4_sd_log_temps(
     // Format each temperature (empty string for NaN)
     auto fmtf = [](char* buf, size_t n, float v) {
         if (std::isfinite(v)) snprintf(buf, n, "%.1f", v);
-        else snprintf(buf, n, "");
+        else if (n > 0) buf[0] = '\0';
     };
     char sc[12], ec[12], ac[12], sp[12];
     fmtf(sc, sizeof(sc), coolroom_c);

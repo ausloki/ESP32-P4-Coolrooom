@@ -52,7 +52,8 @@ esphome compile esp32-p4-coolroom.yaml
 
 **ESPHome**: 2026.7.0 (ARM64 native in `.venv`)  
 **ESP-IDF**: 5.5.4, RISC-V toolchain 14.2.0_20260121  
-**Target**: RAM < 25%, Flash < 20%  
+**Target**: RAM < 25%; app image should fit comfortably inside one 7 MB OTA slot.  
+**Flash policy**: soft target < 6.0 MB per app image; investigate growth above ~5.5 MB; hard limit is the 7,340,032-byte OTA partition in `partitions_custom.csv`.  
 **ARM64 penv fix** (if IDF build fails with arch mismatch):
 ```bash
 lipo ~/.esphome-idf/penvs/5.5.4/bin/python -thin arm64 -output /tmp/py-arm64

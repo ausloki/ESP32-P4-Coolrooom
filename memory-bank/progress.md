@@ -3,18 +3,54 @@
 ## Phase Completion Status
 
 | Phase | Description | Status | Completion Date | Build Test | Device Test |
-|-------|-------------|--------|-----------------|------------|------------|
+| ----- | ----------- | ------ | --------------- | ---------- | ----------- |
 | 1 | WiFi, HA API, Web Server, OTA | ✅ | Previous | ✅ | ✅ |
 | 2 | RS485 Modbus (relays, RTD, RTC) | ✅ | Previous | ✅ | ✅ |
 | 3 | Control Logic (hysteresis, alarms, defrost) | ✅ | Previous | ✅ | ✅ |
 | 4 | LVGL Touchscreen Dashboard | ✅ | 2026-07-18 | ✅ | ⏳ |
-| 5 | SD Card, ntfy, Backup/Restore | 🔄 | TBD | — | — |
+| 5 | SD Card, ntfy, Backup/Restore | 🔄 In Progress | Ongoing | ⏳ | ⏳ |
+
+## 2026-07-23 Resume Status Refresh
+
+### Repository State
+
+- Latest completed commit: `bf2547b` (`feat(offline): keep control autonomous without wifi and add offline prep`)
+- Main handover and active context were refreshed to match current `HEAD`
+- Working tree is now intentionally dirty with repo-owned compile-helper and documentation updates pending commit
+
+### Since The Original Phase 4 Snapshot
+
+- Added animated state visuals for compressor and defrost states
+- Added compile environment helpers and ARM64 recovery path
+- Added repo-managed dependency-check hooks and Windows bootstrap flow
+- Hardened offline autonomous control so Wi-Fi/API loss does not reboot the controller
+- Added offline package-prep assets under `tools/offline/`
+
+### Current Resume Position
+
+- The firmware header still marks Phase 5 as the active feature area
+- Build metrics are now revalidated: RAM 19.5%, flash 20.2% of the 7 MB OTA slot
+- Flash policy has been corrected from `< 20%` to an OTA-slot policy appropriate for this ESP32-P4 partition layout
+- Hardware validation remains outstanding for the newest offline/autonomy and SD-card changes
+
+### New Work Completed This Session
+
+- Set explicit `web_server.auth.type: basic` in firmware configuration
+- Cleaned local logging warnings in `p4_logging.h`
+- Hardened `tools/esphome_compile.sh` to auto-recover the native-IDF reconfigure `src` `REQUIRES` omission for `esp_ringbuf` / `esp_http_server`
+- Updated instructions, recap, and handover docs to reflect the corrected ESP32-P4 flash policy
+
+### Recommended Next Check
+
+- Confirm remaining Phase 5 implementation gaps before new scope is added
+- Run hardware validation for offline operation and SD-card behavior on the ESP32-P4 target board
 
 ## Phase 4 Completion Details (2026-07-18)
 
 ### Tasks Completed ✅
 
 **Display Architecture:**
+
 - [x] Horseshoe arc gauge (3 concentric colored arcs)
 - [x] Temperature-to-arc conversion formula
 - [x] Center temperature display (64pt blue font)
@@ -24,6 +60,7 @@
 - [x] Color palette (dark theme, 10 colors)
 
 **Icon Visual Feedback:**
+
 - [x] Compressor icon (green when relay ON)
 - [x] Light icon (orange when relay ON, touchable)
 - [x] Defrost icon (orange when control logic active, supports passive cycles)
@@ -32,12 +69,14 @@
 - [x] Alarm icon soft reset functionality
 
 **Code & Architecture:**
+
 - [x] Icon color updates via relay handlers (relay-bound)
 - [x] Icon color updates via binary sensors (control logic-bound)
 - [x] Temperature sensor handlers (probe1 2s, probe3 10s, setpoint on-change)
 - [x] Arc value updates with conversion formula
 
 **Documentation:**
+
 - [x] Handover notes with architecture
 - [x] Icon visual feedback loop diagram
 - [x] Display architecture visual reference
@@ -46,6 +85,7 @@
 - [x] Code-review graph (mermaid.js)
 
 **Build & Quality:**
+
 - [x] Zero compilation errors/warnings
 - [x] RAM 19.4% (healthy)
 - [x] Flash 20.2% (comfortable)
@@ -54,6 +94,7 @@
 ### Pending Tasks ⏳
 
 **Device Testing:**
+
 - [ ] Flash firmware.factory.bin to ESP32-P4
 - [ ] Verify home page layout and rendering
 - [ ] Test arc gauge animations
@@ -63,6 +104,7 @@
 - [ ] Extended operation stability test
 
 **Potential Enhancements:**
+
 - [ ] Arc animation/easing effects
 - [ ] Setpoint needle (alternative pointer widget)
 - [ ] Icon pulse animations on alarm
@@ -72,6 +114,7 @@
 ## Phase 5 Roadmap
 
 **Planned Features:**
+
 - SD card CSV logging with event export
 - ntfy push notifications for alarms/critical events
 - Backup/restore of control logic settings to SD
@@ -84,17 +127,18 @@
 ## Key Metrics Trending
 
 | Metric | Phase 3 | Phase 4 | Target | Status |
-|--------|---------|---------|--------|--------|
+| ------ | ------- | ------- | ------ | ------ |
 | RAM Usage | 18.9% | 19.4% | < 25% | ✅ |
-| Flash Usage | 18.2% | 20.2% | < 20% | ⚠️ Approaching limit |
+| Flash Usage | 18.2% | 20.2% | < 6.0 MB app image soft target | ✅ |
 | Compilation Time | ~6s | ~7s | < 10s | ✅ |
 | Code Quality | Clean | Clean | 0 warnings | ✅ |
 
-**Note:** Flash usage trending upward (Phase 4 added LVGL widgets, binary sensors, handlers). Phase 5 SD card features may require optimization. Monitor for next phase.
+**Note:** Flash usage is well within the actual 7 MB OTA-slot budget for this ESP32-P4 partition layout. Future growth should be reviewed once the image exceeds about 5.5 MB, not at an arbitrary 20% threshold.
 
 ## Session Execution Quality
 
 **2026-07-18 Session:**
+
 - Post-task protocol steps: 4/4 completed ✅
 - Completion checklist: 8/8 items verified ✅
 - Documentation completeness: Comprehensive ✅
@@ -105,6 +149,6 @@
 
 ---
 
-**Last Updated:** 2026-07-18  
+**Last Updated:** 2026-07-23  
 **By:** Copilot Agent  
-**Status:** Phase 4 Complete, Phase 5 Ready to Plan
+**Status:** Compile flow hardened; Phase 5 still active

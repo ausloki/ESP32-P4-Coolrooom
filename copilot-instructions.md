@@ -129,11 +129,18 @@ esphome compile esp32-p4-coolroom.yaml
 ```
 
 **Stack**: ESPHome 2026.7.0, ESP-IDF 5.5.4, RISC-V toolchain 14.2.0_20260121  
-**Target**: RAM < 25%, Flash < 20%
+**Target**: RAM < 25%; app image should fit comfortably inside one 7 MB OTA slot.
+
+**Flash Policy**
+- Board flash is 32 MB, but the real firmware constraint is the dual-OTA layout in `partitions_custom.csv`.
+- Each OTA app slot is `0x700000` bytes (7,340,032 bytes, about 7.0 MB).
+- Soft target: keep the app image under 6.0 MB.
+- Review threshold: investigate growth once the image is above about 5.5 MB.
+- Hard limit: the image must remain below one OTA slot size.
 
 **Current Metrics** (as of 2026-07-18):
 - RAM: 19.4% (111,594 / 576,464 bytes) ✓ Healthy
-- Flash: 20.2% (1,479,622 / 7,340,032 bytes) ✓ Comfortable
+- Flash: 20.2% (1,479,622 / 7,340,032 bytes, about 1.48 MB of a 7 MB OTA slot) ✓ Comfortable
 
 ## Documentation Rules
 
@@ -189,7 +196,7 @@ If any step fails, task closeout is blocked until fixed.
 
 ### 1. Compilation & Code Review
 * Compile firmware and verify zero errors/warnings: `esphome compile esp32-p4-coolroom.yaml`
-* Review RAM/Flash metrics — ensure within target constraints (RAM < 25%, Flash < 20%)
+* Review RAM/Flash metrics — ensure RAM remains under 25% and the app image remains comfortably below the 7 MB OTA-slot ceiling (soft target < 6.0 MB)
 * Generate code-review graph: Create a mermaid.js architecture graph detailing the updated logic, state changes, or data flow
   - Run: `tools/code_review_graph_cli.sh` (or equivalent tool)
   - Document: Explain what changed and why in graph title/annotations

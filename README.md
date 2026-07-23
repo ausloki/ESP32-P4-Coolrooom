@@ -7,6 +7,7 @@ ESPHome-based coolroom controller running on the **Waveshare ESP32-P4-WIFI6-Touc
 This project targets the **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B** board specifically, not a generic ESP32 device.
 
 **Before any code or pin changes:**
+
 - Verify against `reference/hardware_pins.md` and the [board schematic](https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/ESP32-P4-WIFI6-Touch-LCD-7B.pdf).
 - The ESP32-P4 has **no on-chip WiFi**. All wireless communication routes through the ESP32-C6 co-processor via SDIO using `esp32_hosted`. Do not assume standard `wifi:` component behaviour.
 - GPIO 9–13 and GPIO 53 are **reserved** by the on-board audio codec. Do not use for RS485 or other peripherals.
@@ -16,7 +17,7 @@ This project targets the **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B** board specifi
 ## Board Summary
 
 | Feature | Detail |
-|---------|--------|
+| ------- | ------ |
 | Chip | ESP32-P4NRW32 — RISC-V dual-core HP @ 400 MHz + LP @ 40 MHz |
 | WiFi/BT | ESP32-C6 co-processor (SDIO) — WiFi 6 2.4 GHz, BT 5 |
 | Flash | 32 MB NOR |
@@ -29,7 +30,7 @@ This project targets the **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B** board specifi
 ## Project Status
 
 | Phase | Feature Set | Status |
-|-------|-------------|--------|
+| ----- | ----------- | ------ |
 | 1 | WiFi provisioning, HA native API, web server, OTA, NTP | **Current** |
 | 2 | RS485 Modbus: relay board + RTD temp sensor | Planned |
 | 3 | Coolroom control logic (setpoint, compressor, defrost, alarms) | Planned |
@@ -53,6 +54,7 @@ When the device cannot connect to any configured network it starts an access poi
 - **Password**: set in `secrets.yaml` → `ap_password`
 
 Connect to that AP and navigate to **192.168.4.1** to:
+
 - Scan and see available networks
 - Enter credentials for your target network
 - Device reconnects automatically and persists the credentials
@@ -74,6 +76,7 @@ Main control logic is designed to run locally even when there is no Wi-Fi or Hom
 - While offline, ntfy requests are skipped; notification edge flags reset so active alarms can notify after reconnect.
 
 Operational note:
+
 - Probe validity and RS485 health still determine safe operation; network presence is not part of compressor/defrost decisions.
 
 ## Site-to-Site VPN Routing (Preferred)
@@ -142,7 +145,9 @@ Use the repo helper scripts to avoid recurring PATH/certificate/toolchain issues
 ```
 
 Notes:
+
 - `tools/esphome_compile.sh` exports `SSL_CERT_FILE` from `certifi` and prepends standard system paths.
+- `tools/esphome_compile.sh` also auto-retries a known ESPHome native-IDF reconfigure failure by patching the generated `.esphome/.../src/CMakeLists.txt` when `esp_http_server` or `esp_ringbuf` are omitted from `src` `REQUIRES`.
 - `tools/esphome_env_check.sh` verifies `esphome` and `certifi` in `.venv` and checks ESP-IDF penv python architecture.
 
 ### Git Hook Dependency Checker (cross-machine)
@@ -168,6 +173,7 @@ python3 tools/dependency_check.py --install
 ```
 
 Hook behavior:
+
 - `.githooks/post-checkout` and `.githooks/post-merge` run non-blocking checks.
 - `.githooks/pre-commit` runs a non-blocking dependency warning before each commit.
 - If dependencies are missing, hooks print remediation commands for macOS/Linux and Windows.
@@ -181,6 +187,7 @@ For first-time setup on Windows, run the bootstrap script from PowerShell:
 ```
 
 This script:
+
 - Creates `.venv` if missing
 - Installs project tooling from `requirements.txt` using `tools/dependency_check.py --install`
 - Configures `core.hooksPath=.githooks` via `tools/setup_git_hooks.py`
@@ -189,6 +196,7 @@ This script:
 ## No-USB Operations
 
 Once WiFi is live, all diagnostics can be done without USB:
+
 - **OTA updates** via `esphome upload --device <ip-or-hostname>`
 - **Web diagnostics** at `http://<device-ip>/` (auth required)
 - **HA entity monitoring** for sensor values, relay states, alarms

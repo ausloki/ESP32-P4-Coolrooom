@@ -1,7 +1,37 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
+
 **Date**: 2026-07-18  
-**Status**: All 12 Phases Complete ✅  
-**Last Commits**: `517f167` (Phase 12: RBAC)
+**Resume State Updated**: 2026-07-23  
+**Status**: In Progress — repo clean, latest completed session captured at `bf2547b`  
+**Last Commit**: `bf2547b` (offline autonomy + offline prep)
+
+> Resume note: this file now reflects the current repository state at `HEAD`.
+> Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-23 Addendum — Compile Helper Retries Native-IDF REQUIRES Failure
+
+- Confirmed a clean ESPHome native-IDF rebuild can fail during reconfigure because generated `src/CMakeLists.txt` omits required built-in components for `src`.
+- The observed missing requirements were `esp_http_server` and `esp_ringbuf`.
+- Updated `tools/esphome_compile.sh` to capture the initial compile output.
+- Updated `tools/esphome_compile.sh` to detect that specific missing-`REQUIRES` failure pattern.
+- Updated `tools/esphome_compile.sh` to patch the generated `.esphome/build/<config>/src/CMakeLists.txt`.
+- Updated `tools/esphome_compile.sh` to retry the build with `ninja all` and `ninja size`.
+- This is a repo-owned workaround for local reproducibility; the root cause still appears to live in the ESPHome native-IDF generation path.
+- Added `reference/ESPHOME_NATIVE_IDF_REQUIRES_BUG_REPORT.md` as a ready-to-file upstream report draft for the observed native-IDF `REQUIRES` omission.
+
+---
+
+## 2026-07-23 Addendum — Flash Budget Policy Corrected
+
+- Rebased the project flash policy on the real hardware constraint instead of a stale `< 20%` percentage target.
+- Confirmed the board is configured for 32 MB flash with dual OTA app slots of `0x700000` bytes each.
+- RAM target remains `< 25%`.
+- Soft flash target: keep app image under `6.0 MB`.
+- Investigate growth once the image exceeds about `5.5 MB`.
+- Hard limit: firmware must fit within one `7,340,032-byte` OTA slot.
+- Practical result: the current ~`1.48 MB` app image is comfortably within budget for this partition layout.
 
 ---
 
@@ -9,25 +39,23 @@
 
 - Project closeout workflow now requires handover note updates for every change.
 - Mandatory closeout now includes: graph update, impacted docs update, recap update, handover update, compact commit, clean-tree check.
-- Applies to both instruction files:
-   - `.github/copilot-instructions.md`
-   - `copilot-instructions.md`
+- Applies to `.github/copilot-instructions.md`.
+- Applies to `copilot-instructions.md`.
 
 ## 2026-07-19 Addendum — GPIO Header Pin/Voltage Mapping
 
 - Updated `reference/hardware_pins.md` with an explicit PH2.0 12PIN GPIO-header net map.
-- Added supported power rail and voltage notes for header usage:
-   - `ESP_3V3` (3.3V)
-   - `Core_5V` (5.0V)
-   - `GND` (0V reference)
+- Added supported power rail note for `ESP_3V3` (3.3V).
+- Added supported power rail note for `Core_5V` (5.0V).
+- Added supported power rail note for `GND` (0V reference).
 - Added guidance that GPIO signal level is 3.3V logic and should not be driven above 3.3V.
 - Clarified map scope as net-availability; physical connector pin-number order must still be verified against board silk/schematic view when building harnesses.
 
 ## 2026-07-19 Addendum — Dual DIN PSU + Common Ground Rule
 
-- Documented project power model using two DIN supplies:
-   - 5V DIN PSU feeds controller via PH2.0 12PIN (`Core_5V` + `GND`).
-   - 12V DIN PSU feeds RS485 RTU-4 relay and RTD PT100 modules.
+- Documented project power model using two DIN supplies.
+- 5V DIN PSU feeds controller via PH2.0 12PIN (`Core_5V` + `GND`).
+- 12V DIN PSU feeds RS485 RTU-4 relay and RTD PT100 modules.
 - Added grounding requirement: 5V PSU negative and 12V PSU negative must be bonded to a common reference point for stable RS485 communications.
 - Added wiring guidance to use a star-point ground bond in the control panel.
 
@@ -54,9 +82,8 @@
 
 ## 2026-07-21 Addendum — Git Hook Dependency Checker
 
-- Added versioned repo hooks in `.githooks/`:
-   - `post-checkout`
-   - `post-merge`
+- Added versioned repo hook `.githooks/post-checkout`.
+- Added versioned repo hook `.githooks/post-merge`.
 - Added `tools/setup_git_hooks.py` to configure `git config --local core.hooksPath .githooks`.
 - Added `tools/dependency_check.py` for cross-platform dependency validation and bootstrap.
 - Added `requirements.txt` for deterministic tooling installs (`esphome`, `code-review-graph`, `certifi`).
@@ -79,40 +106,36 @@
 
 ## Executive Summary
 
-The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 12 phases. All phases have been implemented, compiled successfully, documented, and committed to git. The project uses 19.3% RAM and 20.0% Flash with comfortable headroom for future enhancements. Phase 12 adds comprehensive role-based access control (RBAC) for the web GUI with three distinct access levels.
+The current repository state is a clean working tree at `bf2547b`, not the older "all 12 phases complete" state referenced by some historical notes below. The most recent completed work hardened offline autonomous control, added compile/environment helper scripts, added repo-managed dependency-check hooks plus Windows bootstrap support, and staged offline tooling packages for more repeatable setup.
 
-**Ready for**: Device deployment, production testing, customer handoff.
+The live firmware header still marks Phase 5 (`SD logging, ntfy, backup/restore`) as the active feature area, so the correct resume point is Phase 5 continuation plus targeted compile and hardware validation of the latest offline-safe behavior.
+
+**Ready for**: Phase 5 continuation, compile verification, and hardware testing.
 
 ---
 
 ## Phase Completion Status
 
 | Phase | Feature | Status | Build Metrics | Commit |
-|-------|---------|--------|----------------|--------|
+| ------- | ------- | ------- | ------- | ------- |
 | 1 | WiFi, HA API, OTA | ✅ | — | Base |
 | 2 | RS485 Modbus (relays, RTD, RTC) | ✅ | — | Base |
 | 3 | Core control logic (hysteresis, alarms, defrost) | ✅ | — | Base |
 | 4 | LVGL 7" touchscreen (1024×600) | ✅ | — | Base |
-| 5 | SD logging, ntfy, backup/restore | ✅ | — | Base |
-| 6 | Extended control (lockout, grace, smart defrost) | ✅ | RAM 18.7%, Flash 19.5% | Base |
-| 7 | Diagnostics (RS485 health, heap, PSRAM) | ✅ | RAM 18.8%, Flash 19.6% | Base |
-| 8 | Multi-page LVGL UI (5 pages + tab bar) | ✅ | RAM 18.9%, Flash 19.8% | Base |
-| 8b | Settings controls (+/- buttons, callbacks) | ✅ | RAM 19.0%, Flash 19.9% | `5c2e440` |
-| 9 | Page navigation (scripts + tab wiring) | ✅ | RAM 19.2%, Flash 20.0% | `221998d` |
-| 10 | Extended diagnostics (metrics, health) | ✅ | RAM 19.3%, Flash 20.0% | `1e592f1` |
-| 11 | Web dashboard + REST API | ✅ | RAM 19.3%, Flash 20.0% | `6d982c3` |
-| 12 | Role-Based Access Control (RBAC) | ✅ | RAM 19.3%, Flash 20.0% | `517f167` |
+| 5 | SD logging, ntfy, backup/restore | 🔄 In progress | Historical metrics exist; not revalidated this session | `bf2547b` |
 
 ---
 
 ## Key Deliverables
 
 ### Firmware
+
 - **Main config**: `esp32-p4-coolroom.yaml` (3,760+ lines)
 - **C++ helpers**: `esphome_includes.h` (p4_helpers.h, p4_control.h, p4_logging.h)
 - **Compiled binary**: `.esphome/build/esp32-p4-coolroom/build/firmware.ota.bin`
 
 ### User Interface
+
 - **5 LVGL Pages**: Home (meter + setpoints) + 3 Settings (controls) + Info (diagnostics)
 - **Tab bar navigation**: All buttons wired with script-based state management
 - **Real-time diagnostics**: 8 metrics on info page (heap, PSRAM, uptime, WiFi, RS485)
@@ -120,16 +143,17 @@ The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 12 
 - **Role-Based Access Control**: Three access levels (GUEST/ADMIN/SUPERADMIN) with permission matrix
 
 ### Monitoring & Control
+
 - **Home Assistant integration**: Native API publishes all entities
 - **REST API**: `/api/states` endpoint returns JSON entity states
 - **SD card logging**: Daily CSV temps + event log + JSON backup/restore
 - **ntfy notifications**: Push alerts for alarms, probe faults
-- **Web GUI Security**: Role-based access with three tiers:
-  - **GUEST**: View-only main display (temperature, status, alarms)
-  - **ADMIN**: View main + settings, modify operational parameters (setpoint, alarms, defrost)
-  - **SUPERADMIN**: Full access (backup/restore, logs, WiFi settings, hardware config)
+- **Web GUI Security**: GUEST is view-only for main display, temperature, status, and alarms.
+- **Web GUI Security**: ADMIN can view main + settings and modify operational parameters.
+- **Web GUI Security**: SUPERADMIN has full access including backup/restore, logs, WiFi settings, and hardware config.
 
 ### Documentation
+
 - `reference/program_control_logic_flowchart.md`: Updated phase summary table
 - `reference/session_recaps.md`: Detailed recaps for Phases 9, 10, 11
 - `reference/hardware_pins.md`: All GPIO assignments verified
@@ -144,11 +168,13 @@ The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 12 
 **Objective**: Implement three-tier access control for web GUI to protect sensitive operations.
 
 **Access Levels**:
+
 - **GUEST** (view-only): Temperature display, status indicators, alarms — no modifications allowed
 - **ADMIN**: GUEST access + settings pages, can modify operational parameters (setpoint, alarms, defrost interval)
 - **SUPERADMIN**: ADMIN access + system administration (backup/restore, logs management, WiFi configuration, hardware settings)
 
 **Implementation Details**:
+
 - Enhanced `dashboard.html` with role-based UI/functionality
 - JavaScript permission matrix controls show/hide of sections and button enable/disable
 - Role passed via URL parameter: `?role=admin` or stored in localStorage
@@ -157,6 +183,7 @@ The ESP32-P4 Coolroom Controller firmware is **feature-complete** across all 12 
 - No firmware changes needed (entirely client-side + simple YAML comments)
 
 **Usage Examples**:
+
 ```bash
 # Guest access (view-only)
 http://192.168.1.X/assets/dashboard.html?role=guest
@@ -176,14 +203,16 @@ http://192.168.1.X/assets/dashboard.html?role=superadmin
 
 ### Tasks Completed
 
-**Phase 9: LVGL Page Navigation**
+#### Phase 9: LVGL Page Navigation
+
 - Added 5 page state globals + 5 binary_sensors for tracking active page
 - Implemented 5 page-switching scripts (switch_to_page_home/settings_1/2/3/info)
 - Wired all 25 tab bar buttons (5 pages × 5 buttons) with on_click handlers
 - All buttons call appropriate navigation script on tap
 - Compiled: 3,618 lines YAML, RAM 19.2%, Flash 20.0%
 
-**Phase 10: Extended Diagnostic Page**
+#### Phase 10: Extended Diagnostic Page
+
 - Enhanced `page_info` with 8 system metric labels
 - Added 1s interval lambdas for auto-refresh:
   - `lbl_info_heap`: Free heap memory via p4_fmt_heap_mb()
@@ -196,7 +225,8 @@ http://192.168.1.X/assets/dashboard.html?role=superadmin
   - `lbl_info_probes`: Probe 1/2 status + fault flag
 - Compiled: 3,760 lines YAML, RAM 19.3%, Flash 20.0%
 
-**Phase 11: Web Dashboard + REST API**
+#### Phase 11: Web Dashboard + REST API
+
 - Created responsive HTML dashboard (`assets/dashboard.html`, 350+ lines)
 - Dashboard fetches from ESPHome native `/api/states` endpoint
 - Real-time metrics display: temperature, compressor, defrost, alarms, WiFi
@@ -206,7 +236,8 @@ http://192.168.1.X/assets/dashboard.html?role=superadmin
 - Added REST API documentation in YAML web_server comments
 - Compiled: No firmware size impact (external HTML), RAM 19.3%, Flash 20.0%
 
-**Phase 12: Role-Based Access Control (RBAC)**
+#### Phase 12 Session: Role-Based Access Control (RBAC)
+
 - Implemented three-tier access control: GUEST (view-only) / ADMIN (modify operational) / SUPERADMIN (full)
 - Enhanced dashboard with role-based UI show/hide and button enable/disable
 - Added comprehensive permission matrix in JavaScript
@@ -219,7 +250,8 @@ http://192.168.1.X/assets/dashboard.html?role=superadmin
 - Compiled: No firmware size impact (external HTML/CSS/JS), RAM 19.3%, Flash 20.0%
 
 ### Git Commits
-```
+
+```text
 517f167 ← Phase 12: Role-Based Access Control (RBAC) for web GUI
 6d982c3 ← Phase 11: Web Dashboard + REST API integration
 1e592f1 ← Phase 10: Extended diagnostic page with system health metrics
@@ -227,6 +259,7 @@ http://192.168.1.X/assets/dashboard.html?role=superadmin
 ```
 
 ### Documentation Updates
+
 - ✅ `reference/program_control_logic_flowchart.md`: Phase summary table (all 11 marked complete)
 - ✅ `reference/session_recaps.md`: Phase 9, 10, 11 detailed recaps appended
 - ✅ YAML comments: REST API usage documented
@@ -235,7 +268,7 @@ http://192.168.1.X/assets/dashboard.html?role=superadmin
 
 ## Resource Utilization
 
-```
+```text
                     Phase 8b (Start)  →  Phase 11 (Final)
 RAM                 19.0%             →  19.3%
                     (109.6 KB)            (111.0 KB)
@@ -256,6 +289,7 @@ Remaining Headroom  ~465 KB RAM       ~5.8 MB Flash
 ## Build & Deployment
 
 ### Compilation Command
+
 ```bash
 cd /Volumes/Scratch/Documents/ESP32-P4-Coolroom
 export SSL_CERT_FILE=$(.venv/bin/python -c "import certifi; print(certifi.where())")
@@ -264,11 +298,13 @@ export PATH="$(pwd)/.venv/bin:$PATH"
 ```
 
 ### Deployment
+
 1. **OTA Flash**: Copy `.esphome/build/esp32-p4-coolroom/build/firmware.ota.bin` to device
 2. **Serial Flash**: Use esptool.py with firmware.bin if OTA unavailable
 3. **Verify**: Monitor boot diagnostics (p4_log_boot) via serial output
 
 ### Web Dashboard Access
+
 ```bash
 # REST API (raw)
 curl -u username:password http://192.168.1.X/api/states | jq '.'
@@ -284,6 +320,7 @@ cp assets/dashboard.html /var/www/html/
 ## Architecture Overview
 
 ### Control Loop (10s interval)
+
 1. Read probe temperatures (Modbus RTD boards)
 2. Check probe fault conditions
 3. Evaluate compressor hysteresis (±½·diff)
@@ -296,6 +333,7 @@ cp assets/dashboard.html /var/www/html/
 10. Send ntfy notifications
 
 ### LVGL UI (5-page dashboard)
+
 - **Home**: Real-time temperature meter, setpoint slider, control buttons
 - **Settings 1**: Compressor hysteresis, lockout timer (±/- buttons)
 - **Settings 2**: Alarm thresholds, defrost interval/duration
@@ -303,6 +341,7 @@ cp assets/dashboard.html /var/www/html/
 - **Info**: Live diagnostics (heap, WiFi, RS485, probes, uptime)
 
 ### Communication Stack
+
 - **WiFi**: esp_hosted SDIO ESP32-C6 (GPIO 14-19, 6, 54)
 - **RS485**: Modbus RTU (relays addr 1, RTD boards addr 100/101, RTC addr 0x51)
 - **Home Assistant**: Native API (auto-discovery + entity publishing)
@@ -328,43 +367,44 @@ cp assets/dashboard.html /var/www/html/
 
 ---
 
-## Known Limitations
+## Outstanding Resume Items
 
-1. **LVGL Page Visibility**: Pages not dynamically hidden (all content visible at once)
-   - **Workaround**: Page state tracked; content can be conditionally rendered in future
-   - **Enhancement**: Add LVGL visibility binding or page reload on tab change
+1. **Phase 5 is not closed out**
+   - The firmware header still marks `SD logging, ntfy, backup/restore` as current work.
+   - Resume from implementation completion and validation, not from customer handoff.
 
-2. **Dashboard Trend Graphs**: Placeholder only (Chart.js ready but no data points)
-   - **Future**: Phase 12 to add InfluxDB time-series database
-   - **Interim**: Use Home Assistant history graphs for trends
+2. **Latest build metrics were not revalidated in this session**
+   - Historical docs mention approximately 19.3% RAM and 20.0% flash.
+   - Run the repo compile helper before treating those numbers as current.
 
-3. **WiFi Failover**: No automatic 2.4GHz fallback if WiFi6 unavailable
-   - **Impact**: May lose connection in weak signal areas
-   - **Enhancement**: Add WiFi failover logic in next iteration
+3. **Hardware validation remains outstanding**
+   - Offline autonomy changes, UI behavior, notifications, and storage flows still need on-device checks.
 
-4. **Uptime Counter**: Resets on device reboot (not persistent)
-   - **Enhancement**: Use RTC for persistent uptime tracking
+4. **Historical sections below retain older phase numbering language**
+   - They are useful as implementation history, but they no longer describe the current top-level status.
 
 ---
 
 ## Transition & Next Steps
 
-### For Device Deployment
-1. Flash firmware via OTA or serial
-2. Configure WiFi SSID/password via captive portal or secrets.yaml
-3. Set Home Assistant API token (if using HA integration)
-4. Configure ntfy push URL for notifications
-5. Test each LVGL page and tab bar navigation
-6. Verify control loop operation (check relay state changes)
-7. Monitor SD card for daily temp logs
+### Immediate Resume Actions
 
-### For Future Development (Post-Phase 11)
-- **Phase 12**: Time-series database (InfluxDB) for historical trends
-- **Phase 13**: WebSocket for real-time updates (<1s refresh)
-- **Phase 14**: Mobile app (React Native) for remote monitoring
-- **Phase 15**: ML-based predictive defrost scheduling
+1. Run compile verification through `./tools/esphome_compile.sh`.
+2. Confirm the current Phase 5 implementation surface in `esp32-p4-coolroom.yaml`, `p4_logging.h`, and related docs.
+3. Test the latest offline-control behavior on hardware:
+   - Wi-Fi disconnect must not reboot firmware.
+   - Compressor/defrost/alarm logic must remain local-first.
+   - ntfy notifications must suppress cleanly while offline and resume on reconnect.
+4. Close any remaining SD logging / backup-restore gaps before expanding scope.
+
+### After That
+
+- Rebaseline RAM/flash metrics from a fresh compile.
+- Update the dated recap and handover blocks again when the next Phase 5 slice lands.
+- Only treat the project as deployment-ready after compile and device validation are repeated against current `HEAD`.
 
 ### Maintenance & Support
+
 - Monitor heap/PSRAM usage via info page (current: 19.3% RAM)
 - Check SD card free space monthly (auto-rotates daily logs)
 - Review RS485 bus health indicators for communication issues
@@ -376,7 +416,7 @@ cp assets/dashboard.html /var/www/html/
 ## Key Files & Locations
 
 | File | Purpose | Status |
-|------|---------|--------|
+| ---- | ------- | ------ |
 | `esp32-p4-coolroom.yaml` | Main ESPHome config | ✅ Complete (3,760 lines) |
 | `esphome_includes.h` | C++ helpers | ✅ Complete (p4_*.h included) |
 | `assets/dashboard.html` | Web dashboard | ✅ Complete (350+ lines) |
@@ -389,14 +429,14 @@ cp assets/dashboard.html /var/www/html/
 
 ## Sign-Off
 
-**Project Status**: 🟢 **COMPLETE**  
-**Build Status**: 🟢 **CLEAN** (RAM 19.3%, Flash 20.0%)  
-**Git Status**: 🟢 **CLEAN** (all commits pushed, working tree clean)  
-**Documentation**: 🟢 **COMPLETE** (all phases documented)  
-**Ready for**: Device deployment, production testing, customer handoff
+**Project Status**: 🟡 **Resume-ready, not closed out**  
+**Build Status**: 🟡 **Needs fresh compile validation for current `HEAD`**  
+**Git Status**: 🟢 **CLEAN** (working tree clean at `bf2547b`)  
+**Documentation**: 🟡 **Top-level status reconciled; some lower sections remain historical by design**  
+**Ready for**: Phase 5 continuation and targeted validation
 
 ---
 
-**Last Updated**: 2026-07-18 20:49 UTC  
-**By**: Copilot (Multi-phase firmware development)  
-**Next Review**: Upon device deployment completion
+**Last Updated**: 2026-07-23  
+**By**: Copilot  
+**Next Review**: After the next compile-validated Phase 5 change

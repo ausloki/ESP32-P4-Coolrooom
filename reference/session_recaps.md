@@ -4,6 +4,49 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-23 — Compile Helper Auto-Retry For ESPHome IDF Reconfigure Bug
+
+**Session scope**: Make the local compile flow resilient to the current ESPHome native-IDF `src` `REQUIRES` omission.
+
+### What Changed
+
+- Confirmed the failing rebuild path was a generated-build issue, not a firmware-source issue.
+- Updated `tools/esphome_compile.sh` to capture the initial compile output.
+- Added a targeted retry path that detects the known `esp_http_server` / `esp_ringbuf` missing-`REQUIRES` failure.
+- On that specific failure, the helper now patches the generated `.esphome/build/<config>/src/CMakeLists.txt` and reruns `ninja all` plus `ninja size` in the existing build tree.
+- Updated `README.md` so the helper behavior is documented for future sessions.
+
+### Outcome
+
+- Clean or reconfigure-triggered compiles no longer depend on manual editing of generated `.esphome` files during the same session.
+- The workaround is repo-owned and reproducible, even though the underlying issue still appears to come from ESPHome's native IDF generation path.
+
+### Follow-up
+
+- Added `reference/ESPHOME_NATIVE_IDF_REQUIRES_BUG_REPORT.md` as an upstream bug-report draft capturing the exact failure pattern, environment, generated CMake state, and local workaround.
+
+## 2026-07-23 — Flash Policy Rebased To OTA Slot Size
+
+**Session scope**: Replace the stale generic flash-percentage target with a board- and partition-aware policy.
+
+### What Changed
+
+- Reviewed the actual hardware and partition constraints for the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B project.
+- Confirmed the board is configured for 32 MB NOR flash and dual OTA app slots of `0x700000` bytes each.
+- Updated both instruction files to stop treating `Flash < 20%` as the project rule.
+- Replaced that rule with an OTA-slot policy:
+  - RAM target remains `< 25%`
+  - soft flash target: `< 6.0 MB` per app image
+  - review threshold: investigate growth above about `5.5 MB`
+  - hard limit: app image must fit within one `7,340,032-byte` OTA slot
+
+### Outcome
+
+- Flash guidance now matches the actual ESP32-P4 board layout and OTA strategy.
+- The current firmware size of about `1.48 MB` is correctly treated as comfortable, not near a real flash limit.
+
+---
+
 ## 2026-07-21 — Animated State Visual Spec
 
 **Session scope**: Define background animation language for compressor and defrost state feedback.
