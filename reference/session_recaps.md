@@ -1108,3 +1108,43 @@ of the 7 MB OTA slot). No firmware behavior change — the `web_server:` edit wa
 (UI-only, two-tier) implementation.
 
 ---
+
+## 2026-07-24 — Web Dashboard: Central Horseshoe Gauge (mirrors LVGL touchscreen)
+
+**Trigger**: The web dashboard's "central display" was a flat metric card (numeric temperature +
+setpoint text). The on-device LVGL touchscreen shows the same core data as three concentric
+horseshoe arcs (coolroom / setpoint / ambient), and the request was to bring the web dashboard's
+central display in line with that, visible regardless of guest/operator login state.
+
+**What changed** (`assets/dashboard.html` only — no firmware change):
+
+- Added an SVG-based horseshoe gauge (3 concentric arcs, 270° sweep with a 90° gap centered at
+  the bottom) reproducing the LVGL layout from `esp32-p4-coolroom.yaml`'s Phase 4 dashboard:
+  outer arc = coolroom temperature (`home_temp_arc`, blue `#0A84FF`), middle arc = setpoint
+  (`home_setpoint_arc`, cyan `#00BCD4`), inner arc = ambient temperature (`home_ambient_arc`,
+  pink `#FF1493`).
+- Reused the firmware's exact temperature-to-arc mapping: `percent = (temp_c + 20) / 35 * 100`,
+  clamped 0–100 (same formula as the `lvgl.arc.update` lambdas in the yaml).
+- Center overlay shows the large coolroom temperature (color-coded red/blue/green using the same
+  alarm-relative logic as the LVGL center label: above `setpoint + alarm_high` → red, below
+  `setpoint - alarm_low` → blue, else green), the setpoint (`Set: X°C`), and a status line
+  (Probe Fault / Defrost Active / Running / Idle) mirroring the LVGL status label's states.
+- Added `sensor.probe3_temp` (ambient) to `parseStates()` — this entity was published by the
+  firmware already but was never consumed by the dashboard.
+- Removed the now-redundant flat "Temperature" metric card; the gauge supersedes it. The
+  Compressor/Defrost/Alarms/WiFi/Uptime cards are unchanged.
+- This is part of the guest-visible main display (not gated behind login), consistent with the
+  rest of the temperature/status readout.
+
+**Verification**: JS syntax-checked (`node -e "new Function(script)"`), and the arc-path math
+was sanity-checked standalone in Node (full-track and percent-based arc endpoints computed
+correctly, gap centered at the bottom as intended). **Not visually rendered in a browser this
+session** — no screenshot/browser-automation tool was available in this environment. Worth an
+actual browser check next session before considering this fully verified.
+
+**Build**: No firmware change — RAM 19.5%, Flash 20.3% (unchanged from the prior entry).
+
+**Commit**: Web dashboard central display reworked to a 3-arc horseshoe gauge matching the LVGL
+touchscreen's layout, colors, and temperature-to-arc formula.
+
+---

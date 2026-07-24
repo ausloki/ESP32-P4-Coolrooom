@@ -14,6 +14,13 @@
 - Build re-verified after cleanup: RAM 19.5%, Flash 20.3%. See
   `reference/session_recaps.md` (2026-07-24 entry) for full detail.
 
+## 2026-07-24 Web Dashboard Central Gauge
+
+- Reworked `assets/dashboard.html`'s central display into a 3-arc SVG horseshoe gauge matching
+  the LVGL touchscreen (coolroom/setpoint/ambient temp arcs, same colors and percent formula).
+  No firmware change (RAM/Flash unchanged). Not yet visually verified in a browser — see
+  `reference/session_recaps.md` (2026-07-24 gauge entry) for what was and wasn't checked.
+
 ## Phase Completion Status
 
 | Phase | Description | Status | Completion Date | Build Test | Device Test |

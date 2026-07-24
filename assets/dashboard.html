@@ -289,6 +289,48 @@
         }
         
         .hidden { display: none !important; }
+
+        /* Central horseshoe gauge — mirrors the LVGL touchscreen's three concentric
+           arcs (coolroom / setpoint / ambient) so the web dashboard and the on-device
+           display read the same way regardless of who's viewing it. */
+        .gauge-section {
+            background: #1C1C1E;
+            border-radius: 8px;
+            padding: 24px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .gauge-wrap {
+            position: relative;
+            width: min(340px, 80vw);
+            margin: 0 auto;
+        }
+        .gauge-wrap svg { width: 100%; height: auto; display: block; }
+        .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
+        .gauge-arc { fill: none; stroke-linecap: round; }
+        .gauge-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            pointer-events: none;
+        }
+        .gauge-temp { font-size: 44px; font-weight: 700; color: #0A84FF; line-height: 1; }
+        .gauge-setpoint { font-size: 15px; color: #00BCD4; margin-top: 8px; }
+        .gauge-status { font-size: 13px; color: #FF9F0A; margin-top: 4px; }
+        .gauge-legend {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            margin-top: 14px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        .gauge-legend span { display: flex; align-items: center; gap: 6px; }
+        .gauge-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     </style>
 </head>
 <body>
@@ -310,13 +352,34 @@
         <!-- System Status Alerts -->
         <div id="alerts"></div>
 
+        <!-- Central Display: same three-arc horseshoe gauge as the LVGL touchscreen.
+             Visible to guest and operator alike — this is the main read-only display,
+             not a settings/admin control. -->
+        <div class="gauge-section">
+            <div class="gauge-wrap">
+                <svg viewBox="0 0 300 300">
+                    <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
+                    <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
+                    <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
+                    <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
+                    <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
+                    <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
+                </svg>
+                <div class="gauge-center">
+                    <div class="gauge-temp" id="gaugeTemp">--°C</div>
+                    <div class="gauge-setpoint" id="gaugeSetpoint">Set: --°C</div>
+                    <div class="gauge-status" id="gaugeStatus">--</div>
+                </div>
+            </div>
+            <div class="gauge-legend">
+                <span><i style="background:#0A84FF;"></i> Coolroom</span>
+                <span><i style="background:#00BCD4;"></i> Setpoint</span>
+                <span><i style="background:#FF1493;"></i> Ambient</span>
+            </div>
+        </div>
+
         <!-- Key Metrics -->
         <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-label">Temperature</div>
-                <div class="metric-value"><span id="tempValue">--</span><span class="metric-unit">°C</span></div>
-                <div style="font-size: 12px; color: #999; margin-top: 8px;">Setpoint: <span id="setpointValue">--</span>°C</div>
-            </div>
             <div class="metric-card">
                 <div class="metric-label">Compressor</div>
                 <div id="compressorStatus" style="margin-top: 8px;"></div>
@@ -845,6 +908,7 @@
                 const state = entity.state;
                 
                 if (id === 'sensor.probe1_temp') data.temperature = parseFloat(state);
+                if (id === 'sensor.probe3_temp') data.ambient_temp = parseFloat(state);
                 if (id === 'number.ctl_setpoint') data.setpoint = parseFloat(state);
                 if (id === 'binary_sensor.relay_compressor') data.compressor_on = state === 'on';
                 if (id === 'binary_sensor.relay_defrost') data.defrost_phase = state === 'on';
@@ -872,11 +936,94 @@
             return data;
         }
 
-        function updateDashboard(data) {
-            document.getElementById('tempValue').textContent = (data.temperature || '--').toFixed(1);
-            document.getElementById('setpointValue').textContent = (data.setpoint || '--').toFixed(1);
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // CENTRAL HORSESHOE GAUGE (mirrors the LVGL touchscreen's 3-arc display)
+        // ═══════════════════════════════════════════════════════════════════════════════
 
-            const compStatus = data.compressor_on 
+        // Same 270°-sweep / 90°-gap-at-bottom horseshoe layout as the on-device LVGL
+        // arcs, and the same temperature-to-percent mapping used in esp32-p4-coolroom.yaml:
+        //   percent = (temp_celsius + 20) / 35 * 100   (-20°C -> 0%, 15°C -> 100%)
+        const GAUGE_CENTER = 150;
+        const GAUGE_START_ANGLE = -135; // degrees, 0 = 12 o'clock, clockwise positive
+        const GAUGE_SWEEP = 270;
+        const GAUGE_RADII = { outer: 130, middle: 105, inner: 82 };
+
+        function gaugePoint(radius, angleDeg) {
+            const rad = (angleDeg * Math.PI) / 180;
+            return {
+                x: GAUGE_CENTER + radius * Math.sin(rad),
+                y: GAUGE_CENTER - radius * Math.cos(rad)
+            };
+        }
+
+        function gaugeArcPath(radius, startAngle, endAngle) {
+            const start = gaugePoint(radius, startAngle);
+            const end = gaugePoint(radius, endAngle);
+            const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+            return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+        }
+
+        function tempToPercent(tempC) {
+            if (typeof tempC !== 'number' || isNaN(tempC)) return 0;
+            const pct = ((tempC + 20) / 35) * 100;
+            return Math.max(0, Math.min(100, pct));
+        }
+
+        function setGaugeArc(id, radius, percent) {
+            const endAngle = GAUGE_START_ANGLE + (GAUGE_SWEEP * percent) / 100;
+            document.getElementById(id).setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
+        }
+
+        function initGaugeTracks() {
+            const fullEnd = GAUGE_START_ANGLE + GAUGE_SWEEP;
+            document.getElementById('gaugeTrackOuter').setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
+            document.getElementById('gaugeTrackMiddle').setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
+            document.getElementById('gaugeTrackInner').setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
+        }
+
+        function updateGauge(data) {
+            setGaugeArc('gaugeArcOuter', GAUGE_RADII.outer, tempToPercent(data.temperature));
+            setGaugeArc('gaugeArcMiddle', GAUGE_RADII.middle, tempToPercent(data.setpoint));
+            setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(data.ambient_temp));
+
+            const tempEl = document.getElementById('gaugeTemp');
+            const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
+            tempEl.textContent = hasTemp ? `${data.temperature.toFixed(1)}°C` : '--°C';
+
+            // Same alarm-relative color coding as the LVGL center label.
+            if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_high === 'number' && data.temperature > data.setpoint + data.alarm_high) {
+                tempEl.style.color = '#FF453A'; // col_red
+            } else if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_low === 'number' && data.temperature < data.setpoint - data.alarm_low) {
+                tempEl.style.color = '#0A84FF'; // col_blue
+            } else if (hasTemp) {
+                tempEl.style.color = '#30D158'; // col_green
+            } else {
+                tempEl.style.color = '#0A84FF';
+            }
+
+            document.getElementById('gaugeSetpoint').textContent =
+                typeof data.setpoint === 'number' && !isNaN(data.setpoint) ? `Set: ${data.setpoint.toFixed(1)}°C` : 'Set: --°C';
+
+            const statusEl = document.getElementById('gaugeStatus');
+            if (data.probe_fault) {
+                statusEl.textContent = '⚠ Probe Fault';
+                statusEl.style.color = '#FF453A';
+            } else if (data.defrost_phase) {
+                statusEl.textContent = 'Defrost Active';
+                statusEl.style.color = '#FF9F0A';
+            } else if (data.compressor_on) {
+                statusEl.textContent = 'Running';
+                statusEl.style.color = '#FF9F0A';
+            } else {
+                statusEl.textContent = 'Idle';
+                statusEl.style.color = '#8E8E93';
+            }
+        }
+
+        function updateDashboard(data) {
+            updateGauge(data);
+
+            const compStatus = data.compressor_on
                 ? '<span class="status-badge status-ok">🔴 RUNNING</span>' 
                 : '<span class="status-badge">⚪ OFF</span>';
             document.getElementById('compressorStatus').innerHTML = compStatus;
@@ -1035,6 +1182,7 @@
         // ═══════════════════════════════════════════════════════════════════════════════
         
         // Initialize and start auto-refresh
+        initGaugeTracks();
         initializeRole();
         setInterval(fetchStatus, 10000);
         fetchStatus();

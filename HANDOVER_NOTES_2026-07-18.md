@@ -2,11 +2,29 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-24  
-**Status**: In Progress — security fix session captured at `3b4ab80`; device reflash blocked, hardware not currently connected  
-**Last Commit**: `3b4ab80` (feat(rbac): guest-first elevation and guide cleanup)
+**Status**: In Progress — security fix + dashboard gauge session captured at `89bfe83`; device reflash blocked, hardware not currently connected  
+**Last Commit**: `89bfe83` (docs: note device reflash is blocked on hardware availability)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-24 Addendum — Web Dashboard Central Horseshoe Gauge
+
+- `assets/dashboard.html`'s central display was a flat metric card; reworked it to an SVG
+  horseshoe gauge matching the LVGL touchscreen's three-arc layout from `esp32-p4-coolroom.yaml`
+  (outer = coolroom temp/blue, middle = setpoint/cyan, inner = ambient temp/pink), same 270°
+  sweep / 90° bottom gap, and the same `(temp+20)/35*100` percent mapping used by the firmware's
+  `lvgl.arc.update` lambdas.
+- Added `sensor.probe3_temp` (ambient) to the dashboard's `parseStates()` — previously unused by
+  the web UI despite being published by the firmware.
+- Center label color-coding and status text mirror the LVGL center label's alarm-relative logic.
+- Visible in guest mode (not gated behind login) — this is the main read-only display.
+- No firmware change; compile re-verified anyway per policy: RAM 19.5%, Flash 20.3% (unchanged).
+- **Not visually verified in a browser this session** — no screenshot/browser tool was available.
+  JS syntax and the SVG arc-path math were checked standalone in Node, but an actual browser
+  check is still owed next session.
 
 ---
 

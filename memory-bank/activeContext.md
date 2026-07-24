@@ -1,8 +1,8 @@
 # Active Context — Current Session State
 
 **Date:** 2026-07-24  
-**Session:** Security fix — leaked dashboard credential + RBAC model cleanup  
-**Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING
+**Session:** Security fix (leaked dashboard credential + RBAC cleanup) + web dashboard central gauge  
+**Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING (blocked on hardware)
 
 ## Current Focus
 
@@ -30,6 +30,12 @@
   real two-tier, UI-only-visibility model.
 - Removed the misleading `web_admin_users` comment from `esp32-p4-coolroom.yaml`.
 - Repo-wide grep confirmed no remaining references to the leaked password string.
+- Reworked the web dashboard's central display (`assets/dashboard.html`) into an SVG horseshoe
+  gauge mirroring the LVGL touchscreen's three concentric arcs (coolroom/setpoint/ambient temp),
+  same colors, sweep geometry, and `(temp+20)/35*100` percent formula as the firmware. Added
+  `sensor.probe3_temp` (ambient) to the dashboard's state parsing — previously unused. **Not yet
+  visually verified in a browser** — no screenshot tool was available this session; JS syntax and
+  arc-path math were checked standalone in Node only.
 
 ### Build Status
 
@@ -51,8 +57,11 @@ Warning level: only generic ESP-IDF experimental-features warning remains
 2. Consider whether the leaked password should also be scrubbed from git history
    (`git filter-repo`/BFG) — rotation matters more, but history scrubbing was flagged as an
    option.
-3. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
-   this session's work was a security fix, not Phase 5 feature progress.
+3. Open `assets/dashboard.html` in an actual browser (or run one of the dev-server tools if
+   available) and visually confirm the horseshoe gauge renders correctly — this was only
+   math/syntax-checked, not visually verified.
+4. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
+   this session's work was a security fix + dashboard UI change, not Phase 5 feature progress.
 
 ### Outstanding Items
 
