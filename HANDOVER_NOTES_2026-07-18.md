@@ -1,12 +1,28 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-23  
-**Status**: In Progress — repo clean, latest completed session captured at `bf2547b`  
-**Last Commit**: `bf2547b` (offline autonomy + offline prep)
+**Resume State Updated**: 2026-07-24  
+**Status**: In Progress — security fix session captured at `3b4ab80`; device reflash pending to apply rotated credentials  
+**Last Commit**: `3b4ab80` (feat(rbac): guest-first elevation and guide cleanup)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-24 Addendum — Security Fix: Leaked Dashboard Credential + RBAC Model Cleanup
+
+- A project evaluation found that `assets/dashboard.html` and `assets/dashboard_virtual_preview.html` hardcoded the real device password (`P@lli5ter`) in plaintext client-side JavaScript as the "admin"/"superadmin" demo login — committed to git since Phase 12, and byte-for-byte identical to the actual `web_server_password`/`ota_password` in `secrets.yaml`.
+- Rotated `ota_password` and `web_server_password` in `secrets.yaml` (git-ignored) to new random values.
+- **Action required before this is fully closed out: reflash the device** (`esphome upload`) so the rotated OTA/web credentials take effect — the device currently still expects the old password.
+- Reworked `assets/dashboard.html` login to verify the entered credential against the live device (`GET /api/states` with `Authorization: Basic`, checked for `200` vs `401`) instead of a hardcoded value. Collapsed the three-tier guest/admin/superadmin model — which was never backed by anything server-side, since ESPHome's `web_server.auth` supports only one username/password pair — to the two tiers that actually exist: guest (default, read-only) and operator (the one real device credential).
+- Removed the dashboard's "User Management" panel; it changed "passwords" only in `localStorage` and never touched the device.
+- Fixed the same leaked-password issue in `assets/dashboard_virtual_preview.html` (offline static mock); replaced with an explicit preview-only placeholder credential.
+- Rewrote `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md` to describe the real two-tier, UI-only-visibility model, and to explicitly warn that section hiding in the dashboard is not a real access boundary.
+- Removed the misleading `web_admin_users` role-mapping comment from `esp32-p4-coolroom.yaml`'s `web_server:` block (that setting was never implemented).
+- Repo-wide grep confirmed no remaining references to the leaked password string in any tracked file.
+- Compile validated after the cleanup: RAM 19.5%, Flash 20.3%. No firmware behavior change (the yaml edit was comment-only).
+- Code-review graph refreshed (`code_review_graph_cli.sh update` + `status`): 54 nodes, 434 edges, 10 files tracked.
 
 ---
 

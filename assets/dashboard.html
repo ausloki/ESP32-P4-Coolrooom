@@ -134,8 +134,7 @@
             font-weight: bold;
             margin-bottom: 5px;
         }
-        header .role-badge.superadmin { background: #d4af37; color: #000; }
-        header .role-badge.admin { background: #4CAF50; }
+        header .role-badge.operator { background: #4CAF50; }
         header .role-badge.guest { background: #FF9800; }
         header .timestamp { font-size: 12px; opacity: 0.8; }
         
@@ -409,39 +408,6 @@
                     <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
                     <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
                 </div>
-                <div>
-                    <h3>User Management</h3>
-                    <button onclick="openUserManagement()">👥 Manage Users</button>
-                </div>
-            </div>
-            
-            <!-- User Management Modal -->
-            <div id="userMgmtModal" class="modal">
-                <div class="modal-content" style="width: 600px;">
-                    <h2>👥 User Management</h2>
-                    <div id="userList" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
-                        <!-- Users will be listed here -->
-                    </div>
-                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd;">
-                        <h3 style="margin-bottom: 15px;">Change User Password</h3>
-                        <div class="modal-form-group">
-                            <label for="pwChangeUser">Username</label>
-                            <select id="pwChangeUser" style="width: 100%; padding: 8px;">
-                                <option value="">Select user...</option>
-                                <option value="admin">admin (Administrator)</option>
-                                <option value="superadmin">superadmin (Super Administrator)</option>
-                            </select>
-                        </div>
-                        <div class="modal-form-group">
-                            <label for="pwChangeNew">New Password</label>
-                            <input type="password" id="pwChangeNew" placeholder="Enter new password">
-                        </div>
-                        <div class="modal-button-group">
-                            <button class="primary" onclick="changePassword()">Update Password</button>
-                            <button class="secondary" onclick="closeUserManagement()">Close</button>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -463,11 +429,11 @@
             <h2>🔐 Elevate Access</h2>
             <div class="modal-form-group">
                 <label for="loginUsername">Username</label>
-                <input type="text" id="loginUsername" placeholder="admin or superadmin">
+                <input type="text" id="loginUsername" placeholder="device web_server_username" autocomplete="username">
             </div>
             <div class="modal-form-group">
                 <label for="loginPassword">Password</label>
-                <input type="password" id="loginPassword" placeholder="Password required">
+                <input type="password" id="loginPassword" placeholder="device web_server_password" autocomplete="current-password">
             </div>
             <div class="modal-button-group">
                 <button class="primary" onclick="handleLogin()">Login</button>
@@ -475,9 +441,9 @@
             </div>
             <div class="modal-info">
                 <strong>Dashboard starts in guest mode by default.</strong><br>
-                Use login only to elevate permissions.<br>
-                🔑 admin / P@lli5ter<br>
-                🔴 superadmin / P@lli5ter
+                Enter the same username/password configured in the device's
+                <code>secrets.yaml</code> (<code>web_server_username</code> / <code>web_server_password</code>).
+                This is checked against the live device, not a value stored in this page.
             </div>
         </div>
     </div>
@@ -487,25 +453,12 @@
         // USER AUTHENTICATION & ROLE-BASED ACCESS CONTROL
         // ═══════════════════════════════════════════════════════════════════════════════
         
-        // User database with roles and passwords
-        const USER_DATABASE = {
-            guest: {
-                role: 'guest',
-                password: '', // No password for guest
-                name: 'Guest User'
-            },
-            admin: {
-                role: 'admin',
-                password: 'P@lli5ter',
-                name: 'Administrator'
-            },
-            superadmin: {
-                role: 'superadmin',
-                password: 'P@lli5ter',
-                name: 'Super Administrator'
-            }
-        };
-        
+        // There is exactly one real credential (the device's web_server basic-auth
+        // username/password from secrets.yaml) — ESPHome's web_server component has
+        // no concept of multiple accounts or privilege tiers on the backend. This
+        // dashboard only ever distinguishes "not logged in" (guest, read-only) from
+        // "logged in" (operator, elevated) — anything implying finer-grained roles
+        // would be UI decoration with no real access control behind it.
         const ROLE_PERMISSIONS = {
             guest: {
                 name: 'Guest',
@@ -513,23 +466,17 @@
                 canModify: [],
                 canAdmin: false
             },
-            admin: {
-                name: 'Administrator',
-                canView: ['main_display', 'health_status', 'settings'],
-                canModify: ['setpoint', 'alarms', 'defrost', 'hysteresis'],
-                canAdmin: false
-            },
-            superadmin: {
-                name: 'Super Administrator',
+            operator: {
+                name: 'Operator',
                 canView: ['main_display', 'health_status', 'settings', 'admin'],
                 canModify: ['setpoint', 'alarms', 'defrost', 'hysteresis', 'all'],
                 canAdmin: true
             }
         };
-        
+
         let currentRole = 'guest';
         let currentUser = 'unknown';
-        let authToken = null;
+        let authHeader = null; // "Basic base64(username:password)" once elevated; sent on write calls
         const HA_LAN_IP = '192.168.37.136';
         const API_PATH = '/api/states';
         let activeApiUrl = null;
@@ -584,7 +531,8 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
             try {
-                return await fetch(url, { signal: controller.signal });
+                const headers = authHeader ? { Authorization: authHeader } : {};
+                return await fetch(url, { signal: controller.signal, headers });
             } finally {
                 clearTimeout(timeout);
             }
@@ -692,54 +640,77 @@
         // AUTHENTICATION FUNCTIONS
         // ═══════════════════════════════════════════════════════════════════════════════
         
-        function handleLogin() {
+        async function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
-            
-            // Validate credentials
-            if (!username) {
-                alert('Please enter a username');
-                return;
-            }
-            
-            if (!USER_DATABASE[username]) {
-                alert('User not found');
+
+            if (!username || !password) {
+                alert('Enter the device username and password');
                 return;
             }
 
-            if (username === 'guest') {
-                alert('Guest mode is already active by default. Use admin or superadmin to elevate.');
-                return;
-            }
-            
-            const user = USER_DATABASE[username];
-            
-            // Check password (guest has no password)
-            if (user.password && user.password !== password) {
-                alert('Invalid password');
-                return;
-            }
-            
-            // Authentication successful
-            currentUser = username;
-            currentRole = user.role;
-            authToken = generateAuthToken(username);
+            const candidateHeader = `Basic ${btoa(`${username}:${password}`)}`;
+            const loginButton = document.querySelector('#loginModal button.primary');
+            loginButton.disabled = true;
+            loginButton.textContent = 'Checking...';
 
-            // Hide login modal and show dashboard
-            closeLoginModal();
-            initializeRole();
-            fetchStatus();
-            
-            // Start inactivity timer for non-guest users
-            if (currentRole !== 'guest') {
+            try {
+                // Verify the credential against the live device rather than a value
+                // stored in this page — there is nothing else to check it against.
+                const candidates = buildApiCandidates();
+                let verified = false;
+                let lastStatus = null;
+
+                for (const url of candidates) {
+                    try {
+                        const response = await fetchWithTimeoutUsingHeader(url, candidateHeader);
+                        lastStatus = response.status;
+                        if (response.ok) {
+                            verified = true;
+                            activeApiUrl = url;
+                            break;
+                        }
+                        if (response.status !== 401) {
+                            // Reachable but failing for a non-auth reason; still worth trying other candidates.
+                            continue;
+                        }
+                    } catch (error) {
+                        // Unreachable candidate; try the next one.
+                    }
+                }
+
+                if (!verified) {
+                    if (lastStatus === 401) {
+                        alert('Invalid username or password');
+                    } else {
+                        alert('Could not reach the device to verify credentials');
+                    }
+                    return;
+                }
+
+                currentUser = username;
+                currentRole = 'operator';
+                authHeader = candidateHeader;
+
+                closeLoginModal();
+                initializeRole();
+                fetchStatus();
                 setupActivityListeners();
                 resetInactivityTimer();
+            } finally {
+                loginButton.disabled = false;
+                loginButton.textContent = 'Login';
             }
         }
 
-        function generateAuthToken(username) {
-            // Simple token generation (in production, use JWT)
-            return btoa(`${username}:${Date.now()}`);
+        async function fetchWithTimeoutUsingHeader(url, header, timeoutMs = 2500) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { signal: controller.signal, headers: { Authorization: header } });
+            } finally {
+                clearTimeout(timeout);
+            }
         }
 
         function logout() {
@@ -747,7 +718,7 @@
             if (inactivityTimer) {
                 clearTimeout(inactivityTimer);
             }
-            
+
             // Remove activity listeners
             document.removeEventListener('mousemove', resetInactivityTimer, false);
             document.removeEventListener('keydown', resetInactivityTimer, false);
@@ -755,11 +726,11 @@
             document.removeEventListener('scroll', resetInactivityTimer, false);
             document.removeEventListener('touchstart', resetInactivityTimer, false);
             document.removeEventListener('touchend', resetInactivityTimer, false);
-            
+
             // Reset variables
             currentUser = 'guest';
             currentRole = 'guest';
-            authToken = null;
+            authHeader = null;
 
             initializeRole();
             fetchStatus();
@@ -780,7 +751,7 @@
             // Always start in guest mode; elevation requires explicit login.
             currentUser = 'guest';
             currentRole = 'guest';
-            authToken = null;
+            authHeader = null;
             closeLoginModal();
             initializeRole();
         }
@@ -1006,26 +977,28 @@
             showAlert('info', `Hysteresis update requested: ${value}°C`);
         }
 
-        // Admin functions (superadmin-only)
+        // Admin functions (operator-only). These remain placeholders — no backing
+        // endpoint exists in the firmware yet — but the permission check now maps
+        // to the one real elevated tier instead of an imaginary "superadmin".
         async function backupSettings() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can backup settings');
+            if (currentRole !== 'operator') {
+                showAlert('danger', 'Login required to backup settings');
                 return;
             }
             showAlert('info', 'Backup requested - would call /api/backup endpoint');
         }
 
         async function restoreSettings() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can restore settings');
+            if (currentRole !== 'operator') {
+                showAlert('danger', 'Login required to restore settings');
                 return;
             }
             showAlert('info', 'Restore requested - would upload backup.json');
         }
 
         async function deleteLogs() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can delete logs');
+            if (currentRole !== 'operator') {
+                showAlert('danger', 'Login required to delete logs');
                 return;
             }
             if (confirm('Are you sure? This will delete all old log files.')) {
@@ -1034,112 +1007,27 @@
         }
 
         async function downloadLogs() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can download logs');
+            if (currentRole !== 'operator') {
+                showAlert('danger', 'Login required to download logs');
                 return;
             }
             showAlert('info', 'Log download requested');
         }
 
         async function configureWiFi() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can configure WiFi');
+            if (currentRole !== 'operator') {
+                showAlert('danger', 'Login required to configure WiFi');
                 return;
             }
             showAlert('info', 'WiFi configuration page would open');
         }
 
         async function hardwareSettings() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can access hardware settings');
+            if (currentRole !== 'operator') {
+                showAlert('danger', 'Login required to access hardware settings');
                 return;
             }
             showAlert('info', 'Hardware configuration page would open');
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════════
-        // USER MANAGEMENT FUNCTIONS (SUPERADMIN ONLY)
-        // ═══════════════════════════════════════════════════════════════════════════════
-        
-        function openUserManagement() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can manage users');
-                return;
-            }
-            
-            // Populate user list
-            displayUserList();
-            document.getElementById('userMgmtModal').classList.add('show');
-        }
-
-        function closeUserManagement() {
-            document.getElementById('userMgmtModal').classList.remove('show');
-        }
-
-        function displayUserList() {
-            const userListDiv = document.getElementById('userList');
-            let html = '<table style="width: 100%; border-collapse: collapse;">';
-            html += '<tr style="border-bottom: 2px solid #ddd; padding: 10px 0;">';
-            html += '<th style="text-align: left; padding: 10px;">Username</th>';
-            html += '<th style="text-align: left; padding: 10px;">Role</th>';
-            html += '<th style="text-align: left; padding: 10px;">Status</th>';
-            html += '</tr>';
-            
-            Object.entries(USER_DATABASE).forEach(([username, user]) => {
-                const bgColor = username === currentUser ? '#e8f4f8' : 'transparent';
-                const status = username === currentUser ? '(Current User)' : 'Inactive';
-                html += `<tr style="border-bottom: 1px solid #eee; background: ${bgColor};">`;
-                html += `<td style="padding: 10px;"><strong>${username}</strong></td>`;
-                html += `<td style="padding: 10px;">${user.role}</td>`;
-                html += `<td style="padding: 10px; color: #666; font-size: 12px;">${status}</td>`;
-                html += '</tr>';
-            });
-            
-            html += '</table>';
-            html += '<div style="margin-top: 15px; font-size: 12px; background: #f0f0f0; padding: 10px; border-radius: 4px;">';
-            html += '<strong>Default Password:</strong> P@lli5ter (for admin & superadmin)<br>';
-            html += '<strong>Guest:</strong> No password required<br>';
-            html += '<strong>Only SuperAdmin can change passwords</strong>';
-            html += '</div>';
-            
-            userListDiv.innerHTML = html;
-        }
-
-        function changePassword() {
-            if (currentRole !== 'superadmin') {
-                showAlert('danger', 'Only SuperAdmin can change passwords');
-                return;
-            }
-            
-            const username = document.getElementById('pwChangeUser').value;
-            const newPassword = document.getElementById('pwChangeNew').value;
-            
-            if (!username) {
-                alert('Please select a user');
-                return;
-            }
-            
-            if (!newPassword) {
-                alert('Please enter a new password');
-                return;
-            }
-            
-            if (!USER_DATABASE[username]) {
-                alert('User not found');
-                return;
-            }
-            
-            // Update password
-            USER_DATABASE[username].password = newPassword;
-            
-            // Save to localStorage (in production, this would be saved server-side)
-            localStorage.setItem('userDB', JSON.stringify(USER_DATABASE));
-            
-            showAlert('success', `Password for ${username} has been updated`);
-            
-            // Reset form
-            document.getElementById('pwChangeUser').value = '';
-            document.getElementById('pwChangeNew').value = '';
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════

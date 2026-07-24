@@ -1,298 +1,70 @@
-# User Authentication & Session Management Guide
-**Phase 12b: Complete Authentication System**
+# Dashboard Session & Inactivity Guide
 
----
+## Scope
 
-## Overview
+This guide covers session/inactivity mechanics in `assets/dashboard.html`. For the login flow,
+access levels, and what "operator" actually means, see `reference/RBAC_USER_GUIDE.md` first —
+this document does not restate that model.
 
-The Coolroom Controller web dashboard now features a **complete authentication system** with:
-- ✅ Three pre-configured users with role-based access
-- ✅ Secure password management (default: P@lli5ter)
-- ✅ Auto-logout after 2 minutes of inactivity (non-guest users only)
-- ✅ Real-time inactivity countdown display
-- ✅ SuperAdmin-only password change capability
-- ✅ Session persistence via browser localStorage
-- ✅ Activity tracking on mouse, keyboard, and touch events
+> This file previously described a three-tier `guest`/`admin`/`superadmin` system with
+> hardcoded demo passwords, a "SuperAdmin" password-change feature, and localStorage session
+> persistence. None of that reflected the actual code even before the 2026-07-24 dashboard
+> rewrite — the account tiers were never backed by anything server-side, the password-change
+> feature only wrote to `localStorage` (it never touched the device), and session state was
+> never actually restored from `localStorage` on reload despite what the old doc claimed. That
+> content has been removed rather than fixed in place, since ESPHome's `web_server` genuinely
+> has no multi-account/role support to build it on.
 
----
+## Current Behavior
 
-## User Accounts
+- The dashboard has two states: **guest** (default, view-only) and **operator** (logged in with
+  the device's one real HTTP Basic Auth credential). See `RBAC_USER_GUIDE.md` for the login flow.
+- Session state (`currentRole`, `authHeader`) lives only in page memory — it is **not** persisted
+  to `localStorage` or any cookie. Reloading the page always returns to guest and requires
+  logging in again to re-elevate.
+- No password-change feature exists in the dashboard. The device credential is set once, in
+  `secrets.yaml`, at build time.
 
-### 🟢 GUEST (View-Only Access)
+## Inactivity Timeout (Operator Only)
 
-| Property | Value |
-|----------|-------|
-| **Username** | `guest` |
-| **Password** | *None* (empty) |
-| **Role** | Guest |
-| **Session Timeout** | Exempt (no auto-logout) |
-| **Access** | View-only main display |
+**Timeout duration:** 2 minutes (120 seconds) of no tracked activity.
 
-**Login Steps:**
-1. Enter username: `guest`
-2. Leave password empty
-3. Click Login
-
----
-
-### 🟡 ADMIN (Operational Control)
-
-| Property | Value |
-|----------|-------|
-| **Username** | `admin` |
-| **Password** | `P@lli5ter` |
-| **Role** | Administrator |
-| **Session Timeout** | 2 minutes of inactivity |
-| **Access** | Main display + settings + operational controls |
-
-**Login Steps:**
-1. Enter username: `admin`
-2. Enter password: `P@lli5ter`
-3. Click Login
-
-**Features Available:**
-- View temperature, alarms, system health
-- Modify setpoint temperature
-- Adjust alarm thresholds (high/low delta)
-- Change defrost schedule
-- Modify compressor hysteresis
-- Auto-logout after 2 minutes idle
-
----
-
-### 🔴 SUPERADMIN (Full Administrative Access)
-
-| Property | Value |
-|----------|-------|
-| **Username** | `superadmin` |
-| **Password** | `P@lli5ter` |
-| **Role** | Super Administrator |
-| **Session Timeout** | 2 minutes of inactivity |
-| **Access** | All features including system administration |
-
-**Login Steps:**
-1. Enter username: `superadmin`
-2. Enter password: `P@lli5ter`
-3. Click Login
-
-**Features Available:**
-- All ADMIN capabilities
-- System Administration panel:
-  - Backup/restore system settings
-  - Delete/download logs
-  - WiFi configuration
-  - Hardware settings
-- **👥 User Management:**
-  - View all users and their roles
-  - Change passwords for admin/superadmin accounts
-  - Only SuperAdmin can perform this operation
-
----
-
-## Session Management
-
-### Inactivity Timeout (Non-Guest Users)
-
-**Timeout Duration:** 2 minutes (120 seconds)
-
-**Activity Tracking:**
-- Mouse movement
-- Keyboard input
-- Mouse clicks
-- Page scrolling
-- Touch events (mobile)
+**Activity tracking:** mouse movement, keyboard input, mouse clicks, page scrolling, touch
+events (mobile). Any of these resets the timer.
 
 **Behavior:**
-1. User logs in as admin/superadmin
-2. Timer starts counting down from 2:00
-3. Any activity resets the timer back to 2:00
-4. If timer reaches 0:00:
-   - Warning alert displays: "Session expired due to inactivity. Logging out..."
-   - Dashboard automatically logs out after 2 seconds
-   - Login modal reappears
 
-**Display:**
-- Real-time countdown shown in header: ⏱️ Logout in 1:45
-- Yellow warning color indicates inactivity timer
-- Updates every second
-- Only visible for authenticated non-guest users
+1. User logs in and is elevated to operator.
+2. Timer starts counting down from 2:00, shown in the header as `⏱️ Logout in 1:45`.
+3. Any tracked activity resets the timer back to 2:00.
+4. If the timer reaches 0:00, a warning alert appears ("Session expired due to inactivity.
+   Logging out...") and the dashboard automatically logs out (returns to guest) after 2 seconds.
 
-### Session Persistence
+Guest sessions are exempt — there is nothing to time out, since guest has no elevated access to
+begin with.
 
-User sessions are **automatically saved** in browser localStorage:
-- `authUser` — Logged-in username
-- `authToken` — Session token
-- `authRole` — User's role
+## Security Model — Read This Before Assuming Anything Is Enforced
 
-**On Page Reload:**
-1. Dashboard checks localStorage for saved session
-2. If valid session found: User stays logged in (no login required)
-3. If session expired or invalid: Login modal appears
+- All permission checks (`currentRole !== 'operator'`) run in the browser. They gate what the
+  *dashboard UI* shows/does, not what the *device* will accept. Anyone who has the device's
+  HTTP Basic Auth credential (or who can reach an endpoint the device doesn't itself gate) has
+  full control regardless of this dashboard.
+- The login step now at least verifies the entered credential against the live device before
+  elevating (a real `GET /api/states` call with the entered `Authorization` header must return
+  `200`), so the dashboard can no longer be tricked into showing "Operator" for a wrong password.
+  It still cannot restrict what a *correct* password is allowed to do beyond hiding UI sections.
+- Not suitable for a deployment where the network between browser and device isn't already
+  trusted. This project treats that trust boundary as the LAN/VPN perimeter (see the main
+  `README.md` site-to-site VPN section), not the dashboard's login screen.
 
-**Manual Logout:**
-- Click the red **🚪 Logout** button (always visible in header)
-- Clears localStorage
-- Removes activity listeners
-- Displays login modal
+### If real server-side authorization is ever needed
 
----
-
-## Password Management
-
-### Default Passwords
-
-```
-👤 guest    — No password (leave empty)
-🔑 admin    — P@lli5ter
-🔴 superadmin — P@lli5ter
-```
-
-### Changing Passwords
-
-**Only SuperAdmin users can change passwords.**
-
-**Steps:**
-1. Login as superadmin
-2. Scroll to "System Administration" section
-3. Click "👥 Manage Users" button
-4. In the "Change User Password" section:
-   - Select user from dropdown (admin or superadmin)
-   - Enter new password
-   - Click "Update Password"
-5. Password is updated immediately
-6. Close modal
-
-**Password Change Effects:**
-- New password takes effect immediately
-- Saved to browser localStorage (in production, save to device)
-- Other users with that account must use new password on next login
-- SuperAdmin can change their own password
-
----
-
-## Login Modal
-
-### Display
-
-The login modal appears when:
-- Page first loads (no saved session)
-- User clicks "Logout" button
-- Session expires due to inactivity
-- User's session token is invalid
-
-### Fields
-
-| Field | Description |
-|-------|-------------|
-| **Username** | Required. Enter: `guest`, `admin`, or `superadmin` |
-| **Password** | Required for admin/superadmin. Empty for guest. |
-
-### Demo Users Box
-
-Always visible in login modal for quick reference:
-```
-Demo Users:
-👤 guest (no password)
-🔑 admin / P@lli5ter
-🔴 superadmin / P@lli5ter
-```
-
----
-
-## Security Architecture
-
-### Current Implementation (Phase 12b)
-
-✅ **Client-Side Features:**
-- Password verification in JavaScript
-- Role-based access control
-- UI show/hide based on permissions
-- Button enable/disable based on role
-- Session token generation
-- Activity tracking
-
-✅ **Browser Storage:**
-- localStorage for session persistence
-- localStorage for user database (for demo)
-- Token-based session validation
-
-⚠️ **Limitations (Important):**
-- Passwords stored in browser (not cryptographically secure)
-- Client-side validation only (no server verification)
-- Session tokens are simple base64-encoded strings
-- Not suitable for production high-security deployments
-
-### Future Enhancement Recommendations
-
-**Phase 13 should implement:**
-
-1. **Server-Side Authentication:**
-   - Move user database to device firmware/EEPROM
-   - Implement proper password hashing (bcrypt/argon2)
-   - Generate JWT tokens on device
-   - Validate tokens server-side
-
-2. **HTTPS/TLS:**
-   - Encrypt all authentication traffic
-   - Protect passwords in transit
-
-3. **Audit Logging:**
-   - Log all login/logout events
-   - Track password changes
-   - Monitor failed login attempts
-
-4. **Advanced Features:**
-   - Rate limiting on failed logins
-   - Account lockout after N failed attempts
-   - Session invalidation on logout
-   - Concurrent session management
-   - Multi-factor authentication (MFA)
-
----
-
-## Activity Diagram
-
-```
-┌─────────────────────────────────────────────┐
-│ User Opens Dashboard                        │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │ Session in Storage?  │
-        └──────────┬───────────┘
-              YES │    NO
-                  │     │
-                  ▼     ▼
-           ┌─────────┐  ┌──────────┐
-           │ Restore │  │ Show     │
-           │ Session │  │ Login    │
-           └────┬────┘  │ Modal    │
-                │       └─────┬────┘
-                │             │
-                ▼             ▼
-        ┌─────────────────────────┐
-        │ User Authenticated ✓    │
-        └────┬────────────────────┘
-             │
-             ├─ GUEST?
-             │  └─ No timeout, no countdown
-             │
-             ├─ ADMIN/SUPERADMIN?
-             │  ├─ Start 2-min inactivity timer
-             │  ├─ Display countdown in header
-             │  ├─ Listen for activity events
-             │  │
-             │  ├─ Activity Detected?
-             │  │  └─ Reset timer to 2:00
-             │  │
-             │  └─ Timer Reaches 0:00?
-             │     └─ Auto-logout
-             │
-             └─ Show Dashboard
-```
-
----
+ESPHome's `web_server` component would need to grow multi-account/role support, or a proxy would
+need to sit in front of it, before "admin" vs "operator" vs anything else could be a real
+distinction. Until then, don't reintroduce role tiers in the dashboard that imply enforcement
+that doesn't exist — it's actively misleading (this is exactly what went wrong before: a fake
+"superadmin" tier existed for over a year with a hardcoded password that turned out to match the
+real device credential, and was committed to git).
 
 ## Browser Compatibility
 
@@ -304,110 +76,32 @@ Demo Users:
 | Edge | ✅ | Full support |
 | Mobile browsers | ✅ | Touch events tracked |
 
-**Requirements:**
-- JavaScript enabled
-- localStorage enabled
-- Cookies enabled (optional)
-
----
+**Requirements:** JavaScript enabled. No localStorage/cookie dependency.
 
 ## Troubleshooting
 
-### Problem: Stuck on login screen after logout
+### Login rejected
 
-**Solution:**
-1. Check browser console (F12) for errors
-2. Verify localStorage is enabled
-3. Try clearing localStorage: `localStorage.clear()` in console
-4. Refresh page
+See `RBAC_USER_GUIDE.md` → Troubleshooting. This is almost always either a wrong
+username/password or the device being unreachable from the browser.
 
-### Problem: Timer not counting down
+### Timer not counting down
 
-**Solution:**
-1. Verify you're logged in as admin/superadmin (not guest)
-2. Try moving mouse or clicking to trigger activity event
-3. Check browser console for JavaScript errors
-4. Refresh and login again
+1. Confirm the role badge shows `Operator`, not `Guest` — guests don't get a timer.
+2. Move the mouse or click to trigger an activity event.
+3. Check the browser console for JavaScript errors.
 
-### Problem: Auto-logout happens too quickly
+### Logged out unexpectedly
 
-**Solution:**
-1. Verify no events are being triggered inadvertently
-2. Check that mouse/keyboard are working
-3. Increase timeout in code if needed (edit: `const SESSION_TIMEOUT = 2 * 60 * 1000`)
-
-### Problem: Session doesn't persist on page reload
-
-**Solution:**
-1. Verify localStorage is enabled in browser
-2. Check Privacy/Incognito mode (disables localStorage)
-3. Check browser storage limits
-4. Try a different browser
-
-### Problem: Password change not working
-
-**Solution:**
-1. Verify you're logged in as superadmin
-2. Select a user from dropdown (not "Select user...")
-3. Enter new password (not empty)
-4. Check browser console for errors
-5. Try clearing localStorage and logging in again
-
----
-
-## API Integration (Phase 13+)
-
-Once server-side API is implemented, update these endpoints:
-
-```javascript
-// Current (client-side only):
-POST /login
-  Request: { username, password }
-  Response: { token, role }
-
-// Future (server-side validation):
-POST /api/auth/login
-  Request: { username, password }
-  Response: { token, expiresIn, role }
-
-POST /api/auth/logout
-  Request: { token }
-  Response: { status }
-
-POST /api/auth/refresh-token
-  Request: { token }
-  Response: { newToken, expiresIn }
-
-PUT /api/admin/users/:username/password
-  Request: { newPassword }
-  Response: { status }
-  (SuperAdmin-only endpoint)
-```
-
----
-
-## Files Modified
-
-- `assets/dashboard.html` — Complete authentication system + user UI
-- `esp32-p4-coolroom.yaml` — No changes (external auth system)
-
-## Build Impact
-
-- **Firmware Size:** No change (external HTML auth)
-- **RAM Usage:** 19.3% (unchanged)
-- **Flash Usage:** 20.0% (unchanged)
-- **Lines of Code:** +500 (JavaScript/HTML auth logic)
-
----
+- Expected after 2 minutes of no mouse/keyboard/touch activity.
+- Also expected on page reload — sessions are not persisted, log in again.
 
 ## Related Documentation
 
-- `reference/RBAC_USER_GUIDE.md` — Role-based access control details
-- `HANDOVER_NOTES_2026-07-18.md` — Phase 12 implementation overview
-- `esp32-p4-coolroom.yaml` — YAML configuration (unchanged)
+- `reference/RBAC_USER_GUIDE.md` — login flow and guest/operator access levels.
+- `assets/dashboard.html` — implementation.
 
 ---
 
-**Last Updated:** 2026-07-18  
-**Phase:** 12b (Authentication & Session Management)  
-**Status:** Complete — Ready for deployment
+**Last reviewed:** 2026-07-24 — rewritten to remove the stale three-tier auth description and
+the hardcoded demo password that had leaked the real device credential.

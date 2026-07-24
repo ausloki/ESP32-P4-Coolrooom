@@ -167,7 +167,7 @@
     </div>
 
     <section id="settingsSection" class="section restricted">
-      <h2>⚙️ Operational Settings (ADMIN+)</h2>
+      <h2>⚙️ Operational Settings (OPERATOR)</h2>
       <div class="form-row">
         <div class="field"><label>Setpoint</label><input type="number" value="2.0" /></div>
         <div class="field"><label>High Alarm Delta</label><input type="number" value="3.0" /></div>
@@ -186,7 +186,7 @@
     </section>
 
     <section id="adminSection" class="section restricted">
-      <h2>🔐 System Administration (SUPERADMIN)</h2>
+      <h2>🔐 System Administration (OPERATOR)</h2>
       <div style="display:flex; flex-wrap:wrap; gap:8px;">
         <button class="btn danger">📦 Backup</button>
         <button class="btn danger">📥 Restore</button>
@@ -208,7 +208,7 @@
       <p>Dashboard starts in guest mode by default. Login is only for elevation.</p>
       <div class="field" style="margin-bottom:8px;">
         <label>Username</label>
-        <input id="username" type="text" placeholder="admin or superadmin" />
+        <input id="username" type="text" placeholder="operator" />
       </div>
       <div class="field">
         <label>Password</label>
@@ -219,17 +219,18 @@
         <button class="btn secondary" onclick="closeLogin()">Cancel</button>
       </div>
       <div class="help">
-        Demo credentials:<br>
-        admin / P@lli5ter<br>
-        superadmin / P@lli5ter
+        Preview-only demo credential (not a real device password):<br>
+        operator / preview-only
       </div>
     </div>
   </div>
 
   <script>
+    // This is a static, offline UI mock — it never talks to a real device, so this
+    // "password" is a preview-only placeholder and must never be set to a value
+    // that matches a real secrets.yaml credential.
     const USERS = {
-      admin: { role: 'admin', password: 'P@lli5ter' },
-      superadmin: { role: 'superadmin', password: 'P@lli5ter' }
+      operator: { role: 'operator', password: 'preview-only' }
     };
 
     let role = 'guest';
@@ -242,7 +243,7 @@
       const settings = document.getElementById('settingsSection');
       const admin = document.getElementById('adminSection');
 
-      roleBadge.textContent = role === 'guest' ? 'Guest' : role === 'admin' ? 'Administrator' : 'Super Administrator';
+      roleBadge.textContent = role === 'guest' ? 'Guest' : 'Operator';
 
       if (role === 'guest') {
         roleBadge.style.background = '#f59e0b';
@@ -250,14 +251,8 @@
         logoutBtn.style.display = 'none';
         settings.classList.add('restricted');
         admin.classList.add('restricted');
-      } else if (role === 'admin') {
-        roleBadge.style.background = '#22c55e';
-        loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'inline-block';
-        settings.classList.remove('restricted');
-        admin.classList.add('restricted');
       } else {
-        roleBadge.style.background = '#d4af37';
+        roleBadge.style.background = '#22c55e';
         loginBtn.style.display = 'none';
         logoutBtn.style.display = 'inline-block';
         settings.classList.remove('restricted');
@@ -280,7 +275,7 @@
       const password = document.getElementById('password').value;
 
       if (!username || !USERS[username]) {
-        alert('Use admin or superadmin credentials to elevate.');
+        alert('Use the operator credential to elevate.');
         return;
       }
       if (USERS[username].password !== password) {

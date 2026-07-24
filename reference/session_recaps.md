@@ -1050,3 +1050,57 @@ curl -u username:password http://192.168.x.x/api/states
 **Commit**: Phase 11 complete (REST API documentation + interactive dashboard)
 
 ---
+
+## 2026-07-24 — Security Fix: Leaked Dashboard Credential + RBAC Model Cleanup
+
+**Trigger**: A general project evaluation surfaced that `assets/dashboard.html` (and
+`assets/dashboard_virtual_preview.html`) hardcoded the real device password (`P@lli5ter`) in
+plaintext client-side JavaScript as the "admin"/"superadmin" demo login, committed to git since
+Phase 12 (`517f167`). That value was byte-for-byte identical to the actual
+`web_server_password`/`ota_password` in `secrets.yaml` — anyone who viewed the dashboard's page
+source had the real device/OTA credential. Separately, the three-tier guest/admin/superadmin
+model was never backed by anything server-side: ESPHome's `web_server.auth` supports exactly one
+username/password pair, so the tier distinction and the `web_admin_users` role-mapping comment in
+`esp32-p4-coolroom.yaml` described a feature that was never implemented.
+
+**What changed**:
+
+- Rotated `ota_password` and `web_server_password` in `secrets.yaml` (git-ignored, not committed)
+  to new random values. **Device must be reflashed for the new OTA/web password to take effect.**
+- Reworked `assets/dashboard.html`: removed the hardcoded `USER_DATABASE`; login now verifies the
+  entered credential against the live device (`GET /api/states` with `Authorization: Basic`
+  header, checked for `200` vs `401`) instead of a value stored in the page. Collapsed the fake
+  three-tier model to the two that actually exist: **guest** (default, read-only) and **operator**
+  (the one real device credential). Removed the "User Management" panel, which changed
+  "passwords" only in `localStorage` and never touched the device — it implied a capability that
+  didn't exist.
+- Fixed `assets/dashboard_virtual_preview.html` (offline static mock, added same day as the RBAC
+  cleanup) — it had the same real password as its "demo" login; replaced with an explicit
+  preview-only placeholder value and the same two-tier model.
+- Rewrote `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md` to describe the
+  real two-tier, UI-only-visibility model and explicitly warn that section hiding is not a real
+  access boundary — anyone with the device credential has full control regardless of what the
+  dashboard shows them.
+- Removed the misleading `web_admin_users` role-mapping comment block from
+  `esp32-p4-coolroom.yaml`'s `web_server:` section; replaced with an accurate note pointing at
+  `RBAC_USER_GUIDE.md`.
+- Repo-wide grep confirmed no remaining references to the leaked password string in any tracked
+  file.
+
+**Build**: RAM 19.5% (112,176 / 576,464 B), Flash 20.3% (1,491,976 / 7,340,032 B — about 1.49 MB
+of the 7 MB OTA slot). No firmware behavior change — the `web_server:` edit was comment-only.
+
+**Next steps**:
+
+- Reflash the device (`esphome upload`) so the rotated `ota_password`/`web_server_password` take
+  effect — until then the device still expects the old (now-public-in-history) password.
+- Consider whether the leaked password should also be scrubbed from git history
+  (`git filter-repo`/BFG); rotation matters more than history scrubbing but both were flagged.
+- If real server-side authorization is ever wanted, it requires either ESPHome gaining
+  multi-account/role support or a proxy in front of `web_server` — don't reintroduce fake role
+  tiers in the dashboard in the meantime.
+
+**Commit**: Security fix — leaked dashboard credential rotated, RBAC docs/UI aligned with actual
+(UI-only, two-tier) implementation.
+
+---

@@ -1,5 +1,19 @@
 # Progress Tracking
 
+## 2026-07-24 Security Fix
+
+- Found and fixed a leaked credential: `assets/dashboard.html` (and the same-day
+  `assets/dashboard_virtual_preview.html`) hardcoded the real device password as its
+  "admin"/"superadmin" demo login, committed to git since Phase 12. Rotated
+  `ota_password`/`web_server_password` in `secrets.yaml`; device reflash still pending to apply
+  the new credentials on hardware.
+- Collapsed the fake three-tier guest/admin/superadmin dashboard model (never backed by any
+  server-side role support) to the real two tiers: guest and operator, with login now verified
+  against the live device instead of a hardcoded value.
+- Rewrote `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md` to match.
+- Build re-verified after cleanup: RAM 19.5%, Flash 20.3%. See
+  `reference/session_recaps.md` (2026-07-24 entry) for full detail.
+
 ## Phase Completion Status
 
 | Phase | Description | Status | Completion Date | Build Test | Device Test |
