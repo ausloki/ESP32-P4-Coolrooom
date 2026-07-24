@@ -5,8 +5,8 @@
 - Found and fixed a leaked credential: `assets/dashboard.html` (and the same-day
   `assets/dashboard_virtual_preview.html`) hardcoded the real device password as its
   "admin"/"superadmin" demo login, committed to git since Phase 12. Rotated
-  `ota_password`/`web_server_password` in `secrets.yaml`; device reflash still pending to apply
-  the new credentials on hardware.
+  `ota_password`/`web_server_password` in `secrets.yaml`; device reflash to apply the new
+  credentials on hardware is **blocked — the ESP32-P4 board is not currently connected**.
 - Collapsed the fake three-tier guest/admin/superadmin dashboard model (never backed by any
   server-side role support) to the real two tiers: guest and operator, with login now verified
   against the live device instead of a hardcoded value.

@@ -1066,7 +1066,9 @@ username/password pair, so the tier distinction and the `web_admin_users` role-m
 **What changed**:
 
 - Rotated `ota_password` and `web_server_password` in `secrets.yaml` (git-ignored, not committed)
-  to new random values. **Device must be reflashed for the new OTA/web password to take effect.**
+  to new random values. **Device must be reflashed for the new OTA/web password to take effect —
+  blocked this session because the ESP32-P4 board is not currently connected (no USB/OTA path
+  available).**
 - Reworked `assets/dashboard.html`: removed the hardcoded `USER_DATABASE`; login now verifies the
   entered credential against the live device (`GET /api/states` with `Authorization: Basic`
   header, checked for `200` vs `401`) instead of a value stored in the page. Collapsed the fake
@@ -1093,7 +1095,9 @@ of the 7 MB OTA slot). No firmware behavior change — the `web_server:` edit wa
 **Next steps**:
 
 - Reflash the device (`esphome upload`) so the rotated `ota_password`/`web_server_password` take
-  effect — until then the device still expects the old (now-public-in-history) password.
+  effect — until then the device still expects the old (now-public-in-history) password. This is
+  **blocked on hardware availability**, not a decision or oversight — do it first next session
+  once the board is connected.
 - Consider whether the leaked password should also be scrubbed from git history
   (`git filter-repo`/BFG); rotation matters more than history scrubbing but both were flagged.
 - If real server-side authorization is ever wanted, it requires either ESPHome gaining

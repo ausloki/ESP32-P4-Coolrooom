@@ -45,6 +45,9 @@ Warning level: only generic ESP-IDF experimental-features warning remains
 1. **Reflash the physical device** (`esphome upload`) so the rotated OTA/web credentials take
    effect — this is the one item from this session that cannot be closed out from the repo
    alone. Until reflashed, the device still expects the old (now-public-in-history) password.
+   **Blocked on hardware**: the ESP32-P4 board is not currently connected this session (no
+   USB/OTA path available) — do this first thing next time the board is on hand, before any
+   other hardware-gated work.
 2. Consider whether the leaked password should also be scrubbed from git history
    (`git filter-repo`/BFG) — rotation matters more, but history scrubbing was flagged as an
    option.
@@ -57,7 +60,8 @@ Warning level: only generic ESP-IDF experimental-features warning remains
 2. Hardware validation is still required for the offline-safe and SD-card changes on this
    ESP32-P4 board (no-reboot-on-WiFi-loss, SD write behavior, ntfy reconnect behavior).
 3. RTC identity (0x51 vs 0x68) still needs confirmation via I2C scan or chip marking inspection.
-4. Device reflash for the rotated credentials (see Immediate Next Actions #1) is outstanding.
+4. Device reflash for the rotated credentials (see Immediate Next Actions #1) is outstanding and
+   blocked — hardware is not currently connected.
 5. If real server-side dashboard authorization is ever wanted, it requires either ESPHome
    gaining multi-account/role support or a proxy in front of `web_server` — don't reintroduce
    fake role tiers in the dashboard in the meantime.
@@ -72,5 +76,5 @@ Warning level: only generic ESP-IDF experimental-features warning remains
 
 ---
 
-**Ready for:** Device reflash to apply rotated credentials, then Phase 5 hardware validation on
-the ESP32-P4 target.
+**Ready for:** Device reflash to apply rotated credentials (blocked — hardware not connected this
+session), then Phase 5 hardware validation on the ESP32-P4 target.

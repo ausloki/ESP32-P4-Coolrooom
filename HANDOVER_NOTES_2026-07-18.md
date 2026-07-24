@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-24  
-**Status**: In Progress — security fix session captured at `3b4ab80`; device reflash pending to apply rotated credentials  
+**Status**: In Progress — security fix session captured at `3b4ab80`; device reflash blocked, hardware not currently connected  
 **Last Commit**: `3b4ab80` (feat(rbac): guest-first elevation and guide cleanup)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
@@ -14,7 +14,7 @@
 
 - A project evaluation found that `assets/dashboard.html` and `assets/dashboard_virtual_preview.html` hardcoded the real device password (`P@lli5ter`) in plaintext client-side JavaScript as the "admin"/"superadmin" demo login — committed to git since Phase 12, and byte-for-byte identical to the actual `web_server_password`/`ota_password` in `secrets.yaml`.
 - Rotated `ota_password` and `web_server_password` in `secrets.yaml` (git-ignored) to new random values.
-- **Action required before this is fully closed out: reflash the device** (`esphome upload`) so the rotated OTA/web credentials take effect — the device currently still expects the old password.
+- **Action required before this is fully closed out: reflash the device** (`esphome upload`) so the rotated OTA/web credentials take effect — the device currently still expects the old password. **Blocked**: the ESP32-P4 board is not currently connected (no USB/OTA path available this session) — reflash must happen next time hardware is on hand.
 - Reworked `assets/dashboard.html` login to verify the entered credential against the live device (`GET /api/states` with `Authorization: Basic`, checked for `200` vs `401`) instead of a hardcoded value. Collapsed the three-tier guest/admin/superadmin model — which was never backed by anything server-side, since ESPHome's `web_server.auth` supports only one username/password pair — to the two tiers that actually exist: guest (default, read-only) and operator (the one real device credential).
 - Removed the dashboard's "User Management" panel; it changed "passwords" only in `localStorage` and never touched the device.
 - Fixed the same leaked-password issue in `assets/dashboard_virtual_preview.html` (offline static mock); replaced with an explicit preview-only placeholder credential.
