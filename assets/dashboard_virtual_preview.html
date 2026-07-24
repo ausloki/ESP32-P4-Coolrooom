@@ -70,7 +70,9 @@
 
     /* Central horseshoe gauge — identical geometry/colors/formula to assets/dashboard.html,
        which in turn mirrors the LVGL touchscreen's home_temp_arc/home_setpoint_arc/
-       home_ambient_arc. This preview uses fixed mock readings (no live device). */
+       home_ambient_arc. Panel layout also mirrors the LVGL home screen: icon rail on
+       the left, gauge centered, Wi-Fi/uptime in the top-right corner. This preview uses
+       fixed mock readings (no live device). */
     .gauge-section {
       background: #1C1C1E;
       border: 1px solid rgba(255,255,255,0.06);
@@ -80,7 +82,35 @@
       margin-bottom: 14px;
     }
     .gauge-title { color: rgba(255,255,255,0.82); font-size: 15px; font-weight: 600; margin-bottom: 14px; }
-    .gauge-wrap { position: relative; width: min(320px, 78vw); margin: 0 auto; }
+    .gauge-panel {
+      position: relative;
+      display: grid;
+      grid-template-columns: 40px 1fr 40px;
+      align-items: center;
+      gap: 10px;
+    }
+    .gauge-icons { grid-column: 1; display: flex; flex-direction: column; gap: 12px; }
+    .gauge-icon-chip {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      border: none;
+      padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+      background: rgba(255,255,255,0.07);
+      color: inherit;
+      font-family: inherit;
+    }
+    .gauge-icon-chip.clickable { cursor: pointer; transition: background 0.15s; }
+    .gauge-icon-chip.clickable:hover:not(:disabled) { background: rgba(255,255,255,0.14); }
+    .gauge-icon-chip.is-on { background: rgba(48,209,88,0.22); }
+    .gauge-icon-chip.is-warn { background: rgba(255,159,10,0.24); }
+    .gauge-icon-chip.is-alert { background: rgba(255,69,58,0.22); }
+    .gauge-icon-chip:disabled { background: rgba(255,255,255,0.05); cursor: not-allowed; opacity: 0.5; }
+    .gauge-info { position: absolute; top: 0; right: 0; text-align: right; }
+    .gauge-info-line { font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.6); white-space: nowrap; }
+    .gauge-info-line + .gauge-info-line { margin-top: 4px; }
+    .gauge-wrap { grid-column: 2; position: relative; width: min(300px, 72vw); margin: 0 auto; }
     .gauge-wrap svg { width: 100%; height: auto; display: block; }
     .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
     .gauge-arc { fill: none; stroke-linecap: round; }
@@ -98,37 +128,13 @@
     }
     .gauge-legend span { display: flex; align-items: center; gap: 6px; }
     .gauge-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-
-    /* Tile cards — mirrors Home Assistant's Tile card: rounded-square icon chip
-       + stacked name/state. */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
+    @media (max-width: 440px) {
+      .gauge-panel { grid-template-columns: 1fr; }
+      .gauge-icons { grid-column: 1; flex-direction: row; justify-content: center; }
+      .gauge-wrap { grid-column: 1; }
+      .gauge-info { position: static; text-align: center; margin-top: 10px; }
+      .gauge-info-line + .gauge-info-line { margin-top: 2px; }
     }
-    .tile-card {
-      background: var(--card-bg);
-      border: var(--card-border);
-      border-radius: var(--card-radius);
-      box-shadow: var(--card-shadow);
-      padding: 12px 14px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .tile-icon {
-      width: 40px; height: 40px; flex-shrink: 0;
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 19px;
-      background: var(--accent-soft);
-      color: var(--accent);
-    }
-    .tile-icon.is-on { background: rgba(48,209,88,0.16); color: #1f9d4c; }
-    .tile-icon.is-warn { background: rgba(255,159,10,0.18); color: #b8660a; }
-    .tile-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-    .tile-value { font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
 
     .section {
       background: var(--card-bg);
@@ -220,48 +226,37 @@
 
     <div class="gauge-section">
       <h2 class="gauge-title">Coolroom Status</h2>
-      <div class="gauge-wrap">
-        <svg viewBox="0 0 300 300">
-          <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
-          <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
-          <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
-          <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
-          <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
-          <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
-        </svg>
-        <div class="gauge-center">
-          <div class="gauge-temp" id="gaugeTemp">3.8°C</div>
-          <div class="gauge-setpoint" id="gaugeSetpoint">Set: 2.0°C</div>
-          <div class="gauge-status" id="gaugeStatus">Running</div>
+      <div class="gauge-panel">
+        <div class="gauge-icons">
+          <div class="gauge-icon-chip is-on" title="Compressor">❄️</div>
+          <div class="gauge-icon-chip" title="Defrost">🔥</div>
+          <button class="gauge-icon-chip clickable" id="iconLight" title="Toggle light (login required)" onclick="toggleLight()">💡</button>
+          <div class="gauge-icon-chip" title="No active alarms">🔔</div>
+        </div>
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 300 300">
+            <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
+            <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
+            <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
+            <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
+            <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
+            <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
+          </svg>
+          <div class="gauge-center">
+            <div class="gauge-temp" id="gaugeTemp">3.8°C</div>
+            <div class="gauge-setpoint" id="gaugeSetpoint">Set: 2.0°C</div>
+            <div class="gauge-status" id="gaugeStatus">Running</div>
+          </div>
+        </div>
+        <div class="gauge-info">
+          <div class="gauge-info-line">📶 -61 dBm</div>
+          <div class="gauge-info-line">⏱ 2d 7h</div>
         </div>
       </div>
       <div class="gauge-legend">
         <span><i style="background:#0A84FF;"></i> Coolroom</span>
         <span><i style="background:#00BCD4;"></i> Setpoint</span>
         <span><i style="background:#FF1493;"></i> Ambient</span>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div class="tile-card">
-        <div class="tile-icon is-on">🌀</div>
-        <div><div class="tile-label">Compressor</div><div class="tile-value">Running</div></div>
-      </div>
-      <div class="tile-card">
-        <div class="tile-icon">🔥</div>
-        <div><div class="tile-label">Defrost</div><div class="tile-value">Idle</div></div>
-      </div>
-      <div class="tile-card">
-        <div class="tile-icon is-on">🔔</div>
-        <div><div class="tile-label">Alarms</div><div class="tile-value">Clear</div></div>
-      </div>
-      <div class="tile-card">
-        <div class="tile-icon">📶</div>
-        <div><div class="tile-label">Wi-Fi</div><div class="tile-value">-61 dBm · CoolroomLAN</div></div>
-      </div>
-      <div class="tile-card">
-        <div class="tile-icon">⏱️</div>
-        <div><div class="tile-label">Uptime</div><div class="tile-value">2d 7h</div></div>
       </div>
     </div>
 
@@ -279,8 +274,8 @@
         <div class="field"><label>Compressor Hysteresis</label><input type="number" value="1.0" disabled /></div>
       </div>
       <div style="margin-top:10px; display:flex; gap:8px;">
-        <button class="btn" id="btnUpdateSetpoint" disabled>Update Setpoint</button>
-        <button class="btn" id="btnUpdateAlarms" disabled>Update Alarms</button>
+        <button class="btn" disabled>Update Setpoint</button>
+        <button class="btn" disabled>Update Alarms</button>
       </div>
     </section>
 
@@ -305,11 +300,10 @@
     </section>
 
     <div class="note">
-      This virtual page simulates the real dashboard's layout with fixed mock readings: guest-first
-      default, login for elevation, and the same central horseshoe gauge as
-      <code>assets/dashboard.html</code> / the LVGL touchscreen. Settings/admin stay visible at all
-      times — logging in only enables the controls, it doesn't reveal a hidden section. Never talks
-      to a real device.
+      This virtual page simulates the real dashboard's layout with fixed mock readings: the LVGL
+      touchscreen's icon rail (❄️🔥💡🔔), central horseshoe gauge, and top-right Wi-Fi/uptime
+      readout, plus login for elevation. Settings/admin stay visible at all times — logging in
+      only enables the controls, it doesn't reveal a hidden section. Never talks to a real device.
     </div>
   </div>
 
@@ -367,6 +361,15 @@
       const enabled = role !== 'guest';
       setSectionInteractive('settingsSection', 'settingsLockChip', enabled);
       setSectionInteractive('adminSection', 'adminLockChip', enabled);
+      document.getElementById('iconLight').disabled = !enabled;
+    }
+
+    function toggleLight() {
+      if (role !== 'operator') {
+        alert('Login required to toggle the light (this preview does not actually switch anything).');
+        return;
+      }
+      document.getElementById('iconLight').classList.toggle('is-warn');
     }
 
     function openLogin() {

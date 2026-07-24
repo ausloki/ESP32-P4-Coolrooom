@@ -29,6 +29,13 @@
   admin sections always visible now, guest gets disabled controls instead. No functional access
   change (per-handler role checks remain the real gate). Preview file and Artifact synced.
 
+## 2026-07-24 Gauge Panel Icon Rail
+
+- `assets/dashboard.html` gauge card now has a left icon rail (compressor/defrost/light/alarm,
+  same set/order as LVGL's left sidebar) and top-right Wi-Fi/uptime, replacing the separate tile
+  row entirely. Light toggle is a real `/switch/relay_light/toggle` call, gated to operator.
+  Alarm stays display-only (no exposed reset endpoint in firmware). Preview + Artifact synced.
+
 ## Phase Completion Status
 
 | Phase | Description | Status | Completion Date | Build Test | Device Test |

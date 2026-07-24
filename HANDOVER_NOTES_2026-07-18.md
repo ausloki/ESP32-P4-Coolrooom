@@ -10,6 +10,21 @@
 
 ---
 
+## 2026-07-24 Addendum — Gauge Panel Matches LVGL Icon Rail + Secondary Readings
+
+- `assets/dashboard.html`: moved compressor/defrost/light/alarm icons off the tile row and onto
+  the gauge card as a left icon rail (same set/order as the LVGL left sidebar: ❄️🔥💡🔔). WiFi and
+  uptime moved to a top-right corner readout on the gauge panel, matching the LVGL screen's
+  secondary-readings position. Removed the metrics-grid tile row entirely.
+- Light icon (💡) is a real control: POSTs to `/switch/relay_light/toggle` (ESPHome web_server's
+  standard switch-toggle endpoint), gated to operator login. Alarm icon (🔔) stays display-only —
+  LVGL's alarm reset is a raw lambda flipping in-firmware globals with no exposed entity/service,
+  so there's no endpoint for the web dashboard to call.
+- Synced `assets/dashboard_virtual_preview.html`, republished same Artifact URL.
+- No firmware change.
+
+---
+
 ## 2026-07-24 Addendum — Lovelace-Style Tile Cards, Restricted-Section Overlay Removed
 
 - `assets/dashboard.html` reworked to read as Home Assistant Lovelace cards: CSS custom-property

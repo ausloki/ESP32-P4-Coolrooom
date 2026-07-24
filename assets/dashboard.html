@@ -156,46 +156,6 @@
         header .role-badge.guest { background: #FF9800; }
         header .timestamp { font-size: 12px; opacity: 0.8; }
 
-        /* Tile cards — modeled on Home Assistant's Tile card: a rounded-square
-           icon chip at left, entity name + state stacked at right. State color
-           lives on the icon chip (grey = idle/default, green = on/ok,
-           orange = active/attention, red = alert), the same convention HA uses
-           for binary_sensor/climate/problem tiles. */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-        .tile-card {
-            background: var(--card-bg);
-            border: var(--card-border);
-            border-radius: var(--card-radius);
-            box-shadow: var(--card-shadow);
-            padding: 12px 14px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .tile-icon {
-            width: 40px;
-            height: 40px;
-            flex-shrink: 0;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 19px;
-            background: var(--accent-soft);
-            color: var(--accent);
-        }
-        .tile-icon.is-on { background: rgba(48, 209, 88, 0.16); color: #1f9d4c; }
-        .tile-icon.is-warn { background: rgba(255, 159, 10, 0.18); color: #b8660a; }
-        .tile-icon.is-alert { background: rgba(255, 69, 58, 0.16); color: #d92c22; }
-        .tile-body { min-width: 0; }
-        .tile-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-        .tile-value { font-size: 13px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
         .status-badge {
             display: inline-block;
             padding: 3px 10px;
@@ -345,10 +305,74 @@
             font-weight: 600;
             margin-bottom: 14px;
         }
-        .gauge-wrap {
+
+        /* Panel layout mirrors the LVGL home screen: icon rail on the left
+           (compressor / defrost / light / alarm — same set and order as the
+           touchscreen's left sidebar), the arc gauge centered, and Wi-Fi/uptime
+           tucked in the top-right corner where the LVGL screen puts its
+           secondary readings. */
+        .gauge-panel {
             position: relative;
-            width: min(340px, 80vw);
+            display: grid;
+            grid-template-columns: 40px 1fr 40px;
+            align-items: center;
+            gap: 10px;
+        }
+        .gauge-icons {
+            grid-column: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .gauge-icon-chip {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: none;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            background: rgba(255, 255, 255, 0.07);
+            color: inherit;
+            font-family: inherit;
+        }
+        .gauge-icon-chip.clickable { cursor: pointer; transition: background 0.15s; }
+        .gauge-icon-chip.clickable:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+        .gauge-icon-chip.is-on { background: rgba(48, 209, 88, 0.22); }
+        .gauge-icon-chip.is-warn { background: rgba(255, 159, 10, 0.24); }
+        .gauge-icon-chip.is-alert { background: rgba(255, 69, 58, 0.22); }
+        .gauge-icon-chip:disabled {
+            background: rgba(255, 255, 255, 0.05);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .gauge-info {
+            position: absolute;
+            top: 0;
+            right: 0;
+            text-align: right;
+        }
+        .gauge-info-line {
+            font-size: 11px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.6);
+            white-space: nowrap;
+        }
+        .gauge-info-line + .gauge-info-line { margin-top: 4px; }
+        .gauge-wrap {
+            grid-column: 2;
+            position: relative;
+            width: min(300px, 72vw);
             margin: 0 auto;
+        }
+        @media (max-width: 440px) {
+            .gauge-panel { grid-template-columns: 1fr; }
+            .gauge-icons { grid-column: 1; flex-direction: row; justify-content: center; }
+            .gauge-wrap { grid-column: 1; }
+            .gauge-info { position: static; text-align: center; margin-top: 10px; }
+            .gauge-info-line + .gauge-info-line { margin-top: 2px; }
         }
         .gauge-wrap svg { width: 100%; height: auto; display: block; }
         .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
@@ -397,69 +421,43 @@
         <!-- System Status Alerts -->
         <div id="alerts"></div>
 
-        <!-- Central Display: same three-arc horseshoe gauge as the LVGL touchscreen.
-             Visible to guest and operator alike — this is the main read-only display,
-             not a settings/admin control. -->
+        <!-- Central Display: same three-arc horseshoe gauge as the LVGL touchscreen,
+             with the same left-side status icons (compressor/defrost/light/alarm) and
+             top-right secondary readings (Wi-Fi/uptime) as the on-device home screen.
+             Visible to guest and operator alike — only the light toggle is gated. -->
         <div class="gauge-section">
             <h2 class="gauge-title">Coolroom Status</h2>
-            <div class="gauge-wrap">
-                <svg viewBox="0 0 300 300">
-                    <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
-                    <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
-                    <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
-                    <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
-                    <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
-                    <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
-                </svg>
-                <div class="gauge-center">
-                    <div class="gauge-temp" id="gaugeTemp">--°C</div>
-                    <div class="gauge-setpoint" id="gaugeSetpoint">Set: --°C</div>
-                    <div class="gauge-status" id="gaugeStatus">--</div>
+            <div class="gauge-panel">
+                <div class="gauge-icons">
+                    <div class="gauge-icon-chip" id="iconCompressor" title="Compressor">❄️</div>
+                    <div class="gauge-icon-chip" id="iconDefrost" title="Defrost">🔥</div>
+                    <button class="gauge-icon-chip clickable" id="iconLight" title="Toggle light (login required)" onclick="toggleLight()">💡</button>
+                    <div class="gauge-icon-chip" id="iconAlarms" title="No active alarms">🔔</div>
+                </div>
+                <div class="gauge-wrap">
+                    <svg viewBox="0 0 300 300">
+                        <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
+                        <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
+                        <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
+                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
+                        <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
+                        <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
+                    </svg>
+                    <div class="gauge-center">
+                        <div class="gauge-temp" id="gaugeTemp">--°C</div>
+                        <div class="gauge-setpoint" id="gaugeSetpoint">Set: --°C</div>
+                        <div class="gauge-status" id="gaugeStatus">--</div>
+                    </div>
+                </div>
+                <div class="gauge-info">
+                    <div class="gauge-info-line" id="gaugeWifi">📶 --</div>
+                    <div class="gauge-info-line" id="gaugeUptime">⏱ --</div>
                 </div>
             </div>
             <div class="gauge-legend">
                 <span><i style="background:#0A84FF;"></i> Coolroom</span>
                 <span><i style="background:#00BCD4;"></i> Setpoint</span>
                 <span><i style="background:#FF1493;"></i> Ambient</span>
-            </div>
-        </div>
-
-        <!-- Key Metrics -->
-        <div class="metrics-grid">
-            <div class="tile-card">
-                <div class="tile-icon" id="iconCompressor">🌀</div>
-                <div class="tile-body">
-                    <div class="tile-label">Compressor</div>
-                    <div class="tile-value" id="compressorStatus">--</div>
-                </div>
-            </div>
-            <div class="tile-card">
-                <div class="tile-icon" id="iconDefrost">🔥</div>
-                <div class="tile-body">
-                    <div class="tile-label">Defrost</div>
-                    <div class="tile-value" id="defrostStatus">--</div>
-                </div>
-            </div>
-            <div class="tile-card">
-                <div class="tile-icon" id="iconAlarms">🔔</div>
-                <div class="tile-body">
-                    <div class="tile-label">Alarms</div>
-                    <div class="tile-value" id="alarmStatus">--</div>
-                </div>
-            </div>
-            <div class="tile-card">
-                <div class="tile-icon" id="iconWifi">📶</div>
-                <div class="tile-body">
-                    <div class="tile-label">Wi-Fi</div>
-                    <div class="tile-value" id="wifiStatus">--</div>
-                </div>
-            </div>
-            <div class="tile-card">
-                <div class="tile-icon" id="iconUptime">⏱️</div>
-                <div class="tile-body">
-                    <div class="tile-label">Uptime</div>
-                    <div class="tile-value" id="uptimeValue">--</div>
-                </div>
             </div>
         </div>
 
@@ -627,7 +625,7 @@
             return false;
         }
 
-        function buildApiCandidates() {
+        function buildApiCandidates(path = API_PATH) {
             const candidates = [];
             const host = window.location.hostname;
             const protocol = window.location.protocol || 'http:';
@@ -636,25 +634,45 @@
 
             // Try same-origin first when browsing the dashboard from a local subnet.
             if (isPrivateHostname(host)) {
-                candidates.push(`${protocol}//${host}${API_PATH}`);
+                candidates.push(`${protocol}//${host}${path}`);
                 if (protocol !== 'http:') {
-                    candidates.push(`http://${host}${API_PATH}`);
+                    candidates.push(`http://${host}${path}`);
                 }
             }
 
             // Relative path still works for direct device hosting.
-            candidates.push(API_PATH);
+            candidates.push(path);
 
             // Primary routed target through the inter-site VPN.
-            candidates.push(`http://${HA_LAN_IP}${API_PATH}`);
+            candidates.push(`http://${HA_LAN_IP}${path}`);
 
             // Optional runtime override: ?ha_host=192.168.37.136 (or DNS name)
             if (overrideHost) {
-                candidates.unshift(`http://${overrideHost}${API_PATH}`);
+                candidates.unshift(`http://${overrideHost}${path}`);
             }
 
             // De-duplicate while preserving order.
             return [...new Set(candidates)];
+        }
+
+        // POST to a control endpoint (e.g. a switch toggle), trying the same
+        // host-fallback list as reads. Returns true on any 2xx response.
+        async function postWithFallback(path, timeoutMs = 2500) {
+            const candidates = buildApiCandidates(path);
+            for (const url of candidates) {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), timeoutMs);
+                try {
+                    const headers = authHeader ? { Authorization: authHeader } : {};
+                    const response = await fetch(url, { method: 'POST', signal: controller.signal, headers });
+                    if (response.ok) return true;
+                } catch (error) {
+                    // Unreachable candidate; try the next one.
+                } finally {
+                    clearTimeout(timeout);
+                }
+            }
+            return false;
         }
 
         async function fetchWithTimeout(url, timeoutMs = 2500) {
@@ -942,6 +960,7 @@
             const roleInfo = ROLE_PERMISSIONS[currentRole];
             setSectionInteractive('settingsSection', 'settingsLockChip', roleInfo.canView.includes('settings'));
             setSectionInteractive('adminSection', 'adminLockChip', roleInfo.canAdmin);
+            document.getElementById('iconLight').disabled = currentRole !== 'operator';
         }
 
         function canPerformAction(action) {
@@ -990,6 +1009,7 @@
                 if (id === 'sensor.wifi_rssi') data.wifi_rssi = parseInt(state);
                 if (id === 'text_sensor.wifi_ssid_text') data.wifi_ssid = state;
                 if (id === 'binary_sensor.ctl_probe_fault') data.probe_fault = state === 'on';
+                if (id === 'switch.relay_light') data.light_on = state === 'on';
                 if (id === 'sensor.free_heap') data.heap_free_kb = parseInt(state);
                 if (id === 'number.ctl_alarm_high_delta') data.alarm_high = parseFloat(state);
                 if (id === 'number.ctl_alarm_low_delta') data.alarm_low = parseFloat(state);
@@ -1098,28 +1118,34 @@
         function updateDashboard(data) {
             updateGauge(data);
 
-            document.getElementById('compressorStatus').textContent = data.compressor_on ? 'Running' : 'Off';
+            // Left icon rail — same set, order, and on/off convention as the LVGL
+            // home screen's left sidebar (❄️ compressor, 🔥 defrost, 💡 light, 🔔 alarm).
             setTileIconState('iconCompressor', data.compressor_on ? 'is-on' : null);
-
-            document.getElementById('defrostStatus').textContent = data.defrost_phase ? 'Active' : 'Idle';
             setTileIconState('iconDefrost', data.defrost_phase ? 'is-warn' : null);
 
-            const activeAlarms = [];
-            if (data.alarm_high_active) activeAlarms.push('Hi Temp');
-            if (data.alarm_low_active) activeAlarms.push('Lo Temp');
-            if (data.alarm_ice_active) activeAlarms.push('Ice');
-            document.getElementById('alarmStatus').textContent = activeAlarms.length ? activeAlarms.join(', ') : 'Clear';
-            setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : 'is-on');
+            const lightEl = document.getElementById('iconLight');
+            setTileIconState('iconLight', data.light_on ? 'is-warn' : null);
+            lightEl.title = currentRole === 'operator'
+                ? (data.light_on ? 'Turn light off' : 'Turn light on')
+                : 'Toggle light (login required)';
 
-            document.getElementById('wifiStatus').textContent = data.wifi_connected === false
-                ? 'Disconnected'
-                : `${data.wifi_rssi ?? '--'} dBm · ${data.wifi_ssid || '---'}`;
-            setTileIconState('iconWifi', data.wifi_connected === false ? 'is-alert' : null);
+            const activeAlarms = [];
+            if (data.alarm_high_active) activeAlarms.push('High Temp');
+            if (data.alarm_low_active) activeAlarms.push('Low Temp');
+            if (data.alarm_ice_active) activeAlarms.push('Ice');
+            setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : null);
+            document.getElementById('iconAlarms').title = activeAlarms.length ? activeAlarms.join(', ') : 'No active alarms';
+
+            // Top-right secondary readings, same corner the LVGL screen uses.
+            document.getElementById('gaugeWifi').textContent = data.wifi_connected === false
+                ? '📶 Disconnected'
+                : `📶 ${data.wifi_rssi ?? '--'} dBm`;
+            document.getElementById('gaugeWifi').title = data.wifi_ssid || '';
 
             const uptime = data.uptime_seconds || 0;
             const days = Math.floor(uptime / 86400);
             const hours = Math.floor((uptime % 86400) / 3600);
-            document.getElementById('uptimeValue').textContent = `${days}d ${hours}h`;
+            document.getElementById('gaugeUptime').textContent = `⏱ ${days}d ${hours}h`;
 
             let rs485Html = '';
             rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;
@@ -1158,6 +1184,26 @@
             const alertHtml = `<div class="alert ${alertClass}">${message}</div>`;
             const alertsDiv = document.getElementById('alerts');
             alertsDiv.innerHTML = alertHtml + alertsDiv.innerHTML;
+        }
+
+        // Light toggle — the one control on this page wired to a real endpoint.
+        // ESPHome's web_server exposes POST /switch/<id>/toggle for switch entities,
+        // which relay_light already is (unlike setpoint/alarms/backup below, which
+        // have no exposed endpoint yet and stay as placeholders).
+        async function toggleLight() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to toggle the light');
+                return;
+            }
+            const btn = document.getElementById('iconLight');
+            btn.disabled = true;
+            const ok = await postWithFallback('/switch/relay_light/toggle');
+            btn.disabled = false;
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to toggle the light');
+                return;
+            }
+            fetchStatus();
         }
 
         // Settings update functions (role-protected)

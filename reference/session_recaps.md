@@ -1192,3 +1192,23 @@ same Artifact URL for visual review.
 No firmware change.
 
 ---
+
+## 2026-07-24 — Gauge Panel Matches LVGL Icon Rail + Secondary Readings Layout
+
+Moved compressor/defrost/light/alarm off the separate tile row and onto the gauge card itself,
+as a left icon rail matching the LVGL home screen's left sidebar (same set, same order: snowflake,
+fire, bulb, bell). WiFi and uptime moved to a top-right corner readout on the gauge panel, matching
+where the LVGL screen puts its secondary readings. Removed the metrics-grid tile row entirely
+(assets/dashboard.html) -- every value it held now lives on the gauge panel, so the web dashboard
+reads as a closer visual match to the physical touchscreen.
+
+Light icon is a real control, not decoration: ESPHome web_server exposes POST
+/switch/relay_light/toggle for the relay_light switch entity, so toggleLight() calls it for real
+(gated to operator login, same as other controls). Alarm icon stays display-only -- LVGL's alarm
+reset is a raw C++ lambda flipping ctl_alarm_high_active/ctl_alarm_low_active with no exposed
+ESPHome entity/service, so there is nothing for the web dashboard to call.
+
+Synced assets/dashboard_virtual_preview.html (icon rail + info corner, non-functional light
+toggle) and republished the same Artifact URL. No firmware change.
+
+---
