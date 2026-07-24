@@ -48,6 +48,35 @@
     .btn.secondary { background: #6b7280; }
     .btn.danger { background: #b91c1c; }
 
+    /* Central horseshoe gauge — identical geometry/colors/formula to assets/dashboard.html,
+       which in turn mirrors the LVGL touchscreen's home_temp_arc/home_setpoint_arc/
+       home_ambient_arc. This preview uses fixed mock readings (no live device). */
+    .gauge-section {
+      background: #1C1C1E;
+      border-radius: 10px;
+      padding: 24px 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .gauge-wrap { position: relative; width: min(320px, 78vw); margin: 0 auto; }
+    .gauge-wrap svg { width: 100%; height: auto; display: block; }
+    .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
+    .gauge-arc { fill: none; stroke-linecap: round; }
+    .gauge-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; pointer-events: none;
+    }
+    .gauge-temp { font-size: 42px; font-weight: 700; color: #30D158; line-height: 1; }
+    .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; }
+    .gauge-status { font-size: 13px; color: #FF9F0A; margin-top: 4px; }
+    .gauge-legend {
+      display: flex; justify-content: center; gap: 16px; margin-top: 14px;
+      font-size: 12px; color: #ccc;
+    }
+    .gauge-legend span { display: flex; align-items: center; gap: 6px; }
+    .gauge-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -148,7 +177,7 @@
     <header class="topbar">
       <div class="title">
         <h1>🧊 Coolroom Dashboard (Virtual Preview)</h1>
-        <small>Static UI preview for role flow testing</small>
+        <small>Static UI preview — mock readings, no live device</small>
       </div>
       <div class="controls">
         <span id="roleBadge" class="badge">Guest</span>
@@ -157,11 +186,33 @@
       </div>
     </header>
 
+    <div class="gauge-section">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 300 300">
+          <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
+          <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
+          <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
+          <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
+          <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
+          <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
+        </svg>
+        <div class="gauge-center">
+          <div class="gauge-temp" id="gaugeTemp">3.8°C</div>
+          <div class="gauge-setpoint" id="gaugeSetpoint">Set: 2.0°C</div>
+          <div class="gauge-status" id="gaugeStatus">Running</div>
+        </div>
+      </div>
+      <div class="gauge-legend">
+        <span><i style="background:#0A84FF;"></i> Coolroom</span>
+        <span><i style="background:#00BCD4;"></i> Setpoint</span>
+        <span><i style="background:#FF1493;"></i> Ambient</span>
+      </div>
+    </div>
+
     <div class="grid">
-      <div class="card"><div class="label">Temperature</div><div class="value">3.8°C</div></div>
-      <div class="card"><div class="label">Setpoint</div><div class="value">2.0°C</div></div>
       <div class="card"><div class="label">Compressor</div><div class="value">RUN</div></div>
       <div class="card"><div class="label">Defrost</div><div class="value">IDLE</div></div>
+      <div class="card"><div class="label">Ambient</div><div class="value">22.4°C</div></div>
       <div class="card"><div class="label">WiFi RSSI</div><div class="value">-61 dBm</div></div>
       <div class="card"><div class="label">Uptime</div><div class="value">2d 7h</div></div>
     </div>
@@ -182,7 +233,7 @@
 
     <section class="section">
       <h2>🩺 Health</h2>
-      <p>RS485: ✓ | RTD: ✓ | RTC: ✓ | Heap: 108 MB free | Probe freshness: ✓</p>
+      <p>RS485: ✓ | RTD: ✓ | RTC: ✓ | Heap: 108 KB free | Probe freshness: ✓</p>
     </section>
 
     <section id="adminSection" class="section restricted">
@@ -198,7 +249,10 @@
     </section>
 
     <div class="note">
-      This virtual page simulates the new flow: guest-first default, login button for elevation, and role-based gating for settings/admin sections.
+      This virtual page simulates the real dashboard's layout with fixed mock readings: guest-first
+      default, login for elevation, role-based gating for settings/admin, and the same central
+      horseshoe gauge as <code>assets/dashboard.html</code> / the LVGL touchscreen. It never talks
+      to a real device.
     </div>
   </div>
 
@@ -295,7 +349,43 @@
       applyRole();
     }
 
+    // ── Gauge: same math as assets/dashboard.html (mirrors the LVGL touchscreen) ──
+    const GAUGE_CENTER = 150;
+    const GAUGE_START_ANGLE = -135; // 0 = 12 o'clock, clockwise positive
+    const GAUGE_SWEEP = 270;
+    const GAUGE_RADII = { outer: 130, middle: 105, inner: 82 };
+
+    function gaugePoint(radius, angleDeg) {
+      const rad = (angleDeg * Math.PI) / 180;
+      return { x: GAUGE_CENTER + radius * Math.sin(rad), y: GAUGE_CENTER - radius * Math.cos(rad) };
+    }
+    function gaugeArcPath(radius, startAngle, endAngle) {
+      const start = gaugePoint(radius, startAngle);
+      const end = gaugePoint(radius, endAngle);
+      const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+      return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+    }
+    function tempToPercent(tempC) {
+      return Math.max(0, Math.min(100, ((tempC + 20) / 35) * 100));
+    }
+    function setGaugeArc(id, radius, percent) {
+      const endAngle = GAUGE_START_ANGLE + (GAUGE_SWEEP * percent) / 100;
+      document.getElementById(id).setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
+    }
+    function drawMockGauge() {
+      const fullEnd = GAUGE_START_ANGLE + GAUGE_SWEEP;
+      document.getElementById('gaugeTrackOuter').setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
+      document.getElementById('gaugeTrackMiddle').setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
+      document.getElementById('gaugeTrackInner').setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
+
+      // Mock readings — coolroom 3.8°C, setpoint 2.0°C, ambient 22.4°C.
+      setGaugeArc('gaugeArcOuter', GAUGE_RADII.outer, tempToPercent(3.8));
+      setGaugeArc('gaugeArcMiddle', GAUGE_RADII.middle, tempToPercent(2.0));
+      setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(22.4));
+    }
+
     applyRole();
+    drawMockGauge();
   </script>
 </body>
 </html>

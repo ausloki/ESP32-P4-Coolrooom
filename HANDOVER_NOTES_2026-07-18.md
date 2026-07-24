@@ -2,11 +2,23 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-24  
-**Status**: In Progress — security fix + dashboard gauge session captured at `89bfe83`; device reflash blocked, hardware not currently connected  
-**Last Commit**: `89bfe83` (docs: note device reflash is blocked on hardware availability)
+**Status**: In Progress — security fix + dashboard gauge session captured at `288f76b`; gauge now visually verified via published preview; device reflash blocked, hardware not currently connected  
+**Last Commit**: `288f76b` (feat(dashboard): central horseshoe gauge matching LVGL touchscreen)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-24 Addendum — Virtual Preview Updated + Published for Visual Review
+
+- `assets/dashboard_virtual_preview.html` (the repo's static offline UI mock) updated to include
+  the same horseshoe gauge as `assets/dashboard.html`, with fixed mock readings (coolroom 3.8°C,
+  setpoint 2.0°C, ambient 22.4°C) since this file never talks to a live device.
+- Published via the Artifact tool for actual visual review — the gauge renders correctly (three
+  concentric arcs, bottom gap, center readout, legend). This closes the "not visually verified"
+  gap noted in the prior gauge addendum below.
+- No firmware or `dashboard.html` change.
 
 ---
 

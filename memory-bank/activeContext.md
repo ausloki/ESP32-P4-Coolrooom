@@ -33,9 +33,10 @@
 - Reworked the web dashboard's central display (`assets/dashboard.html`) into an SVG horseshoe
   gauge mirroring the LVGL touchscreen's three concentric arcs (coolroom/setpoint/ambient temp),
   same colors, sweep geometry, and `(temp+20)/35*100` percent formula as the firmware. Added
-  `sensor.probe3_temp` (ambient) to the dashboard's state parsing — previously unused. **Not yet
-  visually verified in a browser** — no screenshot tool was available this session; JS syntax and
-  arc-path math were checked standalone in Node only.
+  `sensor.probe3_temp` (ambient) to the dashboard's state parsing — previously unused.
+- Updated `assets/dashboard_virtual_preview.html` (static offline mock) with the same gauge and
+  mock readings, then published it via the Artifact tool for actual visual review. The gauge
+  renders correctly — this closes the "not visually verified" gap from the initial gauge work.
 
 ### Build Status
 
@@ -57,10 +58,7 @@ Warning level: only generic ESP-IDF experimental-features warning remains
 2. Consider whether the leaked password should also be scrubbed from git history
    (`git filter-repo`/BFG) — rotation matters more, but history scrubbing was flagged as an
    option.
-3. Open `assets/dashboard.html` in an actual browser (or run one of the dev-server tools if
-   available) and visually confirm the horseshoe gauge renders correctly — this was only
-   math/syntax-checked, not visually verified.
-4. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
+3. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
    this session's work was a security fix + dashboard UI change, not Phase 5 feature progress.
 
 ### Outstanding Items

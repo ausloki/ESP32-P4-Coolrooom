@@ -1148,3 +1148,26 @@ actual browser check next session before considering this fully verified.
 touchscreen's layout, colors, and temperature-to-arc formula.
 
 ---
+
+## 2026-07-24 — Virtual Preview Updated + Published for Visual Review
+
+**Trigger**: The prior gauge entry above flagged that the new horseshoe gauge in
+`assets/dashboard.html` had only been math/syntax-checked, not visually rendered (no browser
+tool was available). The user asked for a "virtual" of the dashboard to actually look at.
+
+**What changed**: Brought `assets/dashboard_virtual_preview.html` (the repo's existing static,
+offline UI mock — see the 2026-07-24 RBAC entry above) up to date with the real dashboard: added
+the same SVG horseshoe gauge (identical math/colors/geometry to `dashboard.html`), populated with
+fixed mock readings (coolroom 3.8°C, setpoint 2.0°C, ambient 22.4°C) since this file never talks
+to a live device. Added an "Ambient" metric card alongside the existing Compressor/Defrost/WiFi/
+Uptime cards. Published the file via the Artifact tool so it could actually be viewed rendered in
+a browser, closing the "not visually verified" gap from the prior gauge work — the gauge renders
+correctly: three concentric arcs with the bottom gap, center readout, and legend all in place.
+
+**Build**: No firmware or `dashboard.html` change — preview-only file, plus one Artifact publish
+(not part of the git repo).
+
+**Commit**: Updated static virtual preview to match the real dashboard's gauge; published for
+visual sign-off.
+
+---
