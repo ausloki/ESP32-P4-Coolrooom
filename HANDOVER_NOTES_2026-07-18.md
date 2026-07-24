@@ -30,9 +30,10 @@
 - Confirmed implemented locally: manual backup / restore and boot-time restore attempt.
 - Confirmed implemented locally: ntfy notifications for high alarm, low alarm, clear, and probe fault.
 - Confirmed current SD daily log path is `/sdcard/YYYY-MM-DD.csv`.
-- Confirmed backup/restore is currently limited to four values (`setpoint`, `comp_diff`, `alarm_high`, `alarm_low`), not the wider Phase 6 parameter set.
+- At the time of this snapshot, backup/restore was limited to four values (`setpoint`, `comp_diff`, `alarm_high`, `alarm_low`).
 - Confirmed no web-based log export flow or dashboard OTA update flow is present in current firmware.
 - Added `reference/PHASE5_STATIC_AUDIT_2026-07-23.md` as the detailed static audit record.
+- This snapshot was later superseded by the same-day update that expanded backup/restore to all configurable settings.
 
 ---
 

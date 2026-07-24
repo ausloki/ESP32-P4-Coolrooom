@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coolroom Dashboard Virtual Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f3f5f8;
+      color: #1f2937;
+      padding: 18px;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #003d82;
+      color: #fff;
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+    }
+    .title h1 { margin: 0 0 4px; font-size: 24px; }
+    .title small { opacity: 0.9; }
+    .controls { display: flex; gap: 8px; align-items: center; }
+    .badge {
+      padding: 6px 12px;
+      border-radius: 18px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #f59e0b;
+      color: #111827;
+    }
+    .btn {
+      border: 0;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      color: #fff;
+      background: #0f6ab3;
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .btn.secondary { background: #6b7280; }
+    .btn.danger { background: #b91c1c; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .label { color: #6b7280; font-size: 12px; text-transform: uppercase; }
+    .value { font-size: 26px; font-weight: 700; color: #003d82; margin-top: 6px; }
+
+    .section {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .section h2 { margin: 0 0 10px; font-size: 18px; }
+
+    .restricted {
+      position: relative;
+      opacity: 0.48;
+      pointer-events: none;
+    }
+    .restricted::after {
+      content: "🔒 Restricted in current role";
+      position: absolute;
+      left: 50%; top: 50%; transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.78);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .field label { display: block; font-size: 12px; color: #374151; margin-bottom: 5px; }
+    .field input {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 13px;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.45);
+      z-index: 50;
+    }
+    .modal.show { display: flex; }
+    .dialog {
+      width: min(92vw, 430px);
+      background: #fff;
+      border-radius: 10px;
+      padding: 18px;
+    }
+    .dialog h3 { margin: 0 0 10px; color: #003d82; }
+    .dialog p { margin: 0 0 12px; color: #374151; font-size: 13px; }
+    .dialog .help {
+      background: #eef6ff;
+      border-left: 4px solid #0f6ab3;
+      border-radius: 4px;
+      padding: 10px;
+      font-size: 12px;
+      color: #334155;
+      margin-top: 8px;
+    }
+    .dialog .actions { display: flex; gap: 8px; margin-top: 12px; }
+
+    .note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #4b5563;
+      background: #eef2ff;
+      border-left: 4px solid #6366f1;
+      padding: 8px 10px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="title">
+        <h1>🧊 Coolroom Dashboard (Virtual Preview)</h1>
+        <small>Static UI preview for role flow testing</small>
+      </div>
+      <div class="controls">
+        <span id="roleBadge" class="badge">Guest</span>
+        <button id="loginBtn" class="btn" onclick="openLogin()">🔐 Login</button>
+        <button id="logoutBtn" class="btn danger" onclick="logout()" style="display:none;">🚪 Logout</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card"><div class="label">Temperature</div><div class="value">3.8°C</div></div>
+      <div class="card"><div class="label">Setpoint</div><div class="value">2.0°C</div></div>
+      <div class="card"><div class="label">Compressor</div><div class="value">RUN</div></div>
+      <div class="card"><div class="label">Defrost</div><div class="value">IDLE</div></div>
+      <div class="card"><div class="label">WiFi RSSI</div><div class="value">-61 dBm</div></div>
+      <div class="card"><div class="label">Uptime</div><div class="value">2d 7h</div></div>
+    </div>
+
+    <section id="settingsSection" class="section restricted">
+      <h2>⚙️ Operational Settings (ADMIN+)</h2>
+      <div class="form-row">
+        <div class="field"><label>Setpoint</label><input type="number" value="2.0" /></div>
+        <div class="field"><label>High Alarm Delta</label><input type="number" value="3.0" /></div>
+        <div class="field"><label>Low Alarm Delta</label><input type="number" value="3.0" /></div>
+        <div class="field"><label>Compressor Hysteresis</label><input type="number" value="1.0" /></div>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="btn">Update Setpoint</button>
+        <button class="btn">Update Alarms</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>🩺 Health</h2>
+      <p>RS485: ✓ | RTD: ✓ | RTC: ✓ | Heap: 108 MB free | Probe freshness: ✓</p>
+    </section>
+
+    <section id="adminSection" class="section restricted">
+      <h2>🔐 System Administration (SUPERADMIN)</h2>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="btn danger">📦 Backup</button>
+        <button class="btn danger">📥 Restore</button>
+        <button class="btn danger">🗑️ Delete Logs</button>
+        <button class="btn">📥 Download Logs</button>
+        <button class="btn danger">📡 WiFi Settings</button>
+        <button class="btn danger">⚙️ Hardware Config</button>
+      </div>
+    </section>
+
+    <div class="note">
+      This virtual page simulates the new flow: guest-first default, login button for elevation, and role-based gating for settings/admin sections.
+    </div>
+  </div>
+
+  <div id="loginModal" class="modal">
+    <div class="dialog">
+      <h3>🔐 Elevate Access</h3>
+      <p>Dashboard starts in guest mode by default. Login is only for elevation.</p>
+      <div class="field" style="margin-bottom:8px;">
+        <label>Username</label>
+        <input id="username" type="text" placeholder="admin or superadmin" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="password" type="password" placeholder="Password required" />
+      </div>
+      <div class="actions">
+        <button class="btn" onclick="doLogin()">Login</button>
+        <button class="btn secondary" onclick="closeLogin()">Cancel</button>
+      </div>
+      <div class="help">
+        Demo credentials:<br>
+        admin / P@lli5ter<br>
+        superadmin / P@lli5ter
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const USERS = {
+      admin: { role: 'admin', password: 'P@lli5ter' },
+      superadmin: { role: 'superadmin', password: 'P@lli5ter' }
+    };
+
+    let role = 'guest';
+    let user = 'guest';
+
+    function applyRole() {
+      const roleBadge = document.getElementById('roleBadge');
+      const loginBtn = document.getElementById('loginBtn');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const settings = document.getElementById('settingsSection');
+      const admin = document.getElementById('adminSection');
+
+      roleBadge.textContent = role === 'guest' ? 'Guest' : role === 'admin' ? 'Administrator' : 'Super Administrator';
+
+      if (role === 'guest') {
+        roleBadge.style.background = '#f59e0b';
+        loginBtn.style.display = 'inline-block';
+        logoutBtn.style.display = 'none';
+        settings.classList.add('restricted');
+        admin.classList.add('restricted');
+      } else if (role === 'admin') {
+        roleBadge.style.background = '#22c55e';
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+        settings.classList.remove('restricted');
+        admin.classList.add('restricted');
+      } else {
+        roleBadge.style.background = '#d4af37';
+        loginBtn.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+        settings.classList.remove('restricted');
+        admin.classList.remove('restricted');
+      }
+    }
+
+    function openLogin() {
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('loginModal').classList.add('show');
+    }
+
+    function closeLogin() {
+      document.getElementById('loginModal').classList.remove('show');
+    }
+
+    function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !USERS[username]) {
+        alert('Use admin or superadmin credentials to elevate.');
+        return;
+      }
+      if (USERS[username].password !== password) {
+        alert('Invalid password.');
+        return;
+      }
+
+      user = username;
+      role = USERS[username].role;
+      closeLogin();
+      applyRole();
+    }
+
+    function logout() {
+      user = 'guest';
+      role = 'guest';
+      applyRole();
+    }
+
+    applyRole();
+  </script>
+</body>
+</html>

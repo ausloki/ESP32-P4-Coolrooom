@@ -24,6 +24,10 @@
 
 ### Before Every Code Decision
 1. **Check `reference/` folder first** — schematic PDF, datasheets, hardware_pins.md, control diagrams
+2. **Always consult local ESP32-P4 silicon references before coding**:
+  - `reference/esp32-p4_technical_reference_manual_en.pdf`
+  - `reference/esp32-p4_datasheet_en.pdf`
+  Use these manuals to confirm peripheral behavior, timer/clock expectations, and power-domain details so implementation matches ESP32-P4 hardware, not generic ESP32 assumptions.
 2. **Then check Waveshare GitHub**: https://github.com/waveshareteam/ESP32-P4-WIFI6-Touch-LCD-7B
 3. Never assume generic ESP32 pin mappings — always verify from schematic or official examples
 4. For Phase 4 (LVGL UI) changes, consult `reference/HANDOVER_2026-07-18.md` for display architecture

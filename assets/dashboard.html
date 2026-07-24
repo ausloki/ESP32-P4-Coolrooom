@@ -303,6 +303,7 @@
                 <div class="role-badge" id="roleBadge">Loading...</div>
                 <div style="font-size: 12px; margin-top: 8px;">User: <span id="currentUser">---</span></div>
                 <div style="font-size: 11px; margin-top: 4px; color: #ffcc00;" id="inactivityWarning"></div>
+                <button id="loginButton" onclick="openLoginModal()">🔐 Login</button>
                 <button class="logout-button" onclick="logout()">🚪 Logout</button>
             </div>
         </header>
@@ -457,23 +458,24 @@
     </div>
 
     <!-- Login Modal -->
-    <div id="loginModal" class="modal show">
+    <div id="loginModal" class="modal">
         <div class="modal-content">
-            <h2>🔐 Coolroom Access</h2>
+            <h2>🔐 Elevate Access</h2>
             <div class="modal-form-group">
                 <label for="loginUsername">Username</label>
-                <input type="text" id="loginUsername" placeholder="admin, guest, or superadmin">
+                <input type="text" id="loginUsername" placeholder="admin or superadmin">
             </div>
             <div class="modal-form-group">
                 <label for="loginPassword">Password</label>
-                <input type="password" id="loginPassword" placeholder="Leave empty for guest">
+                <input type="password" id="loginPassword" placeholder="Password required">
             </div>
             <div class="modal-button-group">
                 <button class="primary" onclick="handleLogin()">Login</button>
+                <button class="secondary" onclick="closeLoginModal()">Cancel</button>
             </div>
             <div class="modal-info">
-                <strong>Demo Users:</strong><br>
-                👤 guest (no password)<br>
+                <strong>Dashboard starts in guest mode by default.</strong><br>
+                Use login only to elevate permissions.<br>
                 🔑 admin / P@lli5ter<br>
                 🔴 superadmin / P@lli5ter
             </div>
@@ -704,6 +706,11 @@
                 alert('User not found');
                 return;
             }
+
+            if (username === 'guest') {
+                alert('Guest mode is already active by default. Use admin or superadmin to elevate.');
+                return;
+            }
             
             const user = USER_DATABASE[username];
             
@@ -717,14 +724,9 @@
             currentUser = username;
             currentRole = user.role;
             authToken = generateAuthToken(username);
-            
-            // Save session to localStorage
-            localStorage.setItem('authUser', username);
-            localStorage.setItem('authToken', authToken);
-            localStorage.setItem('authRole', user.role);
-            
+
             // Hide login modal and show dashboard
-            hideLoginModal();
+            closeLoginModal();
             initializeRole();
             fetchStatus();
             
@@ -754,52 +756,33 @@
             document.removeEventListener('touchstart', resetInactivityTimer, false);
             document.removeEventListener('touchend', resetInactivityTimer, false);
             
-            // Clear session
-            localStorage.removeItem('authUser');
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('authRole');
-            
             // Reset variables
-            currentUser = 'unknown';
+            currentUser = 'guest';
             currentRole = 'guest';
             authToken = null;
-            
-            // Show login modal
-            showLoginModal();
+
+            initializeRole();
+            fetchStatus();
+            showAlert('info', 'Returned to guest mode.');
         }
 
-        function showLoginModal() {
+        function openLoginModal() {
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
             document.getElementById('loginModal').classList.add('show');
         }
 
-        function hideLoginModal() {
+        function closeLoginModal() {
             document.getElementById('loginModal').classList.remove('show');
-            
-            // Start inactivity timer for non-guest users
-            if (currentRole !== 'guest') {
-                setupActivityListeners();
-                resetInactivityTimer();
-            }
         }
 
         function checkAuth() {
-            const savedUser = localStorage.getItem('authUser');
-            const savedToken = localStorage.getItem('authToken');
-            
-            if (savedUser && savedToken && USER_DATABASE[savedUser]) {
-                currentUser = savedUser;
-                currentRole = USER_DATABASE[savedUser].role;
-                authToken = savedToken;
-                hideLoginModal();
-                
-                // Start inactivity timer for non-guest users
-                if (currentRole !== 'guest') {
-                    setupActivityListeners();
-                    resetInactivityTimer();
-                }
-            } else {
-                showLoginModal();
-            }
+            // Always start in guest mode; elevation requires explicit login.
+            currentUser = 'guest';
+            currentRole = 'guest';
+            authToken = null;
+            closeLoginModal();
+            initializeRole();
         }
 
         // Initialize authentication on page load
@@ -823,11 +806,21 @@
             const roleBadge = document.getElementById('roleBadge');
             const roleLabel = document.getElementById('roleLabel');
             const userDisplay = document.getElementById('currentUser');
+            const loginButton = document.getElementById('loginButton');
+            const logoutButton = document.querySelector('.logout-button');
             
             roleBadge.className = `role-badge ${currentRole}`;
             roleBadge.textContent = `🔑 ${roleInfo.name}`;
             roleLabel.textContent = roleInfo.name;
             userDisplay.textContent = currentUser;
+
+            if (currentRole === 'guest') {
+                loginButton.classList.remove('hidden');
+                logoutButton.classList.add('hidden');
+            } else {
+                loginButton.classList.add('hidden');
+                logoutButton.classList.remove('hidden');
+            }
         }
 
         function updateUIForRole() {
@@ -849,17 +842,6 @@
                 adminSection.classList.add('hidden');
             }
             
-            // Disable buttons for non-admin
-            if (currentRole !== 'admin' && currentRole !== 'superadmin') {
-                disableAllButtons();
-            }
-        }
-
-        function disableAllButtons() {
-            document.querySelectorAll('button:not(.logout-button)').forEach(btn => {
-                btn.disabled = true;
-                btn.title = 'Insufficient permissions';
-            });
         }
 
         function canPerformAction(action) {

@@ -14,13 +14,17 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 - Added `reference/PHASE5_STATIC_AUDIT_2026-07-23.md` to record what is implemented, partial, and not present.
 - Confirmed the current SD daily log path is `/sdcard/YYYY-MM-DD.csv`.
 - Corrected the older recap text that still referred to `/sdcard/logs/YYYY-MM-DD.csv`.
-- Recorded that backup/restore currently covers only four control values, not the full Phase 6 parameter set.
+- Recorded that backup/restore scope required expansion beyond the original four control values.
 - Recorded that ntfy coverage is currently limited to high alarm, low alarm, clear, and probe fault.
 
 ### Outcome
 
 - The current Phase 5 status is clearer without needing physical hardware.
 - Remaining local work is now separated from board-only validation work.
+
+### Superseded By Later Update
+
+- A later 2026-07-23 change expanded backup/restore to include all configurable settings; this recap remains the pre-expansion audit snapshot.
 
 ## 2026-07-23 — Full Settings Backup/Restore (Phase 5 Scope Update)
 

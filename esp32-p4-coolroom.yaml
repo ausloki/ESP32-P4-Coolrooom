@@ -150,7 +150,9 @@ esphome:
             // Phase 5: mount SD card after all peripherals are up
             if (p4_sd_mount()) {
                 id(sd_card_ok) = true;
-                // Attempt param restore only if NVS is at defaults
+                // Attempt full settings restore from /sdcard/backup.json.
+                // This acts as recovery if NVS was reset/lost; normal retention
+                // still comes from restore_value + NVS sync.
                 float sp = id(ctl_setpoint);
                 float cd = id(ctl_comp_diff);
                 float ah = id(ctl_alarm_high_delta);
@@ -1597,7 +1599,7 @@ button:
           p4_sd_log_event("DEFROST_MANUAL_STOP", "button");
   - platform: template
     id: btn_sd_backup
-    name: "Backup Params to SD"
+    name: "Backup All Settings to SD"
     icon: "mdi:content-save"
     entity_category: config
     web_server:
@@ -1625,7 +1627,7 @@ button:
 
   - platform: template
     id: btn_sd_restore
-    name: "Restore Params from SD"
+    name: "Restore All Settings from SD"
     icon: "mdi:restore"
     entity_category: config
     web_server:
