@@ -22,6 +22,13 @@
   the same gauge and mock data, then published it via Artifact for visual sign-off — renders
   correctly. See `reference/session_recaps.md` (2026-07-24 entries) for detail.
 
+## 2026-07-24 Dashboard Visual Rework
+
+- `assets/dashboard.html` restyled as Home Assistant Lovelace cards (token-based flat surfaces,
+  HA Tile-card metric tiles, gauge card header). Removed the guest lock/blur overlay — settings/
+  admin sections always visible now, guest gets disabled controls instead. No functional access
+  change (per-handler role checks remain the real gate). Preview file and Artifact synced.
+
 ## Phase Completion Status
 
 | Phase | Description | Status | Completion Date | Build Test | Device Test |

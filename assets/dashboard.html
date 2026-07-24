@@ -7,16 +7,34 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* Lovelace-style design tokens — flat cards, hairline borders instead of
+           heavy shadow, tabular numerals, a single restrained accent. */
+        :root {
+            --page-bg: #eef1f5;
+            --card-bg: #ffffff;
+            --card-radius: 12px;
+            --card-border: 1px solid rgba(15, 23, 42, 0.07);
+            --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.06);
+            --text-primary: #14181f;
+            --text-secondary: #667085;
+            --divider: rgba(15, 23, 42, 0.07);
+            --accent: #003d82;
+            --accent-soft: rgba(0, 61, 130, 0.08);
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
+            background: var(--page-bg);
+            color: var(--text-primary);
             padding: 20px;
+            font-variant-numeric: tabular-nums;
         }
         .container {
             max-width: 1400px;
             margin: 0 auto;
         }
-        
+
         /* Login Modal Styles */
         .modal {
             display: none;
@@ -137,61 +155,92 @@
         header .role-badge.operator { background: #4CAF50; }
         header .role-badge.guest { background: #FF9800; }
         header .timestamp { font-size: 12px; opacity: 0.8; }
-        
+
+        /* Tile cards — modeled on Home Assistant's Tile card: a rounded-square
+           icon chip at left, entity name + state stacked at right. State color
+           lives on the icon chip (grey = idle/default, green = on/ok,
+           orange = active/attention, red = alert), the same convention HA uses
+           for binary_sensor/climate/problem tiles. */
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
         }
-        .metric-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        .tile-card {
+            background: var(--card-bg);
+            border: var(--card-border);
+            border-radius: var(--card-radius);
+            box-shadow: var(--card-shadow);
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .metric-label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-            margin-bottom: 8px;
+        .tile-icon {
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 19px;
+            background: var(--accent-soft);
+            color: var(--accent);
         }
-        .metric-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #003d82;
-        }
-        .metric-unit {
-            font-size: 14px;
-            color: #999;
-            margin-left: 5px;
-        }
-        
+        .tile-icon.is-on { background: rgba(48, 209, 88, 0.16); color: #1f9d4c; }
+        .tile-icon.is-warn { background: rgba(255, 159, 10, 0.18); color: #b8660a; }
+        .tile-icon.is-alert { background: rgba(255, 69, 58, 0.16); color: #d92c22; }
+        .tile-body { min-width: 0; }
+        .tile-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+        .tile-value { font-size: 13px; color: var(--text-secondary); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
         .status-badge {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
+            padding: 3px 10px;
+            border-radius: 999px;
             font-size: 12px;
-            font-weight: bold;
-            margin-right: 8px;
+            font-weight: 600;
+            margin-right: 6px;
         }
         .status-ok { background: #d4edda; color: #155724; }
         .status-error { background: #f8d7da; color: #721c24; }
         .status-warning { background: #fff3cd; color: #856404; }
-        
+
         .chart-section {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            background: var(--card-bg);
+            border: var(--card-border);
+            border-radius: var(--card-radius);
+            box-shadow: var(--card-shadow);
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .card-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 15px;
         }
         .chart-section h2 {
-            font-size: 18px;
-            margin-bottom: 15px;
-            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
         }
-        
+        .lock-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(255, 159, 10, 0.14);
+            color: #a15c00;
+            white-space: nowrap;
+        }
+
         .alert {
             padding: 15px;
             border-radius: 8px;
@@ -201,26 +250,7 @@
         .alert-danger { background: #f8d7da; color: #721c24; border-left: 4px solid #721c24; }
         .alert-warning { background: #fff3cd; color: #856404; border-left: 4px solid #856404; }
         .alert-info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #0c5460; }
-        
-        .section-restricted {
-            opacity: 0.5;
-            pointer-events: none;
-            position: relative;
-        }
-        .section-restricted::after {
-            content: "🔒 Restricted Access";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-size: 12px;
-            white-space: nowrap;
-        }
-        
+
         .button-group {
             display: flex;
             gap: 10px;
@@ -228,28 +258,34 @@
             flex-wrap: wrap;
         }
         button {
-            background: #003d82;
+            background: var(--accent);
             color: white;
             border: none;
             padding: 10px 20px;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
-            transition: background 0.2s;
+            font-weight: 500;
+            transition: background 0.15s;
         }
         button:hover:not(:disabled) {
             background: #002555;
         }
         button:disabled {
-            background: #ccc;
+            background: #e2e5ea;
+            color: #9aa1ac;
             cursor: not-allowed;
-            opacity: 0.5;
         }
         button.danger {
             background: #dc3545;
         }
         button.danger:hover:not(:disabled) {
             background: #c82333;
+        }
+        input:disabled {
+            background: #f3f4f6;
+            color: #9ca3af;
+            cursor: not-allowed;
         }
         
         .alert {
@@ -292,13 +328,22 @@
 
         /* Central horseshoe gauge — mirrors the LVGL touchscreen's three concentric
            arcs (coolroom / setpoint / ambient) so the web dashboard and the on-device
-           display read the same way regardless of who's viewing it. */
+           display read the same way regardless of who's viewing it. Styled as a dark
+           ha-card among the light tiles — a common Lovelace pattern for the one card
+           you want to draw the eye. */
         .gauge-section {
             background: #1C1C1E;
-            border-radius: 8px;
-            padding: 24px 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: var(--card-radius);
+            padding: 20px 20px 22px;
+            margin-bottom: 16px;
+            box-shadow: var(--card-shadow);
+        }
+        .gauge-title {
+            color: rgba(255, 255, 255, 0.82);
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 14px;
         }
         .gauge-wrap {
             position: relative;
@@ -318,9 +363,9 @@
             text-align: center;
             pointer-events: none;
         }
-        .gauge-temp { font-size: 44px; font-weight: 700; color: #0A84FF; line-height: 1; }
-        .gauge-setpoint { font-size: 15px; color: #00BCD4; margin-top: 8px; }
-        .gauge-status { font-size: 13px; color: #FF9F0A; margin-top: 4px; }
+        .gauge-temp { font-size: 42px; font-weight: 700; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; }
+        .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
+        .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
         .gauge-legend {
             display: flex;
             justify-content: center;
@@ -356,6 +401,7 @@
              Visible to guest and operator alike — this is the main read-only display,
              not a settings/admin control. -->
         <div class="gauge-section">
+            <h2 class="gauge-title">Coolroom Status</h2>
             <div class="gauge-wrap">
                 <svg viewBox="0 0 300 300">
                     <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
@@ -380,33 +426,51 @@
 
         <!-- Key Metrics -->
         <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-label">Compressor</div>
-                <div id="compressorStatus" style="margin-top: 8px;"></div>
-                <div style="font-size: 12px; color: #999; margin-top: 8px;">Duty: <span id="compDutyValue">--</span>%</div>
+            <div class="tile-card">
+                <div class="tile-icon" id="iconCompressor">🌀</div>
+                <div class="tile-body">
+                    <div class="tile-label">Compressor</div>
+                    <div class="tile-value" id="compressorStatus">--</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">Defrost Phase</div>
-                <div id="defrostStatus" style="margin-top: 8px;"></div>
+            <div class="tile-card">
+                <div class="tile-icon" id="iconDefrost">🔥</div>
+                <div class="tile-body">
+                    <div class="tile-label">Defrost</div>
+                    <div class="tile-value" id="defrostStatus">--</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">Alarms</div>
-                <div id="alarmStatus" style="margin-top: 8px;"></div>
+            <div class="tile-card">
+                <div class="tile-icon" id="iconAlarms">🔔</div>
+                <div class="tile-body">
+                    <div class="tile-label">Alarms</div>
+                    <div class="tile-value" id="alarmStatus">--</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">WiFi</div>
-                <div class="metric-value"><span id="signalValue">--</span><span class="metric-unit">dBm</span></div>
-                <div style="font-size: 12px; color: #999; margin-top: 8px;" id="ssidValue">---</div>
+            <div class="tile-card">
+                <div class="tile-icon" id="iconWifi">📶</div>
+                <div class="tile-body">
+                    <div class="tile-label">Wi-Fi</div>
+                    <div class="tile-value" id="wifiStatus">--</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">System Uptime</div>
-                <div class="metric-value" id="uptimeValue" style="font-size: 18px;">--</div>
+            <div class="tile-card">
+                <div class="tile-icon" id="iconUptime">⏱️</div>
+                <div class="tile-body">
+                    <div class="tile-label">Uptime</div>
+                    <div class="tile-value" id="uptimeValue">--</div>
+                </div>
             </div>
         </div>
 
-        <!-- Settings Section (ADMIN + SUPERADMIN only) -->
-        <div id="settingsSection" class="chart-section hidden">
-            <h2>⚙️ Operational Settings</h2>
+        <!-- Settings Section: always visible — guest just can't submit (inputs/buttons
+             disabled below in updateUIForRole()). No section-level hiding; the actual
+             device call is what's gated, not the view of it. -->
+        <div id="settingsSection" class="chart-section">
+            <div class="card-header-row">
+                <h2>⚙️ Operational Settings</h2>
+                <span class="lock-chip hidden" id="settingsLockChip">🔒 Login to edit</span>
+            </div>
             <div id="settingsContent">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
                     <div>
@@ -452,9 +516,12 @@
             </div>
         </div>
 
-        <!-- System Administration (SUPERADMIN only) -->
-        <div id="adminSection" class="chart-section hidden">
-            <h2>🔐 System Administration</h2>
+        <!-- System Administration: always visible — see the settings-section note above. -->
+        <div id="adminSection" class="chart-section">
+            <div class="card-header-row">
+                <h2>🔐 System Administration</h2>
+                <span class="lock-chip hidden" id="adminLockChip">🔒 Login to edit</span>
+            </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
                 <div>
                     <h3>Backup & Restore</h3>
@@ -857,25 +924,24 @@
             }
         }
 
+        // Settings/admin sections are always visible to guest and operator alike —
+        // there's nothing sensitive in seeing the current setpoint or the existence of
+        // a backup button. What actually matters is that guests can't submit anything,
+        // which is enforced here (disabled inputs/buttons) and backstopped in every
+        // update*/backup*/etc. handler's own canPerformAction()/currentRole check.
+        function setSectionInteractive(sectionId, chipId, enabled) {
+            const section = document.getElementById(sectionId);
+            const chip = document.getElementById(chipId);
+            if (chip) chip.classList.toggle('hidden', enabled);
+            section.querySelectorAll('input, button, select').forEach((el) => {
+                el.disabled = !enabled;
+            });
+        }
+
         function updateUIForRole() {
             const roleInfo = ROLE_PERMISSIONS[currentRole];
-            
-            // Show/hide settings section
-            const settingsSection = document.getElementById('settingsSection');
-            if (roleInfo.canView.includes('settings')) {
-                settingsSection.classList.remove('hidden');
-            } else {
-                settingsSection.classList.add('hidden');
-            }
-            
-            // Show/hide admin section
-            const adminSection = document.getElementById('adminSection');
-            if (roleInfo.canAdmin) {
-                adminSection.classList.remove('hidden');
-            } else {
-                adminSection.classList.add('hidden');
-            }
-            
+            setSectionInteractive('settingsSection', 'settingsLockChip', roleInfo.canView.includes('settings'));
+            setSectionInteractive('adminSection', 'adminLockChip', roleInfo.canAdmin);
         }
 
         function canPerformAction(action) {
@@ -1020,28 +1086,35 @@
             }
         }
 
+        // Sets a tile's icon-chip color: null/omitted = default (accent), or
+        // 'is-on' (green) / 'is-warn' (orange) / 'is-alert' (red) — same on/attention/
+        // problem convention HA uses for its own tile icon coloring.
+        function setTileIconState(id, state) {
+            const el = document.getElementById(id);
+            el.classList.remove('is-on', 'is-warn', 'is-alert');
+            if (state) el.classList.add(state);
+        }
+
         function updateDashboard(data) {
             updateGauge(data);
 
-            const compStatus = data.compressor_on
-                ? '<span class="status-badge status-ok">🔴 RUNNING</span>' 
-                : '<span class="status-badge">⚪ OFF</span>';
-            document.getElementById('compressorStatus').innerHTML = compStatus;
+            document.getElementById('compressorStatus').textContent = data.compressor_on ? 'Running' : 'Off';
+            setTileIconState('iconCompressor', data.compressor_on ? 'is-on' : null);
 
-            const defStatus = data.defrost_phase
-                ? '<span class="status-badge status-warning">🔥 ACTIVE</span>'
-                : '<span class="status-badge">⏸ IDLE</span>';
-            document.getElementById('defrostStatus').innerHTML = defStatus;
+            document.getElementById('defrostStatus').textContent = data.defrost_phase ? 'Active' : 'Idle';
+            setTileIconState('iconDefrost', data.defrost_phase ? 'is-warn' : null);
 
-            let alarmBadges = '';
-            if (data.alarm_high_active) alarmBadges += '<span class="status-badge status-error">⚠️ HI TEMP</span>';
-            if (data.alarm_low_active) alarmBadges += '<span class="status-badge status-error">❄️ LO TEMP</span>';
-            if (data.alarm_ice_active) alarmBadges += '<span class="status-badge status-error">🧊 ICE</span>';
-            if (!alarmBadges) alarmBadges = '<span class="status-badge status-ok">✓ OK</span>';
-            document.getElementById('alarmStatus').innerHTML = alarmBadges;
+            const activeAlarms = [];
+            if (data.alarm_high_active) activeAlarms.push('Hi Temp');
+            if (data.alarm_low_active) activeAlarms.push('Lo Temp');
+            if (data.alarm_ice_active) activeAlarms.push('Ice');
+            document.getElementById('alarmStatus').textContent = activeAlarms.length ? activeAlarms.join(', ') : 'Clear';
+            setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : 'is-on');
 
-            document.getElementById('signalValue').textContent = data.wifi_rssi || '--';
-            document.getElementById('ssidValue').textContent = data.wifi_ssid || '---';
+            document.getElementById('wifiStatus').textContent = data.wifi_connected === false
+                ? 'Disconnected'
+                : `${data.wifi_rssi ?? '--'} dBm · ${data.wifi_ssid || '---'}`;
+            setTileIconState('iconWifi', data.wifi_connected === false ? 'is-alert' : null);
 
             const uptime = data.uptime_seconds || 0;
             const days = Math.floor(uptime / 86400);

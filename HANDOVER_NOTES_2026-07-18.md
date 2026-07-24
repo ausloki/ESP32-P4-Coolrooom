@@ -10,6 +10,26 @@
 
 ---
 
+## 2026-07-24 Addendum — Lovelace-Style Tile Cards, Restricted-Section Overlay Removed
+
+- `assets/dashboard.html` reworked to read as Home Assistant Lovelace cards: CSS custom-property
+  tokens (`--card-bg`, `--card-radius: 12px`, `--card-border`, `--card-shadow`), HA Tile-card
+  metric tiles (rounded-square icon chip + stacked name/state, green/orange/red state coloring),
+  gauge card given a proper header, tabular numerals throughout.
+- Removed the guest-mode "Restricted Access" lock overlay entirely (dead `.section-restricted`
+  CSS plus the `.hidden`-class section toggle in `updateUIForRole()`). Settings/admin sections
+  are now always visible to guest and operator alike — guests get disabled inputs/buttons (native
+  `disabled` attribute) and a small lock-chip badge, not a hidden or blurred section. No
+  functional change to what guests can actually do — the real gate was always each handler's
+  `canPerformAction()`/`currentRole` check, not section visibility.
+- Synced `assets/dashboard_virtual_preview.html` to the same visual system and republished the
+  same Artifact URL.
+- Also created `~/.claude/CLAUDE.md` (user-level, applies across all projects) per the user's
+  request to set a global concise/direct/no-filler communication style for Claude Code.
+- No firmware change.
+
+---
+
 ## 2026-07-24 Addendum — Virtual Preview Updated + Published for Visual Review
 
 - `assets/dashboard_virtual_preview.html` (the repo's static offline UI mock) updated to include

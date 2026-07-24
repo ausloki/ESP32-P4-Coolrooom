@@ -6,30 +6,48 @@
   <title>Coolroom Dashboard Virtual Preview</title>
   <style>
     * { box-sizing: border-box; }
+
+    /* Same Lovelace-style tokens as assets/dashboard.html — flat cards, hairline
+       borders, restrained accent, tabular numerals. Kept in sync by hand; if you
+       change the tokens in dashboard.html, mirror them here. */
+    :root {
+      --page-bg: #eef1f5;
+      --card-bg: #ffffff;
+      --card-radius: 12px;
+      --card-border: 1px solid rgba(15, 23, 42, 0.07);
+      --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.06);
+      --text-primary: #14181f;
+      --text-secondary: #667085;
+      --accent: #003d82;
+      --accent-soft: rgba(0, 61, 130, 0.08);
+    }
+
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f3f5f8;
-      color: #1f2937;
+      background: var(--page-bg);
+      color: var(--text-primary);
       padding: 18px;
+      font-variant-numeric: tabular-nums;
     }
     .wrap { max-width: 1280px; margin: 0 auto; }
     .topbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: #003d82;
+      background: var(--accent);
       color: #fff;
-      border-radius: 10px;
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
       padding: 16px 18px;
       margin-bottom: 14px;
     }
-    .title h1 { margin: 0 0 4px; font-size: 24px; }
-    .title small { opacity: 0.9; }
+    .title h1 { margin: 0 0 4px; font-size: 22px; }
+    .title small { opacity: 0.85; }
     .controls { display: flex; gap: 8px; align-items: center; }
     .badge {
       padding: 6px 12px;
-      border-radius: 18px;
+      border-radius: 999px;
       font-size: 12px;
       font-weight: 700;
       background: #f59e0b;
@@ -37,9 +55,10 @@
     }
     .btn {
       border: 0;
-      border-radius: 7px;
+      border-radius: 8px;
       padding: 8px 12px;
       font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
       color: #fff;
       background: #0f6ab3;
@@ -47,17 +66,20 @@
     .btn:hover { filter: brightness(1.05); }
     .btn.secondary { background: #6b7280; }
     .btn.danger { background: #b91c1c; }
+    .btn:disabled { background: #e2e5ea; color: #9aa1ac; cursor: not-allowed; filter: none; }
 
     /* Central horseshoe gauge — identical geometry/colors/formula to assets/dashboard.html,
        which in turn mirrors the LVGL touchscreen's home_temp_arc/home_setpoint_arc/
        home_ambient_arc. This preview uses fixed mock readings (no live device). */
     .gauge-section {
       background: #1C1C1E;
-      border-radius: 10px;
-      padding: 24px 20px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      padding: 20px 20px 22px;
       margin-bottom: 14px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
+    .gauge-title { color: rgba(255,255,255,0.82); font-size: 15px; font-weight: 600; margin-bottom: 14px; }
     .gauge-wrap { position: relative; width: min(320px, 78vw); margin: 0 auto; }
     .gauge-wrap svg { width: 100%; height: auto; display: block; }
     .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
@@ -67,9 +89,9 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; pointer-events: none;
     }
-    .gauge-temp { font-size: 42px; font-weight: 700; color: #30D158; line-height: 1; }
-    .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; }
-    .gauge-status { font-size: 13px; color: #FF9F0A; margin-top: 4px; }
+    .gauge-temp { font-size: 40px; font-weight: 700; color: #30D158; line-height: 1; letter-spacing: -0.01em; }
+    .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
+    .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
     .gauge-legend {
       display: flex; justify-content: center; gap: 16px; margin-top: 14px;
       font-size: 12px; color: #ccc;
@@ -77,46 +99,55 @@
     .gauge-legend span { display: flex; align-items: center; gap: 6px; }
     .gauge-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
+    /* Tile cards — mirrors Home Assistant's Tile card: rounded-square icon chip
+       + stacked name/state. */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
       margin-bottom: 14px;
     }
-    .card {
-      background: #fff;
-      border-radius: 10px;
-      padding: 14px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    .tile-card {
+      background: var(--card-bg);
+      border: var(--card-border);
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
-    .label { color: #6b7280; font-size: 12px; text-transform: uppercase; }
-    .value { font-size: 26px; font-weight: 700; color: #003d82; margin-top: 6px; }
+    .tile-icon {
+      width: 40px; height: 40px; flex-shrink: 0;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 19px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .tile-icon.is-on { background: rgba(48,209,88,0.16); color: #1f9d4c; }
+    .tile-icon.is-warn { background: rgba(255,159,10,0.18); color: #b8660a; }
+    .tile-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .tile-value { font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
 
     .section {
-      background: #fff;
-      border-radius: 10px;
-      padding: 14px;
+      background: var(--card-bg);
+      border: var(--card-border);
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      padding: 18px 20px;
       margin-bottom: 12px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
-    .section h2 { margin: 0 0 10px; font-size: 18px; }
-
-    .restricted {
-      position: relative;
-      opacity: 0.48;
-      pointer-events: none;
-    }
-    .restricted::after {
-      content: "🔒 Restricted in current role";
-      position: absolute;
-      left: 50%; top: 50%; transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.78);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 7px;
-      font-size: 12px;
+    .card-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .section h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
+    .lock-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600;
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(255,159,10,0.14); color: #a15c00;
       white-space: nowrap;
     }
+    .hidden { display: none !important; }
 
     .form-row {
       display: grid;
@@ -131,6 +162,7 @@
       padding: 8px;
       font-size: 13px;
     }
+    .field input:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 
     .modal {
       position: fixed;
@@ -145,10 +177,10 @@
     .dialog {
       width: min(92vw, 430px);
       background: #fff;
-      border-radius: 10px;
+      border-radius: var(--card-radius);
       padding: 18px;
     }
-    .dialog h3 { margin: 0 0 10px; color: #003d82; }
+    .dialog h3 { margin: 0 0 10px; color: var(--accent); }
     .dialog p { margin: 0 0 12px; color: #374151; font-size: 13px; }
     .dialog .help {
       background: #eef6ff;
@@ -187,6 +219,7 @@
     </header>
 
     <div class="gauge-section">
+      <h2 class="gauge-title">Coolroom Status</h2>
       <div class="gauge-wrap">
         <svg viewBox="0 0 300 300">
           <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
@@ -210,48 +243,72 @@
     </div>
 
     <div class="grid">
-      <div class="card"><div class="label">Compressor</div><div class="value">RUN</div></div>
-      <div class="card"><div class="label">Defrost</div><div class="value">IDLE</div></div>
-      <div class="card"><div class="label">Ambient</div><div class="value">22.4°C</div></div>
-      <div class="card"><div class="label">WiFi RSSI</div><div class="value">-61 dBm</div></div>
-      <div class="card"><div class="label">Uptime</div><div class="value">2d 7h</div></div>
+      <div class="tile-card">
+        <div class="tile-icon is-on">🌀</div>
+        <div><div class="tile-label">Compressor</div><div class="tile-value">Running</div></div>
+      </div>
+      <div class="tile-card">
+        <div class="tile-icon">🔥</div>
+        <div><div class="tile-label">Defrost</div><div class="tile-value">Idle</div></div>
+      </div>
+      <div class="tile-card">
+        <div class="tile-icon is-on">🔔</div>
+        <div><div class="tile-label">Alarms</div><div class="tile-value">Clear</div></div>
+      </div>
+      <div class="tile-card">
+        <div class="tile-icon">📶</div>
+        <div><div class="tile-label">Wi-Fi</div><div class="tile-value">-61 dBm · CoolroomLAN</div></div>
+      </div>
+      <div class="tile-card">
+        <div class="tile-icon">⏱️</div>
+        <div><div class="tile-label">Uptime</div><div class="tile-value">2d 7h</div></div>
+      </div>
     </div>
 
-    <section id="settingsSection" class="section restricted">
-      <h2>⚙️ Operational Settings (OPERATOR)</h2>
+    <!-- Settings/admin sections are always visible — see the note at the bottom of the
+         page. Guest just gets disabled inputs/buttons, not a hidden or blurred section. -->
+    <section id="settingsSection" class="section">
+      <div class="card-header-row">
+        <h2>⚙️ Operational Settings</h2>
+        <span class="lock-chip" id="settingsLockChip">🔒 Login to edit</span>
+      </div>
       <div class="form-row">
-        <div class="field"><label>Setpoint</label><input type="number" value="2.0" /></div>
-        <div class="field"><label>High Alarm Delta</label><input type="number" value="3.0" /></div>
-        <div class="field"><label>Low Alarm Delta</label><input type="number" value="3.0" /></div>
-        <div class="field"><label>Compressor Hysteresis</label><input type="number" value="1.0" /></div>
+        <div class="field"><label>Setpoint</label><input type="number" value="2.0" disabled /></div>
+        <div class="field"><label>High Alarm Delta</label><input type="number" value="3.0" disabled /></div>
+        <div class="field"><label>Low Alarm Delta</label><input type="number" value="3.0" disabled /></div>
+        <div class="field"><label>Compressor Hysteresis</label><input type="number" value="1.0" disabled /></div>
       </div>
       <div style="margin-top:10px; display:flex; gap:8px;">
-        <button class="btn">Update Setpoint</button>
-        <button class="btn">Update Alarms</button>
+        <button class="btn" id="btnUpdateSetpoint" disabled>Update Setpoint</button>
+        <button class="btn" id="btnUpdateAlarms" disabled>Update Alarms</button>
       </div>
     </section>
 
     <section class="section">
       <h2>🩺 Health</h2>
-      <p>RS485: ✓ | RTD: ✓ | RTC: ✓ | Heap: 108 KB free | Probe freshness: ✓</p>
+      <p style="margin-top: 10px; color: var(--text-secondary); font-size: 13px;">RS485: ✓ &nbsp;|&nbsp; RTD: ✓ &nbsp;|&nbsp; RTC: ✓ &nbsp;|&nbsp; Heap: 108 KB free &nbsp;|&nbsp; Probe freshness: ✓</p>
     </section>
 
-    <section id="adminSection" class="section restricted">
-      <h2>🔐 System Administration (OPERATOR)</h2>
+    <section id="adminSection" class="section">
+      <div class="card-header-row">
+        <h2>🔐 System Administration</h2>
+        <span class="lock-chip" id="adminLockChip">🔒 Login to edit</span>
+      </div>
       <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        <button class="btn danger">📦 Backup</button>
-        <button class="btn danger">📥 Restore</button>
-        <button class="btn danger">🗑️ Delete Logs</button>
-        <button class="btn">📥 Download Logs</button>
-        <button class="btn danger">📡 WiFi Settings</button>
-        <button class="btn danger">⚙️ Hardware Config</button>
+        <button class="btn danger" disabled>📦 Backup</button>
+        <button class="btn danger" disabled>📥 Restore</button>
+        <button class="btn danger" disabled>🗑️ Delete Logs</button>
+        <button class="btn" disabled>📥 Download Logs</button>
+        <button class="btn danger" disabled>📡 WiFi Settings</button>
+        <button class="btn danger" disabled>⚙️ Hardware Config</button>
       </div>
     </section>
 
     <div class="note">
       This virtual page simulates the real dashboard's layout with fixed mock readings: guest-first
-      default, login for elevation, role-based gating for settings/admin, and the same central
-      horseshoe gauge as <code>assets/dashboard.html</code> / the LVGL touchscreen. It never talks
+      default, login for elevation, and the same central horseshoe gauge as
+      <code>assets/dashboard.html</code> / the LVGL touchscreen. Settings/admin stay visible at all
+      times — logging in only enables the controls, it doesn't reveal a hidden section. Never talks
       to a real device.
     </div>
   </div>
@@ -290,28 +347,26 @@
     let role = 'guest';
     let user = 'guest';
 
+    function setSectionInteractive(sectionId, chipId, enabled) {
+      const section = document.getElementById(sectionId);
+      const chip = document.getElementById(chipId);
+      if (chip) chip.classList.toggle('hidden', enabled);
+      section.querySelectorAll('input, button').forEach((el) => { el.disabled = !enabled; });
+    }
+
     function applyRole() {
       const roleBadge = document.getElementById('roleBadge');
       const loginBtn = document.getElementById('loginBtn');
       const logoutBtn = document.getElementById('logoutBtn');
-      const settings = document.getElementById('settingsSection');
-      const admin = document.getElementById('adminSection');
 
       roleBadge.textContent = role === 'guest' ? 'Guest' : 'Operator';
+      roleBadge.style.background = role === 'guest' ? '#f59e0b' : '#22c55e';
+      loginBtn.style.display = role === 'guest' ? 'inline-block' : 'none';
+      logoutBtn.style.display = role === 'guest' ? 'none' : 'inline-block';
 
-      if (role === 'guest') {
-        roleBadge.style.background = '#f59e0b';
-        loginBtn.style.display = 'inline-block';
-        logoutBtn.style.display = 'none';
-        settings.classList.add('restricted');
-        admin.classList.add('restricted');
-      } else {
-        roleBadge.style.background = '#22c55e';
-        loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'inline-block';
-        settings.classList.remove('restricted');
-        admin.classList.remove('restricted');
-      }
+      const enabled = role !== 'guest';
+      setSectionInteractive('settingsSection', 'settingsLockChip', enabled);
+      setSectionInteractive('adminSection', 'adminLockChip', enabled);
     }
 
     function openLogin() {

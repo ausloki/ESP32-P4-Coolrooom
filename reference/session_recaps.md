@@ -1171,3 +1171,24 @@ correctly: three concentric arcs with the bottom gap, center readout, and legend
 visual sign-off.
 
 ---
+
+
+## 2026-07-24 — Lovelace-Style Tile Cards, Restricted-Section Overlay Removed
+
+Reworked assets/dashboard.html visual system to read as Home Assistant Lovelace cards: flat
+surfaces (12px radius, hairline border, minimal shadow via CSS tokens at :root), tabular
+numerals, and HA Tile-card metric tiles (rounded-square icon chip + stacked name/state, colored
+green/orange/red for on/attention/alert). Gauge card gained a proper card header ("Coolroom
+Status") and tighter typography.
+
+Removed the guest-mode lock overlay (dead .section-restricted CSS plus the live .hidden-section
+toggle) per explicit instruction: settings/admin sections are now always visible to guest and
+operator alike. Guests just get disabled inputs/buttons (native disabled attribute) plus a small
+lock-chip badge in the section header explaining why -- the actual protection was always the
+per-handler canPerformAction()/currentRole check, not whether the section was visible, so nothing
+was lost functionally. Synced assets/dashboard_virtual_preview.html to match and republished the
+same Artifact URL for visual review.
+
+No firmware change.
+
+---
