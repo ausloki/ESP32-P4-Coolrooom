@@ -2,11 +2,72 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — named alarm warning banners added (both surfaces) + web dashboard entity-ID bugs fixed; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `ac97d3f` (feat(alarms): named alarm warning banners on both surfaces + fix web dashboard entity-ID bugs)
+**Status**: In Progress — control logic benchmarked against Carel IR33 series, two divergences fixed (defrost-on-reboot, flat startup alarm grace); hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Control Logic Benchmarked Against Carel IR33 Series
+
+User asked for a comparison of the cooling/compressor/defrost/alarm logic against a commercial
+Carel IR33-series controller, to confirm the basics follow the same control path before any
+changes, with suggestions if needed — reviewed first, no changes made until confirmed.
+
+**Confirmed matching Carel's baseline**: probe-fault fallback duty cycling (mirrors Carel's
+`c.CY`/`cC.on`/`cC.OF` exactly), dual defrost termination (time-limited + evap-probe-terminated,
+whichever first — matches `Md`/`dtE`), post-defrost drip/drain hold (`dP`), compressor off-time
+lockout (`c2`), high/low alarm deltas relative to setpoint (`AH`/`AL`), alarm persist delay
+(`Pab`), alarm recovery hysteresis (`rE`), door alarm delay (`dAd`), 8h defrost interval. No-cool
+alarm, ice/evap-delta alarm, and delta-triggered smart defrost are enhancements beyond a base
+IR33's feature set — not gaps, additions.
+
+**Six divergences found; two fixed this session (user-approved), four left open pending a
+decision**:
+
+Fixed:
+
+1. **Defrost no longer forced on every reboot.** Previously any reboot (WiFi hiccup, OTA update)
+   of an already-cold room triggered an unwanted defrost cycle 10 minutes after boot, because
+   `p4_ctl_defrost_due()` treated "never run" as "due now". Carel's `d0` (defrost-at-startup)
+   defaults off. Fixed by seeding `ctl_defrost_last_end_ms = ctl_boot_ms` at boot — the interval
+   clock now starts from power-on.
+2. **Startup alarm grace is now pulldown-aware instead of a flat 15-minute timer.** A genuine
+   warm-start pulldown (first commissioning, extended outage) could take far longer than 15
+   minutes to reach setpoint, letting the high-temp alarm fire before the room ever got there
+   once. New behavior: grace still holds unconditionally for the existing 15-minute floor, then
+   continues until the room first reaches the alarm-safe band, capped at a new hard 4-hour
+   ceiling (`startup_grace_max_min` substitution constant — not a tunable entity, same treatment
+   as `probe_stale_ms`). New pure functions `p4_ctl_pulldown_reached()` /
+   `p4_ctl_startup_grace_active()` in `p4_control.h`; new runtime-only global
+   `ctl_startup_pulldown_done` (resets every boot, not persisted/backed up — pulldown state is
+   inherently boot-scoped).
+
+Left open (not fixed — need your call):
+
+1. Compressor hysteresis band is **symmetric** (±0.5°C around setpoint) — Carel's is
+   **asymmetric** (ON at setpoint+differential, OFF at exactly setpoint, room runs above
+   setpoint on average). This is the one real "basics" divergence; arguably better as-is
+   (tracks setpoint exactly) but differs from what a Carel-trained tech expects.
+2. No minimum compressor ON-time / anti-short-cycle start delay (Carel's `c1`/`c0`) — only the
+   OFF-time lockout exists.
+3. No fan control anywhere in the project — confirm whether the evaporator fan is wired
+   independently of this controller (its own thermostat/always-on), or if that's a real gap.
+4. Door switch doesn't pause compressor regulation or suppress the high-temp alarm while open —
+   only the separate door-open alarm has its own delay; a legitimate door-open temp rise can
+   independently trigger the high-temp alarm.
+
+Full comparison table and Carel parameter mapping in `reference/session_recaps.md`'s matching
+2026-07-25 entry.
+
+**Build**: RAM 20.0% (115,440/576,464 B), Flash 20.7% (1,517,848/7,340,032 B) — unchanged, both
+fixes are pure logic with negligible footprint. Compile clean.
+
+**Untested on hardware** — same standing blocker. First checks once connected: confirm a reboot
+on an already-cold room does not trigger defrost, and confirm a cold start from a warm room holds
+off high-temp alarms until setpoint is reached (or the 4h ceiling).
 
 ---
 

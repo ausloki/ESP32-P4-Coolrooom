@@ -122,6 +122,15 @@ substitutions:
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
   probe_stale_ms:      "30000"  # probe 1 declared stale after this many ms
 
+  # Hard safety ceiling on the startup alarm grace period — the grace stays
+  # active past default_startup_grace_min until the room first reaches the
+  # alarm-safe band (covers a slow pulldown from a warm start), but never
+  # longer than this, so a genuinely stuck/broken pulldown still alarms
+  # eventually. Not exposed as a tunable number entity (technical safety
+  # limit, not an operational setting) — matches probe_stale_ms/
+  # defrost_max_min's treatment above.
+  startup_grace_max_min: "240"  # 4h hard ceiling on startup pulldown grace
+
   # ── Phase 5: SD logging & ntfy ──────────────────────────────
   log_interval_min:    "5"      # temperature log interval (minutes)
   ntfy_server:         "https://ntfy.sh"   # ntfy server URL
@@ -144,6 +153,10 @@ esphome:
       then:
         - lambda: |-
             id(ctl_boot_ms) = millis();
+            // Defrost interval clock starts counting from power-on rather
+            // than triggering immediately (matches Carel's d0=off default —
+            // no forced defrost on every reboot/OTA of an already-cold room).
+            id(ctl_defrost_last_end_ms) = id(ctl_boot_ms);
             p4_log_boot();
             p4_ntp_set_fast_sync(${ntp_fast_sync_ms});
     - priority: -200
@@ -1810,10 +1823,24 @@ interval:
           id(ctl_probe_fault) = fault;
 
           // ── 2. Grace periods ────────────────────────────────────────────
-          const uint32_t startup_grace_ms  = (uint32_t)(id(ctl_startup_grace_min)  * 60000.0f);
-          const uint32_t defrost_grace_ms  = (uint32_t)(id(ctl_defrost_grace_min)  * 60000.0f);
-          const uint32_t alarm_persist_ms  = (uint32_t)(id(ctl_alarm_persist_min)  * 60000.0f);
-          bool in_grace = p4_ctl_startup_grace(id(ctl_boot_ms), startup_grace_ms) ||
+          const uint32_t startup_grace_ms     = (uint32_t)(id(ctl_startup_grace_min)  * 60000.0f);
+          const uint32_t startup_grace_max_ms = (uint32_t)(${startup_grace_max_min}   * 60000.0f);
+          const uint32_t defrost_grace_ms     = (uint32_t)(id(ctl_defrost_grace_min)  * 60000.0f);
+          const uint32_t alarm_persist_ms     = (uint32_t)(id(ctl_alarm_persist_min)  * 60000.0f);
+
+          // Pulldown-aware: extends the plain startup grace timer (still the
+          // floor for a normal quick pulldown) until the room actually first
+          // reaches the alarm-safe band, capped at startup_grace_max_min so a
+          // genuinely stuck pulldown still alarms eventually.
+          if (!id(ctl_startup_pulldown_done) &&
+              p4_ctl_pulldown_reached(t, id(ctl_setpoint),
+                                       id(ctl_alarm_high_delta), id(ctl_alarm_low_delta))) {
+              id(ctl_startup_pulldown_done) = true;
+              ESP_LOGI("ctl", "Startup pulldown reached — normal alarm grace resumes");
+          }
+          bool in_grace = p4_ctl_startup_grace_active(id(ctl_boot_ms), startup_grace_ms,
+                                                       startup_grace_max_ms,
+                                                       id(ctl_startup_pulldown_done)) ||
                           p4_ctl_defrost_grace(id(ctl_defrost_last_end_ms), defrost_grace_ms);
 
           // ── 3. Sensor fallback duty cycle (when probe is faulted) ───────
@@ -2241,6 +2268,14 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
+
+  # True once the room has first reached the alarm-safe band around setpoint
+  # since boot — ends the extended startup grace early once pulldown
+  # genuinely completes, ahead of the startup_grace_max_min hard ceiling.
+  - id: ctl_startup_pulldown_done
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
   - id: ctl_wifi_connected
     type: bool

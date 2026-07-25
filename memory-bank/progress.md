@@ -1,5 +1,23 @@
 # Progress Tracking
 
+## 2026-07-25 Control Logic Benchmarked Against Carel IR33 Series; Two Fixes Applied
+
+- Compared `p4_control.h` + the main control tick against a commercial Carel IR33-series
+  controller's standard parameter set, per user request, before making any changes. Confirmed
+  matching: probe-fault fallback duty cycling, dual defrost termination (time + evap-probe),
+  post-defrost drip hold, compressor off-time lockout, alarm deltas/persist/hysteresis, door
+  alarm delay, 8h defrost interval. No-cool/ice/smart-defrost are enhancements beyond baseline.
+- Found six divergences; user approved fixing two:
+  - Defrost no longer fires on every reboot — `ctl_defrost_last_end_ms` now seeded to boot time
+    instead of triggering immediately (matches Carel's `d0`=off default).
+  - Startup alarm grace is now pulldown-aware: holds the existing 15-min floor, then continues
+    until the room first reaches the alarm-safe band, capped at a new 4h hard ceiling — instead
+    of a flat 15-min timer that could let alarms fire before a slow warm-start pulldown finished.
+- Four divergences left open pending a decision: symmetric vs Carel's asymmetric hysteresis band,
+  no minimum compressor ON-time/anti-short-cycle delay, no fan control at all, door switch doesn't
+  pause compressor regulation or suppress the high-temp alarm.
+- Build: RAM 20.0%, Flash 20.7% (unchanged). Compile clean. Untested on physical hardware.
+
 ## 2026-07-25 Named Alarm Warning Banners + Web Dashboard Reading Gaps Closed
 
 - User selected 2 of 4 proposed follow-ups from a visual-parity status check: named alarm warning

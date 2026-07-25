@@ -1514,4 +1514,59 @@ the first attempt this time — no ninja/native-IDF flake.
 status badges are both untested on the physical touchscreen/device — still blocked, hardware not
 connected this session.
 
+## 2026-07-25 — Control Logic Reviewed Against Carel IR33 Series; Two Divergences Fixed
+
+User asked for a comparison of this project's cooling/defrost/alarm logic against a commercial
+Carel IR33-series controller, to confirm the basics follow the same path before any changes, with
+suggestions if needed. Reviewed `p4_control.h` + the main 10s control tick in
+`esp32-p4-coolroom.yaml` against Carel's standard `dIn`-style parameter set (`St`/`rd`, `c1`/`c2`,
+`dEF`/`id`/`Md`/`dtE`/`dP`, `AH`/`AL`/`Pab`/`rE`, `dAd`, `d0`, `dAO`, `c.CY` fallback duty cycle).
+
+Confirmed matching: probe-fault fallback duty cycling, dual defrost termination (time-limited +
+evap-probe-terminated), post-defrost drip/drain hold, compressor off-time lockout, high/low alarm
+deltas relative to setpoint, alarm persist delay, alarm recovery hysteresis, door alarm delay,
+8h defrost interval. No-cool alarm, ice/evap-delta alarm, and delta-triggered smart defrost are
+enhancements beyond a base IR33's feature set (present on some higher-end Carel controllers, not
+required to match).
+
+Found six divergences from Carel's baseline behavior; presented all six with a recommendation to
+fix two first. User approved fixing #3 and #4 this session; the other four (symmetric vs
+asymmetric hysteresis band, no minimum compressor ON-time/anti-short-cycle start delay, no fan
+control at all, door switch doesn't pause compressor regulation or suppress the high-temp alarm)
+remain open pending a decision — **not fixed, deliberately out of scope this session**.
+
+- **Fix #3 — defrost no longer forced on every reboot**: `p4_ctl_defrost_due()` treated
+  `ctl_defrost_last_end_ms == 0` ("never run") as "due immediately" once 10 minutes of uptime had
+  passed — meaning any reboot (WiFi hiccup, OTA update) of an already-cold room triggered an
+  unnecessary defrost cycle. Carel's `d0` (defrost-at-startup) defaults off. Fixed by seeding
+  `ctl_defrost_last_end_ms = ctl_boot_ms` in the `on_boot` priority-600 lambda
+  ([esp32-p4-coolroom.yaml:142-148](../esp32-p4-coolroom.yaml#L142)) — the defrost interval clock
+  now starts counting from power-on instead of firing immediately. The `== 0` branch in
+  `p4_ctl_defrost_due()` stays as defensive fallback code, now effectively unreachable under
+  normal operation.
+- **Fix #4 — startup alarm grace is now pulldown-aware, not a flat timer**: the old
+  `startup_grace_min` (15 min) was a fixed window regardless of how far from setpoint the room
+  actually was at boot — too short to cover a real warm-start pulldown (first commissioning, long
+  power outage), which would then let the high-temp alarm fire before the room had ever reached
+  setpoint once. New behavior: grace still holds unconditionally for `startup_grace_min` (15 min,
+  the floor — covers the common fast-pulldown case exactly as before), then continues past that
+  point until the room first reaches the alarm-safe band around setpoint, capped at a new hard
+  ceiling `startup_grace_max_min` (240 min / 4h substitution constant, not exposed as a tunable
+  entity — matches how `probe_stale_ms`/`defrost_max_min` are already treated as fixed technical
+  safety limits rather than operational settings). Implemented as two new pure functions in
+  `p4_control.h`: `p4_ctl_pulldown_reached()` and `p4_ctl_startup_grace_active()`
+  ([p4_control.h](../p4_control.h)), plus a new runtime-only global `ctl_startup_pulldown_done`
+  (not NVS-persistent, not part of SD backup/restore — resets every boot by design, since pulldown
+  state is boot-scoped). Wired into the main control tick's grace-period section
+  ([esp32-p4-coolroom.yaml:1812-1830](../esp32-p4-coolroom.yaml#L1812)).
+
+**Build**: RAM 20.0% (115,440/576,464 B), Flash 20.7% (1,517,848/7,340,032 B) — unchanged from
+last session, both fixes are pure logic/glue with negligible footprint. Compile clean.
+
+**Hardware-gated follow-up**: neither fix has been observed on a real pulldown or reboot cycle —
+same standing blocker, device not connected this session. First things to verify once hardware is
+back: that a reboot on an already-cold room does *not* trigger defrost, and that a cold start from
+a warm room holds off high-temp alarms until setpoint is actually reached (or the 4h ceiling, if
+something's genuinely wrong).
+
 ---

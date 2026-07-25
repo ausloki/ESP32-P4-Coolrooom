@@ -129,6 +129,34 @@ inline bool p4_ctl_defrost_grace(uint32_t defrost_end_ms, uint32_t grace_ms) {
     return (millis() - defrost_end_ms) < grace_ms;
 }
 
+/// True once the room has reached within the alarm-safe band around setpoint
+/// (used to detect first-ever pulldown completion since boot).
+inline bool p4_ctl_pulldown_reached(float coolroom_c, float setpoint_c,
+                                     float alarm_high_c, float alarm_low_c) {
+    if (!p4_rtd_valid(coolroom_c)) return false;
+    return !p4_ctl_alarm_high(coolroom_c, setpoint_c, alarm_high_c) &&
+           !p4_ctl_alarm_low(coolroom_c, setpoint_c, alarm_low_c);
+}
+
+/// True while the startup alarm-suppression grace is active. Held
+/// unconditionally for floor_ms (covers a normal, quick pulldown without
+/// nuisance alarms during the approach to setpoint), then continues —
+/// capped at ceiling_ms — until the room has reached the alarm-safe band for
+/// the first time. Prevents a slow warm-start pulldown from false-alarming
+/// before it's had a fair chance to reach setpoint, while still guaranteeing
+/// a genuinely stuck/broken pulldown eventually alarms rather than being
+/// suppressed forever.
+inline bool p4_ctl_startup_grace_active(
+    uint32_t boot_ms,
+    uint32_t floor_ms,
+    uint32_t ceiling_ms,
+    bool     pulldown_done
+) {
+    if (p4_ctl_startup_grace(boot_ms, floor_ms)) return true;
+    if (pulldown_done) return false;
+    return p4_ctl_startup_grace(boot_ms, ceiling_ms);
+}
+
 /// True once the alarm condition has persisted long enough to be considered real.
 /// alarm_since_ms: millis() when the alarm was first detected; 0 = not active.
 /// persist_ms: minimum duration required before alarm fires the siren.

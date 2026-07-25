@@ -1,79 +1,80 @@
 # Active Context — Current Session State
 
 **Date:** 2026-07-25
-**Session:** Named alarm warning banners (LVGL + web dashboard) + fixed a wide-reaching pre-existing entity-ID bug in the web dashboard
+**Session:** Control logic benchmarked against Carel IR33 series; two divergences fixed (defrost-on-reboot, flat startup alarm grace)
 **Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING (blocked on hardware)
 
 ## Current Focus
 
 ### What Was Confirmed This Session
 
-- User was asked a status-check question ("have we achieved LVGL/webgui visual parity with the
-  old project?") and selected exactly two of four proposed follow-ups: add named alarm warning
-  banners on both surfaces, and close the missing-readings gap on the web dashboard. A full LVGL
-  main-screen redesign to match the old project's meter/needle layout was explicitly **not**
-  selected — do not revisit that without the user asking again.
-- **Major discovery while investigating (not user-reported)**: `assets/dashboard.html`'s
-  `parseStates()` had been reading wrong entity IDs since the dashboard was first built —
-  internal `ctl_*` global variable names and guessed domains instead of the real published `id:`
-  fields. This affected: alarm high/low/ice/probe-fault binary sensors (`ctl_*` → real
-  `alarm_high_active`/`alarm_low_active`/`ice_alarm_sensor`/`probe_fault_active`), compressor/
-  defrost (wrong domain — should be `switch.*` not `binary_sensor.*`), RS485/RTC health sensors
-  (`hw_*_ok` globals → real `rs485_relay_online`/`rs485_rtd1_online`/`rtc_online`), the Wi-Fi
-  indicator (`wifi_connected` doesn't exist → `binary_sensor.controller_online`), free heap
-  (`free_heap` → `free_heap_kb`), and every `number.ctl_*` settings readback (→ `setpoint`,
-  `alarm_high_delta`, `alarm_low_delta`, `compressor_differential`). **The compressor/defrost
-  status badges, alarm bell, probe-fault alert, RS485/RTC health row, and settings input pre-fill
-  have never reflected real device state on the live web dashboard.** All fixed this session.
+- User asked for a comparison of the cooling/compressor/defrost/alarm logic against a commercial
+  Carel IR33-series controller, to confirm the basics follow the same control path before any
+  changes — reviewed and presented first, no changes made until the user confirmed which to fix.
+- Reviewed `p4_control.h` + the main 10s control tick against Carel's standard `dIn` parameter
+  set. **Confirmed matching**: probe-fault fallback duty cycling (`c.CY`-equivalent), dual defrost
+  termination (time + evap-probe, matches `Md`/`dtE`), post-defrost drip hold (`dP`), compressor
+  off-time lockout (`c2`), high/low alarm deltas (`AH`/`AL`), alarm persist delay (`Pab`), alarm
+  recovery hysteresis (`rE`), door alarm delay (`dAd`), 8h defrost interval. No-cool alarm,
+  ice/evap-delta alarm, and smart delta-defrost are enhancements beyond a base IR33 — not gaps.
+- Found six divergences from Carel's baseline; user approved fixing two (#3 defrost-on-reboot,
+  #4 flat startup alarm grace) this session. **Four left open, not fixed, pending a decision**:
+  1. Compressor hysteresis band is symmetric (±0.5°C around setpoint) vs Carel's asymmetric (ON
+     at setpoint+diff, OFF at exactly setpoint) — the one real "basics" divergence, needs a call.
+  2. No minimum compressor ON-time / anti-short-cycle start delay (Carel's `c1`/`c0`).
+  3. No fan control anywhere in the project — needs confirming whether the evaporator fan is
+     wired independently (own thermostat/always-on) or if that's a real gap.
+  4. Door switch doesn't pause compressor regulation or suppress the high-temp alarm while open.
 
 ### Latest Completed Work
 
-- `assets/dashboard.html`: fixed every wrong entity ID in `parseStates()` (see above), added
-  parsing for `binary_sensor.door_alarm_active`/`no_cool_alarm_sensor` (existing entities the
-  dashboard never read) and `sensor.probe2_temp` (evaporator).
-- New pulsing `.alarm-banner` on the web dashboard — shows whichever of HIGH TEMPERATURE / LOW
-  TEMPERATURE / DOOR OPEN / NO COOLING / ICE DETECTED are active. Kept separate from the existing
-  plain `.alert-danger`/`.alert-warning` boxes (probe fault, Wi-Fi disconnect).
-- New Evaporator reading pill on the web dashboard (`sensor.probe2_temp`), third pill alongside
-  Internal (SHT31) / External (SHT20). Lockout/defrost/drip countdowns considered and dropped —
-  no backing live-countdown entities exist yet; out of scope for a reading-gap close-up.
-- `esp32-p4-coolroom.yaml`: new LVGL `page_home` widget `lbl_home_alarm_banner` — scrolling
-  (`long_mode: SCROLL_CIRCULAR`) label in the 32px gap between the left icon column and the tab
-  bar (`x:96, y:520, width:912, height:28`), hidden by default. Driven from the existing "Phase
-  4: 1s LVGL display updates" `interval:` block via `lvgl.widget.update` (hidden) +
-  `lvgl.label.update` (text), reading the same five alarm globals the web banner uses — both
-  surfaces show the identical named-alarm set. Deliberately excludes probe fault, which already
-  has its own indicator (`lbl_status_text` + `led_probe_fault`).
-- `assets/dashboard_virtual_preview.html`: synced (evaporator pill + a demo active alarm banner
-  so the static preview visibly demonstrates the new feature). Artifact republished at the same
-  URL: `https://claude.ai/code/artifact/a5947d8c-7dfc-4b4f-adb0-fcf77b175ca3`.
+- **Fix #3 — defrost no longer forced on every reboot.** `p4_ctl_defrost_due()` treated
+  `ctl_defrost_last_end_ms == 0` ("never run") as "due immediately" after 10 min uptime, so any
+  reboot (WiFi hiccup, OTA) of an already-cold room triggered an unwanted defrost. Fixed by
+  seeding `ctl_defrost_last_end_ms = ctl_boot_ms` in the `on_boot` priority-600 lambda — the
+  interval clock now starts from power-on. Carel's `d0` (defrost-at-startup) defaults off; this
+  now matches.
+- **Fix #4 — startup alarm grace is now pulldown-aware, not a flat timer.** Old 15-min flat
+  window was too short for a genuine warm-start pulldown (first commissioning, long outage),
+  letting the high-temp alarm fire before the room ever reached setpoint once. New: grace holds
+  unconditionally for 15 min (floor, unchanged for the common case), then continues until the
+  room first reaches the alarm-safe band, capped at a new hard 4h ceiling
+  (`startup_grace_max_min` substitution constant — not a tunable entity, same treatment as
+  `probe_stale_ms`). New pure functions `p4_ctl_pulldown_reached()` /
+  `p4_ctl_startup_grace_active()` in `p4_control.h`; new runtime-only global
+  `ctl_startup_pulldown_done` (resets every boot by design, not persisted/backed up).
+- Full Carel comparison table and parameter mapping recorded in
+  `reference/session_recaps.md`'s 2026-07-25 "Control Logic Reviewed Against Carel IR33 Series"
+  entry.
 
 ### Build Status
 
 ```text
-Compile: successful via ./tools/esphome_compile.sh, clean on the first attempt (no flake)
-RAM:   20.0% (115,424 / 576,464 bytes)
-Flash: 20.7% (1,517,672 / 7,340,032 bytes)
+Compile: successful via ./tools/esphome_compile.sh, clean
+RAM:   20.0% (115,440 / 576,464 bytes)
+Flash: 20.7% (1,517,848 / 7,340,032 bytes)
 ```
 
 ### Immediate Next Actions
 
-1. Hardware validation, once the device is connected, should specifically check: the corrected
-   web dashboard status badges (compressor/defrost/alarm bell/probe-fault/RS485/RTC — none of
-   these were verified against a real device before, since the bug predates this session) and the
-   new LVGL banner's scroll behavior on the touchscreen.
-2. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
+1. Decide on the four open Carel divergences (symmetric vs asymmetric hysteresis band especially
+   — needs a call either way, not obviously a bug) — ask if/when revisiting this topic.
+2. Hardware validation, once connected, should specifically check: a reboot on an already-cold
+   room does *not* trigger defrost, and a cold start from a warm room holds off high-temp alarms
+   until setpoint is genuinely reached (or the 4h ceiling).
+3. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
    unchanged from prior sessions, still blocked.
-3. Reflash the physical device once connected — still pending from credential rotation and the
-   PIN-gate/page-navigation fix, same standing hardware blocker.
+4. Reflash the physical device once connected — still pending from credential rotation and every
+   firmware change since, same standing hardware blocker.
 
 ### Outstanding Items
 
 1. Phase 5 is still open in the firmware header and instructions.
 2. Hardware validation required for: offline-safe/SD-card behavior, RTC identity (0x51 vs 0x68),
    SHT31/SHT20 sensors (address confirmation, physical wiring), the LVGL page-navigation + PIN
-   gate flow, and now the corrected web dashboard status indicators + both new alarm banners.
-   All blocked — device not currently connected.
+   gate flow, the web dashboard status indicators + both alarm banners (prior session), and now
+   the defrost-on-reboot fix + pulldown-aware alarm grace (this session). All blocked — device
+   not currently connected.
 3. Device reflash for rotated credentials + all firmware changes since is still outstanding, same
    hardware blocker.
 4. If real server-side dashboard authorization is ever wanted, it requires either ESPHome gaining
@@ -84,10 +85,13 @@ Flash: 20.7% (1,517,672 / 7,340,032 bytes)
 6. No live-countdown entities exist for compressor lockout/defrost/drip — only LVGL-only labels
    and configured-duration `number:` entities. Would need new backend entities if ever wanted on
    the web dashboard.
+7. Four Carel-comparison divergences left open (see "What Was Confirmed This Session" above) —
+   awaiting a decision on each, not to be changed without the user weighing in.
 
 ### Key Anchors For Resume
 
 - Firmware status header: `esp32-p4-coolroom.yaml`
+- Control logic: `p4_control.h` (pure functions), `p4_logging.h` (SD/backup), `p4_helpers.h`
 - Current recap history: `reference/session_recaps.md`
 - Main resume handover: `HANDOVER_NOTES_2026-07-18.md`
 - Hardware/I2C reference: `reference/hardware_pins.md`
@@ -97,6 +101,7 @@ Flash: 20.7% (1,517,672 / 7,340,032 bytes)
 
 ---
 
-**Ready for:** Hardware validation — this session both fixed a wide-reaching pre-existing web
-dashboard bug and added two new visible UI features, none of it checked against a real device
-yet. Blocked on hardware not being connected this session.
+**Ready for:** Hardware validation — two prior sessions' worth of unvalidated changes (web
+dashboard fixes, alarm banners, and now the Carel-alignment defrost/alarm-grace fixes) are all
+stacked up waiting on the device being connected. Also awaiting a user decision on the four open
+Carel divergences before touching that area further.
