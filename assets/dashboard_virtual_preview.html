@@ -422,12 +422,8 @@
         <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-backup')" aria-label="What does Backup do?">i</button>
         <button class="btn danger" disabled>📥 Restore</button>
         <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-restore')" aria-label="What does Restore do?">i</button>
-        <button class="btn danger" disabled>🗑️ Delete Logs</button>
-        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-delete-logs')" aria-label="What does Delete Logs do?">i</button>
-        <button class="btn" disabled>📥 Download Logs</button>
-        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-download-logs')" aria-label="What does Download Logs do?">i</button>
-        <button class="btn danger" disabled>📡 WiFi Settings</button>
-        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi')" aria-label="What does WiFi Settings do?">i</button>
+        <button class="btn" disabled onclick="toggleHelp(event, 'logs-panel')">🗂️ Logs Management</button>
+        <button class="btn" disabled onclick="toggleHelp(event, 'wifi-panel')">📡 WiFi Settings</button>
         <button class="btn" disabled onclick="toggleHelp(event, 'hw-panel')">⚙️ Hardware Config</button>
         <input type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" disabled style="width: 140px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
         <button class="btn" disabled>🔒 Change PIN</button>
@@ -443,19 +439,42 @@
         overwriting current values. Runs automatically once at boot if a backup exists; also has a real manual
         button (<code>btn_sd_restore</code>) — this preview button doesn't call it.
       </div>
-      <div id="help-delete-logs" class="help-popover hidden">
-        Meant to clean up old daily temperature/event CSV log files from the SD card. No log-deletion logic
-        exists in the firmware yet — placeholder only.
+      <div id="logs-panel" class="help-popover hidden">
+        <p style="margin-bottom: 8px;">Lists the daily temperature log files on the SD card (one per day, plus a
+          running <code>events.csv</code>) — Download saves the selected file, Delete permanently removes it.
+          This preview shows mock filenames; the real dashboard talks to a live <code>/logs</code> endpoint.</p>
+        <select disabled style="width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+          <option>2026-07-25.csv (18.4 KB)</option>
+          <option>2026-07-24.csv (22.1 KB)</option>
+          <option>2026-07-23.csv (21.8 KB)</option>
+          <option>events.csv (4.2 KB)</option>
+        </select>
+        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+          <button class="btn" disabled>🔄 Refresh</button>
+          <button class="btn" disabled>📥 Download</button>
+          <button class="btn danger" disabled>🗑️ Delete</button>
+        </div>
       </div>
-      <div id="help-download-logs" class="help-popover hidden">
-        Meant to let you pull the daily temperature log (temps, Setpoint, compressor/defrost state, alarms —
-        one row every 5 minutes) and the alarm/event log off the SD card. No download endpoint exists yet —
-        placeholder only.
-      </div>
-      <div id="help-wifi" class="help-popover hidden">
-        Meant to change which WiFi network the controller connects to. Currently only configurable at build
-        time (<code>secrets.yaml</code>), or via the device's own "CoolroomP4-Setup" fallback access point.
-        This button doesn't do anything yet.
+      <div id="wifi-panel" class="help-popover hidden">
+        <div class="hw-grid" style="margin-bottom: 12px;">
+          <div><strong>Current Network</strong><span>Coolroom-LAN</span></div>
+          <div><strong>Signal</strong><span>-61 dBm</span></div>
+          <div><strong>IP Address</strong><span>192.168.1.42</span></div>
+        </div>
+        <p style="margin-bottom: 10px;">Entering a new network below reconnects <strong>immediately</strong> —
+          the current connection drops right away while the device attempts the new one, falling back to its own
+          "CoolroomP4-Setup" access point if the new credentials don't work. No test-first safety net.</p>
+        <div style="display: flex; flex-direction: column; gap: 8px; max-width: 320px;">
+          <div>
+            <label style="display: block; font-size: 12px; margin-bottom: 3px;">New Network Name (SSID)</label>
+            <input type="text" disabled placeholder="Network name" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; margin-bottom: 3px;">New Network Password</label>
+            <input type="password" disabled placeholder="Network password" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+          </div>
+          <button class="btn danger" disabled style="align-self: flex-start;">📡 Reconnect to This Network</button>
+        </div>
       </div>
       <div id="hw-panel" class="help-popover hidden">
         <div class="hw-grid">
@@ -526,7 +545,7 @@
       const section = document.getElementById(sectionId);
       const chip = document.getElementById(chipId);
       if (chip) chip.classList.toggle('hidden', enabled);
-      section.querySelectorAll('input, button').forEach((el) => {
+      section.querySelectorAll('input, button, select').forEach((el) => {
         if (el.classList.contains('help-icon')) return;
         el.disabled = !enabled;
       });

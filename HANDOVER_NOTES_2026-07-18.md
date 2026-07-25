@@ -2,11 +2,59 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — help balloons now guest-invisible, Hardware Config is a real live diagnostics panel; three admin features (Delete/Download Logs, WiFi scan+switch) need new firmware infrastructure, findings presented, awaiting user direction; hardware validation + device reflash both blocked  
-**Last Commit**: `44fd8fe` (feat(dashboard): guest-gate help balloons, turn Hardware Config into a live panel)
+**Status**: In Progress — SD log file manager (list/download/delete) and simple WiFi reconnect implemented as new firmware capabilities; hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — SD Log File Manager + Simple WiFi Reconnect Implemented
+
+User picked (via AskUserQuestion) "Build the full file manager" for Delete/Download Logs and
+"Read-only stats + simple reconnect" (no test-first rollback) for WiFi Settings, from the two
+scoped options presented in the prior addendum. Both implemented — the first genuinely new
+firmware capability added since the entity-wiring work earlier in this cycle.
+
+**New file `p4_log_manager.h`**: a custom `AsyncWebHandler` registered on the same
+`AsyncWebServer` instance `web_server:` uses (`web_server_base::global_web_server_base->add_handler()`
+in a new `on_boot: priority: -250` block), so it inherits the same basic-auth automatically.
+Three routes, all restricted to a strict filename allowlist (`events.csv` or `YYYY-MM-DD.csv` —
+the only path-traversal defense, deliberately strict rather than a blocklist):
+
+- `GET /logs` — list files with sizes
+- `GET /logs/download?file=NAME` — download (4 MB cap)
+- `POST /logs/delete?file=NAME` — delete
+
+Every API call used (`canHandle`/`handleRequest`, `url_to()`, `arg()`, `beginResponse()`) was
+verified against the actual ESP-IDF web server shim source
+(`web_server_idf.h`/`.cpp`) before writing the handler, not guessed.
+
+**WiFi reconnect**: two new `text:` entities (`input_wifi_new_ssid`, `input_wifi_new_password` —
+the latter never calls `publish_state()`, same reasoning as the touchscreen PIN entity). Dashboard
+POSTs both sequentially; the password entity's `set_action` calls
+`wifi::global_wifi_component->save_wifi_sta(ssid, password)` — the same API ESPHome's captive
+portal uses, confirmed to persist + reconnect immediately. True to what was picked: no test-before-
+commit safety net. If the new credentials are wrong, the existing `"CoolroomP4-Setup"` fallback AP
+is the recovery path, same as any other WiFi misconfiguration.
+
+**Frontend**: Logs Management is now a real file picker (`refreshLogFileList()`/download-as-blob/
+delete-with-confirm). WiFi Settings opens a panel with current SSID/RSSI/IP, an explicit warning
+about the immediate-drop/no-rollback behavior, and the new-network form —
+`applyNewWifi()` confirms before submitting since this can disrupt the very connection being used
+to reach the page. Dead stub functions and their "doesn't do anything yet" help balloons removed.
+Virtual preview mirrored with static mock content; also fixed a gap found while mirroring
+(`setSectionInteractive()` there didn't toggle `<select>` elements — now matches the live version).
+
+Backup/Restore's stub wiring (flagged earlier, not part of this request) intentionally untouched.
+
+**Build**: RAM 20.1% (+280 B), Flash 20.8% (+5 KB). Compiled clean at each incremental step
+(handler, then WiFi entities) rather than all at once.
+
+**Untested on hardware** — same standing blocker, but this entry raises the stakes on it: the
+WiFi reconnect path in particular should be verified carefully once the device is connected, since
+a mistake there affects whether the device stays reachable at all.
 
 ---
 

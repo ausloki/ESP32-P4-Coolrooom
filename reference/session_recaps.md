@@ -1680,4 +1680,77 @@ directly rather than guessing at scope; response pending as of this entry.
 
 No firmware/yaml changes this entry either — pure static asset edit. Compile re-run: unchanged.
 
+## 2026-07-25 — SD Log File Manager + Simple WiFi Reconnect Implemented
+
+User picked, via AskUserQuestion: "Build the full file manager" for Delete/Download Logs, and
+"Read-only stats + simple reconnect" (no safe test-first rollback) for WiFi Settings. Both
+implemented this entry — the first genuinely new firmware capability added since the
+research/scoping entry above, not just frontend wiring.
+
+**New file `p4_log_manager.h`** — a custom `esphome::web_server_idf::AsyncWebHandler` registered
+via `web_server_base::global_web_server_base->add_handler()` in a new `on_boot: priority: -250`
+block ([esp32-p4-coolroom.yaml](../esp32-p4-coolroom.yaml)), so it automatically inherits the same
+basic-auth credentials `web_server:` already uses (confirmed by reading
+`WebServerBase::add_handler()`'s source — it wraps with `AuthMiddlewareHandler` whenever
+`credentials_.username` is set, which happens at C++ codegen time, before any `on_boot:` trigger
+can fire, so registration order doesn't matter). Three routes:
+
+- `GET /logs` — JSON list of `{name, size}` for files under `/sdcard` matching the strict filename
+  pattern `is_valid_log_filename()` (exactly `events.csv`, or `YYYY-MM-DD.csv`) — this pattern
+  check is the *only* path-traversal defense, deliberately a strict allowlist rather than a
+  blocklist of `..`/slashes.
+- `GET /logs/download?file=NAME` — reads the whole file into memory (capped at 4 MB, generous for
+  daily 5-minute-interval CSVs) and returns it with a `Content-Disposition: attachment` header.
+- `POST /logs/delete?file=NAME` — `unlink()`s the file, returns `{"ok":true|false}`.
+
+Verified the ESP-IDF web server shim's exact API before writing any of this (not guessed) by
+reading `web_server_idf.h`/`.cpp` directly: `AsyncWebHandler::canHandle`/`handleRequest`,
+`AsyncWebServerRequest::url_to()`/`method()`/`arg()`/`beginResponse()`, and confirmed
+`getParam()`/`arg()` read both POST body and URL query string via `search_query_sources()` — so a
+`POST /logs/delete?file=X` with no body (matching this project's existing
+`postWithFallback(path)` pattern) works correctly.
+
+**WiFi reconnect** — two new `text:` entities, `input_wifi_new_ssid` (plain) and
+`input_wifi_new_password` (`mode: password`, never calls `publish_state()` — same reasoning as
+the touchscreen PIN entity). The dashboard POSTs both sequentially (SSID first, awaited, then
+password); the password entity's `set_action` reads the staged SSID from a new global
+`ctl_wifi_new_ssid`, clears it, and calls `wifi::global_wifi_component->save_wifi_sta(ssid, x)` —
+confirmed via `wifi_component.cpp` that this one call persists the new credentials to NVS, sets
+them as the active STA config, *and* triggers an immediate reconnect (same API the captive portal
+component uses). This is genuinely the "simple, no rollback" version the user picked: if the new
+credentials are wrong, the device's existing `ap: "CoolroomP4-Setup"` fallback AP is the recovery
+path, same as any other WiFi misconfiguration — there's no test-before-commit safety net.
+
+**Frontend** (`assets/dashboard.html`):
+
+- Logs Management: replaced the stub buttons with a real `<select>` populated by
+  `refreshLogFileList()` (fetches `/logs`, called on login and via a Refresh button) plus
+  Download/Delete buttons acting on the selected file. Download streams the response as a blob
+  and triggers a browser download via a temporary anchor; Delete confirms first, then POSTs and
+  refreshes the list.
+- WiFi Settings: button now opens a `wifi-panel` with current SSID/RSSI/IP (reusing already-parsed
+  `data` fields), an explicit inline warning about the immediate-drop/no-rollback behavior, and the
+  new-SSID/new-password form. `applyNewWifi()` confirms before submitting, given this can disrupt
+  the very connection the user is using to reach the page.
+- Removed the now-dead `deleteLogs()`/`downloadLogs()`/`configureWiFi()` stub functions and their
+  associated static "placeholder, doesn't do anything" help balloons — replaced by real, honest
+  functionality and inline explanatory text instead.
+- `assets/dashboard_virtual_preview.html` mirrored with static mock content (illustrative file
+  list, non-functional form fields) — no real device to poll there, consistent with the rest of
+  that file's static-mock nature. Also fixed a related gap found while mirroring: its
+  `setSectionInteractive()` didn't include `select` in the elements it enables/disables on
+  login/logout (the live dashboard's version already did); now matches.
+
+**Build**: RAM 20.1% (115,764/576,464 B, +280 B), Flash 20.8% (1,523,592/7,340,032 B, +5 KB) — the
+new custom HTTP handler and two text entities account for the small increase. Compile clean on
+every incremental step (handler alone, then WiFi entities added) — verified each addition builds
+before layering the next, rather than writing everything and debugging one large failure.
+
+**Explicitly not touched this entry**: Backup/Restore's stub wiring (flagged in an earlier entry,
+not part of this request) — left as-is.
+
+**Hardware-gated follow-up**: none of this has been exercised against a real SD card or a real
+WiFi reconnect attempt — both are now first-priority checks once hardware is connected, especially
+the WiFi reconnect path since a mistake there affects whether the device stays reachable at all.
+
 ---

@@ -148,6 +148,7 @@ esphome:
     - p4_helpers.h
     - p4_control.h
     - p4_logging.h
+    - p4_log_manager.h
   on_boot:
     - priority: 600
       then:
@@ -246,6 +247,17 @@ esphome:
             } else {
                 id(sd_card_ok) = false;
                 ESP_LOGW("sd", "SD card not found or mount failed");
+            }
+    - priority: -250
+      then:
+        - lambda: |-
+            // Custom SD log-manager endpoint (list/download/delete daily CSV
+            // logs) — registered on the same AsyncWebServer instance
+            // web_server uses, so it automatically inherits the same
+            // basic-auth credentials via WebServerBase::add_handler().
+            if (web_server_base::global_web_server_base != nullptr) {
+                web_server_base::global_web_server_base->add_handler(new p4_logs::LogManagerHandler());
+                ESP_LOGI("logmgr", "SD log manager endpoint registered at /logs");
             }
     - priority: -100
       then:
@@ -1633,6 +1645,57 @@ text:
         ESP_LOGI("pin", "Access PIN changed via web");
         p4_sd_log_event("PIN_CHANGED", "web");
 
+  # ── WiFi reconnect (read-only stats live on Hardware Config; this is the
+  # write side) — deliberately the simple "reconnect and hope" version, not
+  # a safe test-before-commit switchover: save_wifi_sta() persists the new
+  # credentials and reconnects immediately, dropping the current connection
+  # in the process. If the new credentials are wrong, this device's existing
+  # "CoolroomP4-Setup" fallback AP (see wifi:/ap: above) is the recovery
+  # path — same as it already is for any other WiFi misconfiguration.
+  - platform: template
+    id: input_wifi_new_ssid
+    name: "New WiFi SSID"
+    icon: "mdi:wifi-plus"
+    mode: text
+    max_length: 32
+    optimistic: false
+    entity_category: config
+    web_server:
+      sorting_group_id: group_network
+      sorting_weight: 10
+    set_action:
+      lambda: |-
+        // Not sensitive — fine to stage here plainly. Consumed and cleared
+        // by input_wifi_new_password's set_action below.
+        id(ctl_wifi_new_ssid) = x;
+
+  - platform: template
+    id: input_wifi_new_password
+    name: "New WiFi Password (submit after SSID)"
+    icon: "mdi:wifi-lock"
+    mode: password
+    max_length: 64
+    optimistic: false
+    entity_category: config
+    web_server:
+      sorting_group_id: group_network
+      sorting_weight: 11
+    set_action:
+      lambda: |-
+        // Deliberately never publish_state(x) — same reasoning as the
+        // touchscreen PIN entity above: mode: password only masks the JSON
+        // "state" field, not the raw "value" field, so the only safe option
+        // is to never let the plaintext password become published state.
+        std::string ssid = id(ctl_wifi_new_ssid);
+        if (ssid.empty()) {
+          ESP_LOGW("wifi_apply", "New WiFi password submitted with no SSID staged — ignored");
+          return;
+        }
+        id(ctl_wifi_new_ssid) = "";
+        ESP_LOGI("wifi_apply", "Reconnecting to new WiFi network: %s", ssid.c_str());
+        p4_sd_log_event("WIFI_RECONFIG", ssid.c_str());
+        wifi::global_wifi_component->save_wifi_sta(ssid, x);
+
 ##############################################################################
 # Buttons
 ##############################################################################
@@ -2336,6 +2399,15 @@ globals:
   # Digits currently being typed on the LVGL keypad; cleared after every
   # check/save so the plaintext PIN never lingers longer than one keypress.
   - id: ctl_pin_buf
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  # New WiFi SSID, staged here by input_wifi_new_ssid's set_action until the
+  # matching password arrives via input_wifi_new_password (two separate POSTs
+  # from the dashboard, awaited sequentially) — see that entity's set_action
+  # for where this is consumed and cleared.
+  - id: ctl_wifi_new_ssid
     type: std::string
     restore_value: no
     initial_value: '""'

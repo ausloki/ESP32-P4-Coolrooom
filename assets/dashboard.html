@@ -712,34 +712,54 @@
                     </div>
                 </div>
                 <div>
-                    <h3>Logs Management</h3>
-                    <button onclick="deleteLogs()" class="danger">🗑️ Delete Old Logs</button>
-                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-delete-logs')" aria-label="What does Delete Old Logs do?">i</button>
-                    <button onclick="downloadLogs()" style="margin-left: 5px;">📥 Download Logs</button>
-                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-download-logs')" aria-label="What does Download Logs do?">i</button>
-                    <div id="help-delete-logs" class="help-popover hidden">
-                        Meant to clean up old daily temperature/event CSV log files from the SD card to free up
-                        space. No log-deletion logic exists in the firmware yet — this button is currently a
-                        placeholder and doesn't delete anything.
+                    <div class="field-label-row">
+                        <h3>Logs Management</h3>
+                        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-logs')" aria-label="What does log management do?">i</button>
                     </div>
-                    <div id="help-download-logs" class="help-popover hidden">
-                        Meant to let you pull the daily temperature log (Coolroom/Evaporator/External temps,
-                        Setpoint, compressor/defrost state, alarms — one row every 5 minutes, see
-                        <code>log_interval_min</code>) and the separate alarm/event log off the SD card for
-                        review. No download endpoint exists in the firmware yet — this button is currently a
-                        placeholder.
+                    <select id="logFileSelect" style="width: 100%; padding: 8px; margin-bottom: 8px;">
+                        <option value="">Login to view log files</option>
+                    </select>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                        <button onclick="refreshLogFileList()">🔄 Refresh</button>
+                        <button onclick="downloadSelectedLog()">📥 Download</button>
+                        <button onclick="deleteSelectedLog()" class="danger">🗑️ Delete</button>
+                    </div>
+                    <div id="help-logs" class="help-popover hidden">
+                        Lists the daily temperature log files on the SD card (one per day, plus a running
+                        <code>events.csv</code> of alarm/fault/defrost events) so you can pick one — <strong>Download</strong>
+                        saves it to your computer, <strong>Refresh</strong> re-reads the file list, and
+                        <strong>Delete</strong> permanently removes the selected file from the SD card to free up
+                        space. Deletion cannot be undone, so double-check the filename first.
                     </div>
                 </div>
                 <div>
                     <h3>Network & Hardware</h3>
-                    <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
-                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi')" aria-label="What does WiFi Settings do?">i</button>
+                    <button onclick="toggleHelp(event, 'wifi-panel')">📡 WiFi Settings</button>
                     <button onclick="toggleHelp(event, 'hw-panel')" style="margin-left: 5px;">⚙️ Hardware Config</button>
-                    <div id="help-wifi" class="help-popover hidden">
-                        Meant to let you change which WiFi network the controller connects to. Right now that's
-                        only configurable at build time (<code>secrets.yaml</code>), or by connecting to the
-                        device's own <strong>"CoolroomP4-Setup"</strong> fallback access point if it can't reach
-                        the configured network. This button doesn't do anything yet.
+                    <div id="wifi-panel" class="help-popover hidden">
+                        <div class="hw-grid" style="margin-bottom: 12px;">
+                            <div><strong>Current Network</strong><span id="wifiCurrentSsid">--</span></div>
+                            <div><strong>Signal</strong><span id="wifiCurrentRssi">--</span></div>
+                            <div><strong>IP Address</strong><span id="wifiCurrentIp">--</span></div>
+                        </div>
+                        <p style="margin-bottom: 10px;">
+                            Entering a new network below reconnects <strong>immediately</strong> — the current
+                            WiFi connection drops right away while the device attempts the new one. If the new
+                            credentials are wrong, it falls back to its own <strong>"CoolroomP4-Setup"</strong>
+                            setup access point, same as any other WiFi misconfiguration; you'll need to connect
+                            to that to try again. There is no test-first safety net — double-check before submitting.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 8px; max-width: 320px;">
+                            <div>
+                                <label for="wifiNewSsid" style="display: block; font-size: 12px; margin-bottom: 3px;">New Network Name (SSID)</label>
+                                <input type="text" id="wifiNewSsid" placeholder="Network name" maxlength="32" style="width: 100%; padding: 8px;">
+                            </div>
+                            <div>
+                                <label for="wifiNewPassword" style="display: block; font-size: 12px; margin-bottom: 3px;">New Network Password</label>
+                                <input type="password" id="wifiNewPassword" placeholder="Network password" maxlength="64" style="width: 100%; padding: 8px;">
+                            </div>
+                            <button onclick="applyNewWifi()" class="danger" style="align-self: flex-start;">📡 Reconnect to This Network</button>
+                        </div>
                     </div>
                     <div id="hw-panel" class="help-popover hidden">
                         <div class="hw-grid">
@@ -1080,6 +1100,7 @@
                 closeLoginModal();
                 initializeRole();
                 fetchStatus();
+                refreshLogFileList();
                 setupActivityListeners();
                 resetInactivityTimer();
             } finally {
@@ -1119,6 +1140,7 @@
 
             initializeRole();
             fetchStatus();
+            document.getElementById('logFileSelect').innerHTML = '<option value="">Login to view log files</option>';
             showAlert('info', 'Returned to guest mode.');
         }
 
@@ -1464,6 +1486,7 @@
             document.getElementById('probeStatus').innerHTML = probeHtml;
 
             updateHardwarePanel(data);
+            updateWifiPanel(data);
 
             // Update settings inputs
             if (document.getElementById('setpointInput').value === '') {
@@ -1515,6 +1538,13 @@
                 typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--';
             document.getElementById('hwHeap').textContent = data.heap_free_kb ? `${data.heap_free_kb} KB` : '--';
             document.getElementById('hwPsram').textContent = data.psram_free_kb ? `${data.psram_free_kb} KB` : '--';
+        }
+
+        function updateWifiPanel(data) {
+            document.getElementById('wifiCurrentSsid').textContent = data.wifi_ssid || '--';
+            document.getElementById('wifiCurrentRssi').textContent =
+                typeof data.wifi_rssi === 'number' ? `${data.wifi_rssi} dBm` : '--';
+            document.getElementById('wifiCurrentIp').textContent = data.ip_address || '--';
         }
 
         function showAlert(type, message) {
@@ -1645,30 +1675,123 @@
             showAlert('info', 'Restore requested - would upload backup.json');
         }
 
-        async function deleteLogs() {
-            if (currentRole !== 'operator') {
-                showAlert('danger', 'Login required to delete logs');
-                return;
-            }
-            if (confirm('Are you sure? This will delete all old log files.')) {
-                showAlert('info', 'Log deletion requested');
-            }
+        // Log file manager — talks to the custom /logs endpoint registered by
+        // p4_log_manager.h (list/download/delete daily CSV logs on the SD
+        // card). Uses the same host-fallback + Authorization header pattern
+        // as every other authenticated call on this page.
+        function formatLogFileSize(bytes) {
+            if (typeof bytes !== 'number' || isNaN(bytes)) return '';
+            if (bytes < 1024) return `${bytes} B`;
+            return `${(bytes / 1024).toFixed(1)} KB`;
         }
 
-        async function downloadLogs() {
+        async function refreshLogFileList() {
+            const select = document.getElementById('logFileSelect');
             if (currentRole !== 'operator') {
-                showAlert('danger', 'Login required to download logs');
+                select.innerHTML = '<option value="">Login to view log files</option>';
                 return;
             }
-            showAlert('info', 'Log download requested');
+            select.innerHTML = '<option value="">Loading log files…</option>';
+            const candidates = buildApiCandidates('/logs');
+            for (const url of candidates) {
+                try {
+                    const response = await fetchWithTimeout(url);
+                    if (!response.ok) continue;
+                    const files = await response.json();
+                    if (!files.length) {
+                        select.innerHTML = '<option value="">No log files on the SD card</option>';
+                        return;
+                    }
+                    select.innerHTML = files
+                        .map((f) => `<option value="${f.name}">${f.name} (${formatLogFileSize(f.size)})</option>`)
+                        .join('');
+                    return;
+                } catch (error) {
+                    // Unreachable candidate; try the next one.
+                }
+            }
+            select.innerHTML = '<option value="">Could not reach the device</option>';
         }
 
-        async function configureWiFi() {
+        async function downloadSelectedLog() {
             if (currentRole !== 'operator') {
-                showAlert('danger', 'Login required to configure WiFi');
+                showAlert('warning', 'Login required to download logs');
                 return;
             }
-            showAlert('info', 'WiFi configuration page would open');
+            const file = document.getElementById('logFileSelect').value;
+            if (!file) {
+                showAlert('warning', 'Select a log file first');
+                return;
+            }
+            const candidates = buildApiCandidates(`/logs/download?file=${encodeURIComponent(file)}`);
+            for (const url of candidates) {
+                try {
+                    const response = await fetchWithTimeout(url, 8000);
+                    if (!response.ok) continue;
+                    const blob = await response.blob();
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = file;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(link.href);
+                    return;
+                } catch (error) {
+                    // Unreachable candidate; try the next one.
+                }
+            }
+            showAlert('error', `Could not download ${file}`);
+        }
+
+        async function deleteSelectedLog() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to delete logs');
+                return;
+            }
+            const file = document.getElementById('logFileSelect').value;
+            if (!file) {
+                showAlert('warning', 'Select a log file first');
+                return;
+            }
+            if (!confirm(`Permanently delete ${file}? This cannot be undone.`)) return;
+            const ok = await postWithFallback(`/logs/delete?file=${encodeURIComponent(file)}`);
+            if (!ok) {
+                showAlert('error', `Could not delete ${file}`);
+                return;
+            }
+            showAlert('success', `Deleted ${file}`);
+            refreshLogFileList();
+        }
+
+        // WiFi reconnect — the "simple" version, not a safe test-then-commit
+        // switchover: submits straight to input_wifi_new_ssid/input_wifi_new_password
+        // (see esp32-p4-coolroom.yaml), which calls save_wifi_sta() and reconnects
+        // immediately. Two sequential POSTs, awaited in order, since the firmware
+        // combines them server-side only once both have arrived.
+        async function applyNewWifi() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to change WiFi settings');
+                return;
+            }
+            const ssid = document.getElementById('wifiNewSsid').value.trim();
+            const password = document.getElementById('wifiNewPassword').value;
+            if (!ssid) {
+                showAlert('warning', 'Enter a network name first');
+                return;
+            }
+            if (!confirm(`Reconnect to "${ssid}"? This drops the current WiFi connection immediately — if the new credentials don't work, the device falls back to its own "CoolroomP4-Setup" access point.`)) {
+                return;
+            }
+            const ok1 = await postWithFallback(`/text/input_wifi_new_ssid/set?value=${encodeURIComponent(ssid)}`);
+            const ok2 = await postWithFallback(`/text/input_wifi_new_password/set?value=${encodeURIComponent(password)}`);
+            if (!ok1 || !ok2) {
+                showAlert('error', 'Could not reach the device to submit the new WiFi network');
+                return;
+            }
+            document.getElementById('wifiNewSsid').value = '';
+            document.getElementById('wifiNewPassword').value = '';
+            showAlert('info', `Submitted "${ssid}" — the device is attempting to reconnect. This page will lose contact with it until that finishes (or falls back to the setup access point).`);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════

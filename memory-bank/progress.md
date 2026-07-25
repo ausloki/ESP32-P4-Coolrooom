@@ -1,5 +1,26 @@
 # Progress Tracking
 
+## 2026-07-25 SD Log File Manager + Simple WiFi Reconnect Implemented
+
+- User picked the two options presented in the prior entry: full file manager for Delete/Download
+  Logs, and read-only stats + simple (no-rollback) reconnect for WiFi Settings.
+- New `p4_log_manager.h` — custom `AsyncWebHandler` registered on `web_server_base`'s shared
+  `AsyncWebServer` (inherits the same basic-auth automatically). Routes: `GET /logs` (list),
+  `GET /logs/download?file=X` (download, 4 MB cap), `POST /logs/delete?file=X` (delete). Filenames
+  restricted to a strict allowlist (`events.csv` or `YYYY-MM-DD.csv`) as the only path-traversal
+  defense. Every API call verified against the actual ESP-IDF web server shim source first.
+- New WiFi reconnect: `input_wifi_new_ssid`/`input_wifi_new_password` text entities feed
+  `wifi::global_wifi_component->save_wifi_sta()` — persists + reconnects immediately, same API
+  ESPHome's captive portal uses. No test-before-commit safety net, per what was picked; recovery
+  if wrong is the device's existing "CoolroomP4-Setup" fallback AP.
+- Dashboard: Logs Management is now a real file picker; WiFi Settings shows current stats +
+  reconnect form with an explicit warning and confirm-before-submit. Dead stub functions and
+  "placeholder" help text removed. Preview mirrored (static mock content); fixed a `<select>`
+  gating gap found while mirroring.
+- Backup/Restore's stub wiring intentionally left untouched (separate, unrequested item).
+- Build: RAM +280 B, Flash +5 KB. Compiled clean incrementally. Untested on hardware — WiFi
+  reconnect path is now the top priority to verify carefully once connected.
+
 ## 2026-07-25 Help Balloons Guest-Gated; Hardware Config Became a Real Live Panel
 
 - Reversed earlier same-day decision per feedback: help balloons now hide for guests entirely
