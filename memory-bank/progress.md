@@ -1,5 +1,23 @@
 # Progress Tracking
 
+## 2026-07-25 Help Balloons Guest-Gated; Hardware Config Became a Real Live Panel
+
+- Reversed earlier same-day decision per feedback: help balloons now hide for guests entirely
+  (not just stay clickable) — only visible after admin login. `setSectionInteractive()` updated
+  in both dashboard files.
+- Hardware Config button now opens a real live diagnostics panel instead of static help text —
+  every stat (WiFi/RS485/RTC/SHT31/SHT20/SD-card status, chip temp, heap/PSRAM, SSID/RSSI/IP) was
+  already a published entity, so this was pure frontend work. New `updateHardwarePanel()`
+  populates it every poll cycle. Removed the now-redundant separate help icon and the dead
+  `hardwareSettings()` stub.
+- Researched (not implemented) the other three requested features — Delete Logs, Download Logs,
+  WiFi scan+safe-switch — and confirmed via ESPHome source that all three need genuinely new
+  firmware infrastructure (a custom SD file-manager HTTP handler; a new WiFi test-then-commit
+  state machine with real risk to primary connectivity if done carelessly). Findings and options
+  presented to the user rather than guessing at scope; response pending.
+- No firmware/yaml changes, compile re-run: unchanged. Virtual preview mirrored, artifact
+  republished at the same URL.
+
 ## 2026-07-25 Help Balloons Extended to System Administration Buttons
 
 - Follow-up to the same-day setting-help-balloons work: added one help balloon per admin action

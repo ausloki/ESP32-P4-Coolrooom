@@ -228,6 +228,16 @@
     }
     .help-popover strong { color: var(--text-primary); }
 
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .status-ok { background: #d4edda; color: #155724; }
+    .status-error { background: #f8d7da; color: #721c24; }
+
+    /* Hardware Config panel — live stat grid instead of static help text. */
+    .hw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; }
+    .hw-grid > div { display: flex; flex-direction: column; gap: 2px; }
+    .hw-grid strong { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+    .hw-grid span { font-size: 13px; font-variant-numeric: tabular-nums; }
+
     .modal {
       position: fixed;
       inset: 0;
@@ -418,8 +428,7 @@
         <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-download-logs')" aria-label="What does Download Logs do?">i</button>
         <button class="btn danger" disabled>📡 WiFi Settings</button>
         <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi')" aria-label="What does WiFi Settings do?">i</button>
-        <button class="btn danger" disabled>⚙️ Hardware Config</button>
-        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-hardware')" aria-label="What does Hardware Config do?">i</button>
+        <button class="btn" disabled onclick="toggleHelp(event, 'hw-panel')">⚙️ Hardware Config</button>
         <input type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" disabled style="width: 140px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
         <button class="btn" disabled>🔒 Change PIN</button>
         <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-pin')" aria-label="What does the Touchscreen Access PIN do?">i</button>
@@ -448,9 +457,21 @@
         time (<code>secrets.yaml</code>), or via the device's own "CoolroomP4-Setup" fallback access point.
         This button doesn't do anything yet.
       </div>
-      <div id="help-hardware" class="help-popover hidden">
-        Placeholder with no defined function yet. Hardware-related settings (probe enable/disable, door sensor
-        mode, siren, defrost enable) already live in Operational Settings and on the touchscreen.
+      <div id="hw-panel" class="help-popover hidden">
+        <div class="hw-grid">
+          <div><strong>Controller</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>WiFi</strong><span>Coolroom-LAN · -61 dBm</span></div>
+          <div><strong>IP Address</strong><span>192.168.1.42</span></div>
+          <div><strong>RS485 Relay Board</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>RS485 RTD Board</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>RTC (PCF8563)</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>SHT31 (Internal)</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>SHT20 (External)</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>SD Card</strong><span class="status-badge status-ok">✓ online</span></div>
+          <div><strong>Chip Temp</strong><span>46.2°C</span></div>
+          <div><strong>Free Heap</strong><span>108 KB</span></div>
+          <div><strong>Free PSRAM</strong><span>7,842 KB</span></div>
+        </div>
       </div>
       <div id="help-pin" class="help-popover hidden">
         The 4-digit code required to reach the Settings screens on the physical touchscreen unit — it doesn't
@@ -505,12 +526,18 @@
       const section = document.getElementById(sectionId);
       const chip = document.getElementById(chipId);
       if (chip) chip.classList.toggle('hidden', enabled);
-      // Help balloons stay clickable regardless of role — explaining a
-      // setting isn't a privileged action, only changing one is.
       section.querySelectorAll('input, button').forEach((el) => {
         if (el.classList.contains('help-icon')) return;
         el.disabled = !enabled;
       });
+      // Help balloons are only shown once logged in — a guest browsing the
+      // main page has no use for explanations of controls they can't touch.
+      section.querySelectorAll('.help-icon').forEach((el) => {
+        el.classList.toggle('hidden', !enabled);
+      });
+      if (!enabled) {
+        section.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
+      }
     }
 
     function applyRole() {

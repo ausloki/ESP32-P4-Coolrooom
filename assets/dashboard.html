@@ -245,6 +245,29 @@
         .help-popover strong { color: var(--text-primary); }
         .help-popover.hidden { display: none; }
 
+        /* Hardware Config panel — same balloon shell, but a live-updating
+           stat grid instead of static explanatory text. */
+        .hw-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 8px 16px;
+        }
+        .hw-grid > div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .hw-grid strong {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+        .hw-grid span {
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+        }
+
         .alert {
             padding: 15px;
             border-radius: 8px;
@@ -711,19 +734,28 @@
                     <h3>Network & Hardware</h3>
                     <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
                     <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi')" aria-label="What does WiFi Settings do?">i</button>
-                    <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
-                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-hardware')" aria-label="What does Hardware Config do?">i</button>
+                    <button onclick="toggleHelp(event, 'hw-panel')" style="margin-left: 5px;">⚙️ Hardware Config</button>
                     <div id="help-wifi" class="help-popover hidden">
                         Meant to let you change which WiFi network the controller connects to. Right now that's
                         only configurable at build time (<code>secrets.yaml</code>), or by connecting to the
                         device's own <strong>"CoolroomP4-Setup"</strong> fallback access point if it can't reach
                         the configured network. This button doesn't do anything yet.
                     </div>
-                    <div id="help-hardware" class="help-popover hidden">
-                        Placeholder with no defined function yet. All current hardware-related settings (probe
-                        enable/disable, door sensor mode, siren, defrost enable, etc.) already live in the
-                        Operational Settings above and on the touchscreen's Settings screens — this button
-                        doesn't do anything.
+                    <div id="hw-panel" class="help-popover hidden">
+                        <div class="hw-grid">
+                            <div><strong>Controller</strong><span id="hwController">--</span></div>
+                            <div><strong>WiFi</strong><span id="hwWifi">--</span></div>
+                            <div><strong>IP Address</strong><span id="hwIp">--</span></div>
+                            <div><strong>RS485 Relay Board</strong><span id="hwRs485Relay">--</span></div>
+                            <div><strong>RS485 RTD Board</strong><span id="hwRs485Rtd">--</span></div>
+                            <div><strong>RTC (PCF8563)</strong><span id="hwRtc">--</span></div>
+                            <div><strong>SHT31 (Internal)</strong><span id="hwSht31">--</span></div>
+                            <div><strong>SHT20 (External)</strong><span id="hwSht20">--</span></div>
+                            <div><strong>SD Card</strong><span id="hwSdCard">--</span></div>
+                            <div><strong>Chip Temp</strong><span id="hwChipTemp">--</span></div>
+                            <div><strong>Free Heap</strong><span id="hwHeap">--</span></div>
+                            <div><strong>Free PSRAM</strong><span id="hwPsram">--</span></div>
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -1156,12 +1188,19 @@
             const section = document.getElementById(sectionId);
             const chip = document.getElementById(chipId);
             if (chip) chip.classList.toggle('hidden', enabled);
-            // Help balloons stay clickable regardless of role — explaining a
-            // setting isn't a privileged action, only changing one is.
             section.querySelectorAll('input, button, select').forEach((el) => {
                 if (el.classList.contains('help-icon')) return;
                 el.disabled = !enabled;
             });
+            // Help balloons are only shown once logged in — a guest browsing the
+            // main page has no use for "what does this setting do?" explanations
+            // of controls they can't touch anyway.
+            section.querySelectorAll('.help-icon').forEach((el) => {
+                el.classList.toggle('hidden', !enabled);
+            });
+            if (!enabled) {
+                section.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
+            }
         }
 
         function updateUIForRole() {
@@ -1228,6 +1267,10 @@
                 if (id === 'number.alarm_high_delta') data.alarm_high = parseFloat(state);
                 if (id === 'number.alarm_low_delta') data.alarm_low = parseFloat(state);
                 if (id === 'number.compressor_differential') data.comp_diff = parseFloat(state);
+                if (id === 'binary_sensor.sd_card_online') data.sd_card_ok = state === 'on';
+                if (id === 'sensor.chip_temp') data.chip_temp = parseFloat(state);
+                if (id === 'sensor.free_psram_kb') data.psram_free_kb = parseInt(state);
+                if (id === 'text_sensor.ip_address') data.ip_address = state;
             });
             
             if (!data.uptime_seconds) data.uptime_seconds = Math.floor(Date.now() / 1000);
@@ -1420,6 +1463,8 @@
             const probeHtml = `SHT31: <span class="status-badge ${data.sht31_ok ? 'status-ok' : 'status-error'}">${data.sht31_ok ? '✓' : '✗'}</span>SHT20: <span class="status-badge ${data.sht20_ok ? 'status-ok' : 'status-error'}">${data.sht20_ok ? '✓' : '✗'}</span>`;
             document.getElementById('probeStatus').innerHTML = probeHtml;
 
+            updateHardwarePanel(data);
+
             // Update settings inputs
             if (document.getElementById('setpointInput').value === '') {
                 document.getElementById('setpointInput').value = (data.setpoint || 15).toFixed(1);
@@ -1448,6 +1493,28 @@
             if (data.probe_fault) alertsHtml += '<div class="alert alert-danger">⚠️ Probe fault detected. Fallback mode active.</div>';
             if (data.wifi_connected === false) alertsHtml += '<div class="alert alert-warning">⚠️ WiFi disconnected.</div>';
             document.getElementById('alerts').innerHTML = alertsHtml || '';
+        }
+
+        // Hardware Config panel — unlike the static help balloons, this one shows
+        // live values every poll cycle, all pulled from entities that already
+        // exist and are already published (no new firmware work needed).
+        function updateHardwarePanel(data) {
+            const okBadge = (ok) => `<span class="status-badge ${ok ? 'status-ok' : 'status-error'}">${ok ? '✓ online' : '✗ offline'}</span>`;
+            document.getElementById('hwController').innerHTML = okBadge(data.wifi_connected !== false);
+            document.getElementById('hwWifi').textContent = data.wifi_ssid
+                ? `${data.wifi_ssid} · ${data.wifi_rssi ?? '--'} dBm`
+                : '--';
+            document.getElementById('hwIp').textContent = data.ip_address || '--';
+            document.getElementById('hwRs485Relay').innerHTML = okBadge(data.rs485_relay_ok);
+            document.getElementById('hwRs485Rtd').innerHTML = okBadge(data.rs485_rtd_ok);
+            document.getElementById('hwRtc').innerHTML = okBadge(data.rtc_ok);
+            document.getElementById('hwSht31').innerHTML = okBadge(data.sht31_ok);
+            document.getElementById('hwSht20').innerHTML = okBadge(data.sht20_ok);
+            document.getElementById('hwSdCard').innerHTML = okBadge(data.sd_card_ok);
+            document.getElementById('hwChipTemp').textContent =
+                typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--';
+            document.getElementById('hwHeap').textContent = data.heap_free_kb ? `${data.heap_free_kb} KB` : '--';
+            document.getElementById('hwPsram').textContent = data.psram_free_kb ? `${data.psram_free_kb} KB` : '--';
         }
 
         function showAlert(type, message) {
@@ -1602,14 +1669,6 @@
                 return;
             }
             showAlert('info', 'WiFi configuration page would open');
-        }
-
-        async function hardwareSettings() {
-            if (currentRole !== 'operator') {
-                showAlert('danger', 'Login required to access hardware settings');
-                return;
-            }
-            showAlert('info', 'Hardware configuration page would open');
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════

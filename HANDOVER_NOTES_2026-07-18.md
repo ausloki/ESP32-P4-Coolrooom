@@ -2,11 +2,43 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — help balloons now cover every admin control (settings + action buttons); hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `9cf5ea5` (feat(dashboard): extend help balloons to System Administration action buttons)
+**Status**: In Progress — help balloons now guest-invisible, Hardware Config is a real live diagnostics panel; three admin features (Delete/Download Logs, WiFi scan+switch) need new firmware infrastructure, findings presented, awaiting user direction; hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Help Balloons Guest-Gated; Hardware Config Is Now a Real Panel
+
+Two corrections to the prior addendum's admin-button balloons, per user feedback:
+
+1. Help balloons now **hide** for guests (not just stay clickable) — `setSectionInteractive()` in
+   both dashboard files toggles `.help-icon` visibility with the same enabled/disabled flag as the
+   controls themselves, and force-closes any open popover on logout.
+2. **Hardware Config is now a real live diagnostics panel**, not static help text. Everything it
+   needed was already a published entity (WiFi/RS485/RTC/SHT31/SHT20/SD-card status, chip temp,
+   free heap/PSRAM, SSID/RSSI/IP) — pure frontend work, no new firmware entities. New
+   `updateHardwarePanel(data)` populates a `.hw-grid` every poll cycle; the button opens it
+   directly (redundant separate help icon removed), and the dead `hardwareSettings()` stub is gone.
+
+**Not implemented — findings presented, awaiting direction**: Delete Logs, Download Logs, and
+WiFi Settings (scan + safe test-before-commit switchover) all need genuinely new firmware
+capabilities, confirmed by reading the ESPHome source rather than guessing:
+
+- No SD file-listing/serving/deleting HTTP endpoint exists anywhere in this project or stock
+  ESPHome. Feasible via a custom `AsyncWebHandler` registered through `web_server_base`'s
+  `add_handler()` (confirmed in `web_server_base.h`) — but that's a new C++ component, not config.
+- Safe WiFi switchover (test a new network without dropping the current one until confirmed) needs
+  a state machine running alongside ESPHome's own WiFi reconnect logic — genuine risk of
+  destabilizing primary connectivity on a device built to stay autonomous and alert-reachable if
+  implemented carelessly.
+
+Full technical detail in `reference/session_recaps.md`'s matching entry. Asked the user directly
+rather than building blind, given the effort size and (for WiFi specifically) the reliability risk.
+
+No firmware/yaml changes — static asset edit, compile re-run as a sanity check, unchanged.
 
 ---
 

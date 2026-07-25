@@ -1636,4 +1636,48 @@ very different things and deserve separate explanations.
 No firmware/yaml changes — pure static asset edit again. Compile re-run as a sanity check:
 unchanged.
 
+## 2026-07-25 — Help Balloons Restricted to Logged-In View; Hardware Config Became a Real Live Panel
+
+Two corrections to the admin-button help balloon work above, per user feedback:
+
+1. **Help balloons are guest-invisible now, not just guest-clickable.** Last entry deliberately
+   exempted `.help-icon` from the guest disable-everything pass so guests could still read
+   explanations. User corrected this: helper info should only appear after admin login — a guest
+   browsing the main page has no use for "what does this do?" text about controls they can't
+   touch. `setSectionInteractive()` in both `dashboard.html` and `dashboard_virtual_preview.html`
+   now hides (`classList.toggle('hidden', !enabled)`) every `.help-icon` in a section when that
+   section is guest-disabled, and force-closes any popover left open from a prior logged-in
+   session before hiding.
+2. **Hardware Config is now a real live diagnostics panel, not a static help balloon.** User
+   wanted it to "show all hardware stats for connected devices" — checked what already exists
+   before building anything new, and found every stat needed is already a published entity
+   (`binary_sensor.controller_online`, `rs485_relay_online`, `rs485_rtd1_online`, `rtc_online`,
+   `sht31_online`, `sht20_online`, `sd_card_online`; `sensor.chip_temp`, `free_heap_kb`,
+   `free_psram_kb`, `wifi_rssi`; `text_sensor.wifi_ssid_text`, `ip_address`) — no new firmware
+   entities needed, purely a frontend job. Replaced the static `help-hardware` balloon with a
+   `hw-panel` stat grid (`.hw-grid`, new CSS) populated live every poll cycle by a new
+   `updateHardwarePanel(data)` call from `updateDashboard()`; the button itself
+   (`toggleHelp(event, 'hw-panel')`) now opens the panel directly, so the redundant separate "i"
+   icon for this one item was removed. The now-orphaned `hardwareSettings()` stub function was
+   deleted. Dropped the `danger` button styling for Hardware Config too — it's a read-only view,
+   not a destructive action. Virtual preview mirrors the same panel with static mock values
+   (`Coolroom-LAN`, `192.168.1.42`, `46.2°C` chip temp, etc.), since it has no real device to poll.
+
+**Deferred, not implemented — presented findings and asked before writing code**: the user's
+other three requests (Delete Logs → delete a selected log entry, Download Logs → save a selected
+log locally, WiFi Settings → show current WiFi credentials/stats + scan-and-test-before-committing
+a new network) all need genuinely new firmware capabilities that don't exist in ESPHome or this
+project today — not just wiring an existing entity like Backup/Restore or the Update buttons were.
+Specifically: no SD file-listing/serving/deleting HTTP endpoint exists anywhere (would need a
+custom `AsyncWebHandler` registered via `web_server_base`'s `add_handler()`, confirmed feasible by
+reading the local ESPHome package source at
+`.venv/lib/python3.12/site-packages/esphome/components/web_server_base/web_server_base.h`, but a
+real new component, not a config change); and a safe test-then-commit WiFi switchover needs a new
+state machine that temporarily runs alongside ESPHome's own WiFi reconnect logic — real risk of
+destabilizing the device's primary connectivity if done carelessly, on a controller explicitly
+designed to stay autonomous and reachable for alerts. Findings and options presented to the user
+directly rather than guessing at scope; response pending as of this entry.
+
+No firmware/yaml changes this entry either — pure static asset edit. Compile re-run: unchanged.
+
 ---
