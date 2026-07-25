@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
 **Status**: In Progress — help balloons now guest-invisible, Hardware Config is a real live diagnostics panel; three admin features (Delete/Download Logs, WiFi scan+switch) need new firmware infrastructure, findings presented, awaiting user direction; hardware validation + device reflash both blocked  
-**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
+**Last Commit**: `44fd8fe` (feat(dashboard): guest-gate help balloons, turn Hardware Config into a live panel)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
