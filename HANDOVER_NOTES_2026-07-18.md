@@ -2,11 +2,23 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — second RTD board removed, ambient remapped to SHT20; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `6c3e1fa` (refactor(sensors): remove second RTD board, remap ambient to SHT20)
+**Status**: In Progress — decorative probe-source selects removed; hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending — see `reference/session_recaps.md` 2026-07-25 "Removed Remaining Decorative Probe-Source Selects" entry
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Removed Remaining Decorative Probe-Source Selects
+
+- Confirmed and removed `select_probe1_source`/`select_probe2_source` — same issue as the
+  `select_probe3_source` removed earlier this session: each only logged and republished its own
+  state, nothing in the firmware ever read the value to actually switch a sensor source.
+  `probe1_temp`/`probe2_temp` are hard-mapped to `rtd1_ch1_raw`/`rtd1_ch2_raw` directly.
+- Removed the entire `select:` top-level block (both entries were its only content) and the
+  "Select Entities (Phase 7: Probe source profiles)" section header.
+- Build: RAM 19.5% (112,136/576,464 B), Flash 20.3% (1,491,208/7,340,032 B). Compile clean.
 
 ---
 

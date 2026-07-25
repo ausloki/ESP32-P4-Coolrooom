@@ -1578,43 +1578,6 @@ number:
             return std::string(buf);
 
 ##############################################################################
-# Select Entities (Phase 7: Probe source profiles)
-##############################################################################
-
-select:
-  - platform: template
-    name: "Probe 1 Source"
-    id: select_probe1_source
-    options:
-      - "RTD Board Channel 1"
-      - "SHT20 I2C"
-      - "SHT31 I2C 0x44"
-    initial_option: "RTD Board Channel 1"
-    web_server:
-      sorting_group_id: group_diagnostics
-      sorting_weight: 50
-    set_action:
-      lambda: |-
-        ESP_LOGD("select", "Probe 1 source changed to: %s", x.c_str());
-        id(select_probe1_source).publish_state(x);
-
-  - platform: template
-    name: "Probe 2 Source"
-    id: select_probe2_source
-    options:
-      - "RTD Board Channel 2"
-      - "SHT20 I2C"
-      - "SHT31 I2C 0x44"
-    initial_option: "RTD Board Channel 2"
-    web_server:
-      sorting_group_id: group_diagnostics
-      sorting_weight: 51
-    set_action:
-      lambda: |-
-        ESP_LOGD("select", "Probe 2 source changed to: %s", x.c_str());
-        id(select_probe2_source).publish_state(x);
-
-##############################################################################
 # Buttons
 ##############################################################################
 

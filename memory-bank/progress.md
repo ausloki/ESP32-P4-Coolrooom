@@ -11,6 +11,9 @@
 - Updated hardware docs, phase-status tables ("3x RTD" → "2x RTD"), and control-flow diagrams to
   match. See `reference/session_recaps.md` (2026-07-25 entry) for the full change list.
 - Build: RAM 19.5%, Flash 20.4% (both down slightly — one fewer RS485 board).
+- Follow-up: also removed `select_probe1_source`/`select_probe2_source` (same non-functional
+  decorative-dropdown issue as `select_probe3_source` — nothing ever read their value; probes
+  are hard-mapped). Removed the entire now-empty `select:` block. Build: RAM 19.5%, Flash 20.3%.
 
 ## 2026-07-25 I2C Humidity/Temp Sensors
 

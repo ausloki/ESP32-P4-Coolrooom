@@ -1,7 +1,7 @@
 # Active Context — Current Session State
 
 **Date:** 2026-07-25  
-**Session:** Removed second RTD board, remapped ambient temp to SHT20 (follow-up to earlier I2C humidity/temp addition)  
+**Session:** Removed second RTD board + all decorative probe-source selects, remapped ambient temp to SHT20 (follow-up to earlier I2C humidity/temp addition)  
 **Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING (blocked on hardware)
 
 ## Current Focus
@@ -37,15 +37,17 @@
   `copilot-instructions.md` files), `reference/hardware_pins.md`, `README.md`,
   `reference/DISPLAY_ARCHITECTURE_VISUAL.md`, `reference/program_control_logic_flowchart.md`,
   `reference/control_logic_ns_diagram.md`, and `assets/dashboard.html` all updated to match.
-- Left untouched (out of scope): `select_probe1_source`/`select_probe2_source` are the same kind
-  of non-functional dropdown as the removed one, but weren't part of this request.
+- Follow-up (same session): confirmed and removed `select_probe1_source`/`select_probe2_source`
+  too — same issue as the just-removed `select_probe3_source` (only logged and republished their
+  own state; `probe1_temp`/`probe2_temp` are hard-mapped to `rtd1_ch1_raw`/`rtd1_ch2_raw` with no
+  source-switching logic anywhere). Removed the entire now-empty `select:` block.
 
 ### Build Status
 
 ```text
 Compile: successful via ./tools/esphome_compile.sh
-RAM:   19.5% (112,320 / 576,464 bytes)
-Flash: 20.4% (1,496,104 / 7,340,032 bytes) — both down slightly (one fewer RS485 board)
+RAM:   19.5% (112,136 / 576,464 bytes)
+Flash: 20.3% (1,491,208 / 7,340,032 bytes) — down slightly again after the select removal
 Warning level: only generic ESP-IDF experimental-features warning remains
 ```
 
@@ -73,9 +75,6 @@ Warning level: only generic ESP-IDF experimental-features warning remains
    tiers in the dashboard in the meantime.
 5. Decide whether the old S3 project's calibration-offset/dew-point/primary-probe-override
    features are worth porting later — deliberately left out of both humidity-sensor sessions.
-6. `select_probe1_source`/`select_probe2_source` are non-functional decorative dropdowns (same
-   issue as the removed `select_probe3_source`) — worth cleaning up or actually implementing
-   later, but out of scope so far.
 
 ### Key Anchors For Resume
 

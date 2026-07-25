@@ -1357,3 +1357,20 @@ every consumer of the old ambient reading onto SHT20 instead.
 slightly from last session (one fewer RS485 board driver + sensors). Compile clean.
 
 ---
+
+## 2026-07-25 — Removed Remaining Decorative Probe-Source Selects
+
+**Trigger**: The previous entry flagged `select_probe1_source`/`select_probe2_source` as the same
+kind of non-functional decorative dropdown as the just-removed `select_probe3_source` (each only
+logs and republishes its own state via `set_action`; nothing in the firmware ever reads their
+value to actually pick a sensor source — `probe1_temp`/`probe2_temp` are hard-mapped to
+`rtd1_ch1_raw`/`rtd1_ch2_raw` directly). User asked to confirm and remove.
+
+**What changed**: Removed both remaining `select:` entries and the now-empty `select:` top-level
+block/section header (`"Select Entities (Phase 7: Probe source profiles)"`) from
+`esp32-p4-coolroom.yaml` — nothing else in the file referenced them.
+
+**Build**: RAM 19.5% (112,136/576,464 B), Flash 20.3% (1,491,208/7,340,032 B) — down slightly
+again. Compile clean.
+
+---
