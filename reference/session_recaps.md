@@ -1212,3 +1212,35 @@ Synced assets/dashboard_virtual_preview.html (icon rail + info corner, non-funct
 toggle) and republished the same Artifact URL. No firmware change.
 
 ---
+
+## 2026-07-25 — Gauge Restyled to Match ESP32-Coolroom-Prescision Web Dashboard
+
+Ported the instrument-dial polish from the earlier S3 project's web dashboard
+(/Volumes/Scratch/Documents/ESP32-Coolroom-Prescision/web/tooltips.js, the #coolroom-dashboard
+gauge injected into ESPHome's stock web_server UI) onto assets/dashboard.html's SVG gauge:
+
+- Tracks are now faded in each ring's own hue (rgba(10,132,255,.16) outer / rgba(0,188,212,.16)
+  middle / rgba(255,20,147,.16) inner) instead of a neutral grey.
+- Added tick marks around the outer ring (every 5°C, major every 10°C) spanning the gauge's
+  actual -20..15°C range — ticks only cover the live arc sweep, none fall in the bottom gap.
+- Added small ring labels (CURRENT / SET / AMB) placed in the SVG itself, in the bottom-left of
+  the gap, replacing the colored-dot legend row that used to sit below the gauge.
+- Center temperature reading changed from a bold 700-weight numeral to a thinner 300-weight LCD-
+  style numeral (matching the old project's 56px/weight-300 center readout, scaled to this card's
+  smaller size).
+- The outer value arc now recolors dynamically with the reading (green/red/blue), not just the
+  center text — the old project did this too, though with its own 4-state cool/warm/hot/cold
+  scheme. Kept this project's actual 3-state red/blue/green logic (matches the real
+  esp32-p4-coolroom.yaml on_value lambda) rather than importing the old thresholds, since that
+  logic reflects real alarm_high/alarm_low behavior on this hardware.
+
+Deliberately did not port: the old project's 4-state color scheme (different alarm model), its
+glowing status-pill treatment for compressor/defrost/light/alarm (the icon-rail style here was a
+separate, already-settled request), or its side-panel humidity/evaporator/lockout/drip readouts
+(this device has no humidity sensor, and evaporator/lockout data isn't currently wired into this
+dashboard). Scope stayed to "the horseshoe/arc gauges," not a full dashboard rebuild.
+
+Synced assets/dashboard_virtual_preview.html, republished same Artifact URL. No firmware change
+— compile re-verified anyway per policy: RAM 19.5%, Flash 20.3% (unchanged).
+
+---

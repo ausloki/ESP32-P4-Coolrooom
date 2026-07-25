@@ -10,6 +10,26 @@
 
 ---
 
+## 2026-07-25 Addendum — Gauge Restyled to Match ESP32-Coolroom-Prescision Web Dashboard
+
+- Ported instrument-dial styling from the earlier S3 project's web dashboard
+  (`/Volumes/Scratch/Documents/ESP32-Coolroom-Prescision/web/tooltips.js`, its injected
+  `#coolroom-dashboard` gauge) onto `assets/dashboard.html`'s SVG gauge: hue-matched faded tracks
+  per ring, tick marks around the outer ring (every 5°C across the real -20..15°C range), small
+  in-SVG ring labels (CURRENT/SET/AMB) replacing the old colored-dot legend row, thinner
+  300-weight center numeral, and dynamic outer-arc recoloring (not just the text) on temperature
+  state.
+- Kept this project's real 3-state red/blue/green color logic (matches the actual
+  `esp32-p4-coolroom.yaml` `on_value` lambda) rather than the old project's 4-state
+  cool/warm/hot/cold scheme — that reflected a different alarm model.
+- Did not port the old project's glowing status-pill icons or side-panel humidity/evaporator/
+  lockout/drip readouts — out of scope for "the horseshoe/arc gauges," and this hardware has no
+  humidity sensor.
+- Synced `assets/dashboard_virtual_preview.html`, republished same Artifact URL.
+- No firmware change; compile re-verified: RAM 19.5%, Flash 20.3% (unchanged).
+
+---
+
 ## 2026-07-24 Addendum — Gauge Panel Matches LVGL Icon Rail + Secondary Readings
 
 - `assets/dashboard.html`: moved compressor/defrost/light/alarm icons off the tile row and onto

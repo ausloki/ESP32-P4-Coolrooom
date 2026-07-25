@@ -112,22 +112,24 @@
     .gauge-info-line + .gauge-info-line { margin-top: 4px; }
     .gauge-wrap { grid-column: 2; position: relative; width: min(300px, 72vw); margin: 0 auto; }
     .gauge-wrap svg { width: 100%; height: auto; display: block; }
-    .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
+    /* Faded track in each ring's own hue, tick marks, and small ring labels —
+       instrument-dial touches borrowed from an earlier project's web gauge. */
+    .gauge-track { fill: none; stroke-linecap: round; }
+    .gauge-track.outer { stroke: rgba(10, 132, 255, 0.16); }
+    .gauge-track.middle { stroke: rgba(0, 188, 212, 0.16); }
+    .gauge-track.inner { stroke: rgba(255, 20, 147, 0.16); }
     .gauge-arc { fill: none; stroke-linecap: round; }
+    .gauge-tick { stroke: rgba(255,255,255,0.22); stroke-width: 1.5; }
+    .gauge-tick.major { stroke: rgba(255,255,255,0.4); stroke-width: 2; }
+    .gauge-ring-label { font-size: 8px; font-family: inherit; text-anchor: middle; letter-spacing: 0.06em; fill: rgba(255,255,255,0.38); }
     .gauge-center {
       position: absolute; inset: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; pointer-events: none;
     }
-    .gauge-temp { font-size: 40px; font-weight: 700; color: #30D158; line-height: 1; letter-spacing: -0.01em; }
+    .gauge-temp { font-size: 44px; font-weight: 300; color: #30D158; line-height: 1; letter-spacing: -0.01em; }
     .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
     .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-    .gauge-legend {
-      display: flex; justify-content: center; gap: 16px; margin-top: 14px;
-      font-size: 12px; color: #ccc;
-    }
-    .gauge-legend span { display: flex; align-items: center; gap: 6px; }
-    .gauge-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     @media (max-width: 440px) {
       .gauge-panel { grid-template-columns: 1fr; }
       .gauge-icons { grid-column: 1; flex-direction: row; justify-content: center; }
@@ -235,10 +237,11 @@
         </div>
         <div class="gauge-wrap">
           <svg viewBox="0 0 300 300">
-            <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
-            <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
-            <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
-            <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
+            <g id="gaugeTicks"></g>
+            <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="14"></path>
+            <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="11"></path>
+            <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="9"></path>
+            <path id="gaugeArcOuter" class="gauge-arc" stroke="#30D158" stroke-width="14"></path>
             <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
             <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
           </svg>
@@ -252,11 +255,6 @@
           <div class="gauge-info-line">📶 -61 dBm</div>
           <div class="gauge-info-line">⏱ 2d 7h</div>
         </div>
-      </div>
-      <div class="gauge-legend">
-        <span><i style="background:#0A84FF;"></i> Coolroom</span>
-        <span><i style="background:#00BCD4;"></i> Setpoint</span>
-        <span><i style="background:#FF1493;"></i> Ambient</span>
       </div>
     </div>
 
@@ -430,13 +428,40 @@
       const endAngle = GAUGE_START_ANGLE + (GAUGE_SWEEP * percent) / 100;
       document.getElementById(id).setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
     }
+    function buildGaugeTicks() {
+      const g = document.getElementById('gaugeTicks');
+      if (!g) return;
+      let html = '';
+      for (let v = -20; v <= 15; v += 5) {
+        const major = v % 10 === 0;
+        const angle = GAUGE_START_ANGLE + ((v + 20) / 35) * GAUGE_SWEEP;
+        const p1 = gaugePoint(GAUGE_RADII.outer + 8, angle);
+        const p2 = gaugePoint(GAUGE_RADII.outer + (major ? 15 : 11), angle);
+        html += `<line class="gauge-tick${major ? ' major' : ''}" x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}"></line>`;
+      }
+      const labelAngle = 200;
+      const labels = [
+        { r: GAUGE_RADII.outer, text: 'CURRENT' },
+        { r: GAUGE_RADII.middle, text: 'SET' },
+        { r: GAUGE_RADII.inner, text: 'AMB' }
+      ];
+      labels.forEach((l) => {
+        const p = gaugePoint(l.r, labelAngle);
+        html += `<text class="gauge-ring-label" x="${p.x.toFixed(1)}" y="${(p.y + 3).toFixed(1)}">${l.text}</text>`;
+      });
+      g.innerHTML = html;
+    }
+
     function drawMockGauge() {
       const fullEnd = GAUGE_START_ANGLE + GAUGE_SWEEP;
       document.getElementById('gaugeTrackOuter').setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
       document.getElementById('gaugeTrackMiddle').setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
       document.getElementById('gaugeTrackInner').setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
+      buildGaugeTicks();
 
-      // Mock readings — coolroom 3.8°C, setpoint 2.0°C, ambient 22.4°C.
+      // Mock readings — coolroom 3.8°C, setpoint 2.0°C, ambient 22.4°C. 3.8 is
+      // within [setpoint-alarm_low, setpoint+alarm_high] for typical deltas, so
+      // this renders in the "healthy" green state, matching dashboard.html.
       setGaugeArc('gaugeArcOuter', GAUGE_RADII.outer, tempToPercent(3.8));
       setGaugeArc('gaugeArcMiddle', GAUGE_RADII.middle, tempToPercent(2.0));
       setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(22.4));

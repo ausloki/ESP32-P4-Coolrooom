@@ -36,6 +36,14 @@
   row entirely. Light toggle is a real `/switch/relay_light/toggle` call, gated to operator.
   Alarm stays display-only (no exposed reset endpoint in firmware). Preview + Artifact synced.
 
+## 2026-07-25 Gauge Styled After ESP32-Coolroom-Prescision
+
+- `assets/dashboard.html` gauge restyled after the earlier S3 project's web dashboard
+  (`ESP32-Coolroom-Prescision/web/tooltips.js`): hue-matched faded tracks, tick marks, in-SVG
+  CURRENT/SET/AMB ring labels, thinner center numeral, dynamic outer-arc recoloring. Kept this
+  project's real 3-state (red/blue/green) alarm-relative color logic rather than the old
+  project's different 4-state scheme. Preview + Artifact synced.
+
 ## Phase Completion Status
 
 | Phase | Description | Status | Completion Date | Build Test | Device Test |

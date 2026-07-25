@@ -375,8 +375,22 @@
             .gauge-info-line + .gauge-info-line { margin-top: 2px; }
         }
         .gauge-wrap svg { width: 100%; height: auto; display: block; }
-        .gauge-track { fill: none; stroke: #8E8E93; stroke-opacity: 0.25; stroke-linecap: round; }
+        /* Faded track in each ring's own hue (not a neutral grey) — an instrument-
+           dial touch borrowed from an earlier project's web gauge. */
+        .gauge-track { fill: none; stroke-linecap: round; }
+        .gauge-track.outer { stroke: rgba(10, 132, 255, 0.16); }
+        .gauge-track.middle { stroke: rgba(0, 188, 212, 0.16); }
+        .gauge-track.inner { stroke: rgba(255, 20, 147, 0.16); }
         .gauge-arc { fill: none; stroke-linecap: round; }
+        .gauge-tick { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1.5; }
+        .gauge-tick.major { stroke: rgba(255, 255, 255, 0.4); stroke-width: 2; }
+        .gauge-ring-label {
+            font-size: 8px;
+            font-family: inherit;
+            text-anchor: middle;
+            letter-spacing: 0.06em;
+            fill: rgba(255, 255, 255, 0.38);
+        }
         .gauge-center {
             position: absolute;
             inset: 0;
@@ -387,19 +401,9 @@
             text-align: center;
             pointer-events: none;
         }
-        .gauge-temp { font-size: 42px; font-weight: 700; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; }
+        .gauge-temp { font-size: 46px; font-weight: 300; color: #30D158; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
         .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
         .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-        .gauge-legend {
-            display: flex;
-            justify-content: center;
-            gap: 18px;
-            margin-top: 14px;
-            font-size: 12px;
-            color: #ccc;
-        }
-        .gauge-legend span { display: flex; align-items: center; gap: 6px; }
-        .gauge-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     </style>
 </head>
 <body>
@@ -436,10 +440,11 @@
                 </div>
                 <div class="gauge-wrap">
                     <svg viewBox="0 0 300 300">
-                        <path id="gaugeTrackOuter" class="gauge-track" stroke-width="14"></path>
-                        <path id="gaugeTrackMiddle" class="gauge-track" stroke-width="11"></path>
-                        <path id="gaugeTrackInner" class="gauge-track" stroke-width="9"></path>
-                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="14"></path>
+                        <g id="gaugeTicks"></g>
+                        <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="14"></path>
+                        <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="11"></path>
+                        <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="9"></path>
+                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#30D158" stroke-width="14"></path>
                         <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
                         <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
                     </svg>
@@ -453,11 +458,6 @@
                     <div class="gauge-info-line" id="gaugeWifi">📶 --</div>
                     <div class="gauge-info-line" id="gaugeUptime">⏱ --</div>
                 </div>
-            </div>
-            <div class="gauge-legend">
-                <span><i style="background:#0A84FF;"></i> Coolroom</span>
-                <span><i style="background:#00BCD4;"></i> Setpoint</span>
-                <span><i style="background:#FF1493;"></i> Ambient</span>
             </div>
         </div>
 
@@ -1060,11 +1060,52 @@
             document.getElementById(id).setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
         }
 
+        // Short tick marks around the outer ring plus small ring labels tucked
+        // into the bottom-left of the gap (CURRENT/SET/AMB) — an instrument-dial
+        // touch borrowed from an earlier project's web gauge. Built once; static.
+        function buildGaugeTicks() {
+            const g = document.getElementById('gaugeTicks');
+            if (!g) return;
+            let html = '';
+            for (let v = -20; v <= 15; v += 5) {
+                const major = v % 10 === 0;
+                const angle = GAUGE_START_ANGLE + ((v + 20) / 35) * GAUGE_SWEEP;
+                const p1 = gaugePoint(GAUGE_RADII.outer + 8, angle);
+                const p2 = gaugePoint(GAUGE_RADII.outer + (major ? 15 : 11), angle);
+                html += `<line class="gauge-tick${major ? ' major' : ''}" x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}"></line>`;
+            }
+            const labelAngle = 200; // bottom-left, inside the gap
+            const labels = [
+                { r: GAUGE_RADII.outer, text: 'CURRENT' },
+                { r: GAUGE_RADII.middle, text: 'SET' },
+                { r: GAUGE_RADII.inner, text: 'AMB' }
+            ];
+            labels.forEach((l) => {
+                const p = gaugePoint(l.r, labelAngle);
+                html += `<text class="gauge-ring-label" x="${p.x.toFixed(1)}" y="${(p.y + 3).toFixed(1)}">${l.text}</text>`;
+            });
+            g.innerHTML = html;
+        }
+
         function initGaugeTracks() {
             const fullEnd = GAUGE_START_ANGLE + GAUGE_SWEEP;
             document.getElementById('gaugeTrackOuter').setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
             document.getElementById('gaugeTrackMiddle').setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
             document.getElementById('gaugeTrackInner').setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
+            buildGaugeTicks();
+        }
+
+        // Same alarm-relative color coding as the LVGL center label: red above
+        // setpoint+alarm_high, blue below setpoint-alarm_low, green otherwise.
+        function temperatureStateColor(data) {
+            const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
+            if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_high === 'number' && data.temperature > data.setpoint + data.alarm_high) {
+                return '#FF453A'; // col_red
+            }
+            if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_low === 'number' && data.temperature < data.setpoint - data.alarm_low) {
+                return '#0A84FF'; // col_blue
+            }
+            return '#30D158'; // col_green (default/healthy, including when temp is unknown)
         }
 
         function updateGauge(data) {
@@ -1076,16 +1117,11 @@
             const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
             tempEl.textContent = hasTemp ? `${data.temperature.toFixed(1)}°C` : '--°C';
 
-            // Same alarm-relative color coding as the LVGL center label.
-            if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_high === 'number' && data.temperature > data.setpoint + data.alarm_high) {
-                tempEl.style.color = '#FF453A'; // col_red
-            } else if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_low === 'number' && data.temperature < data.setpoint - data.alarm_low) {
-                tempEl.style.color = '#0A84FF'; // col_blue
-            } else if (hasTemp) {
-                tempEl.style.color = '#30D158'; // col_green
-            } else {
-                tempEl.style.color = '#0A84FF';
-            }
+            // The value arc itself shifts color with the reading too, not just the
+            // center label — matches the LVGL center label's states either way.
+            const stateColor = temperatureStateColor(data);
+            tempEl.style.color = stateColor;
+            document.getElementById('gaugeArcOuter').style.stroke = stateColor;
 
             document.getElementById('gaugeSetpoint').textContent =
                 typeof data.setpoint === 'number' && !isNaN(data.setpoint) ? `Set: ${data.setpoint.toFixed(1)}°C` : 'Set: --°C';
