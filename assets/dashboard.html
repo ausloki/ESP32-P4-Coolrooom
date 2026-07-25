@@ -425,6 +425,31 @@
         .gauge-reading span:last-child { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
         .gauge-reading.internal span:last-child { color: #00BCD4; }
         .gauge-reading.external span:last-child { color: #FF1493; }
+        .gauge-reading.evaporator span:last-child { color: #FF9F0A; }
+
+        /* Named alarm banner — visible, pulsing, matches the old project's
+           .cr-alarm-banner treatment (as opposed to the generic .alert boxes
+           below, which cover fault/connectivity notices, not named alarms). */
+        .alarm-banner {
+            background: rgba(255, 69, 58, 0.14);
+            border: 1px solid #FF453A;
+            color: #FF453A;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            animation: alarm-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes alarm-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.35); }
+            50% { box-shadow: 0 0 0 8px rgba(255, 69, 58, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .alarm-banner { animation: none; }
+        }
     </style>
 </head>
 <body>
@@ -488,6 +513,10 @@
                 <div class="gauge-reading external">
                     <span class="gauge-reading-label">External (SHT20)</span>
                     <span id="readingExternal">--°C · --%RH</span>
+                </div>
+                <div class="gauge-reading evaporator">
+                    <span class="gauge-reading-label">Evaporator</span>
+                    <span id="readingEvaporator">--°C</span>
                 </div>
             </div>
         </div>
@@ -1029,30 +1058,33 @@
                 const state = entity.state;
                 
                 if (id === 'sensor.probe1_temp') data.temperature = parseFloat(state);
-                if (id === 'number.ctl_setpoint') data.setpoint = parseFloat(state);
-                if (id === 'binary_sensor.relay_compressor') data.compressor_on = state === 'on';
-                if (id === 'binary_sensor.relay_defrost') data.defrost_phase = state === 'on';
-                if (id === 'binary_sensor.ctl_alarm_high') data.alarm_high_active = state === 'on';
-                if (id === 'binary_sensor.ctl_alarm_low') data.alarm_low_active = state === 'on';
-                if (id === 'binary_sensor.ctl_ice_alarm_active') data.alarm_ice_active = state === 'on';
-                if (id === 'binary_sensor.hw_rs485_relay_ok') data.rs485_relay_ok = state === 'on';
-                if (id === 'binary_sensor.hw_rs485_rtd1_ok') data.rs485_rtd_ok = state === 'on';
-                if (id === 'binary_sensor.hw_rtc_ok') data.rtc_ok = state === 'on';
+                if (id === 'sensor.probe2_temp') data.evap_temp = parseFloat(state);
+                if (id === 'number.setpoint') data.setpoint = parseFloat(state);
+                if (id === 'switch.relay_compressor') data.compressor_on = state === 'on';
+                if (id === 'switch.relay_defrost') data.defrost_phase = state === 'on';
+                if (id === 'binary_sensor.alarm_high_active') data.alarm_high_active = state === 'on';
+                if (id === 'binary_sensor.alarm_low_active') data.alarm_low_active = state === 'on';
+                if (id === 'binary_sensor.ice_alarm_sensor') data.alarm_ice_active = state === 'on';
+                if (id === 'binary_sensor.door_alarm_active') data.alarm_door_active = state === 'on';
+                if (id === 'binary_sensor.no_cool_alarm_sensor') data.alarm_nocool_active = state === 'on';
+                if (id === 'binary_sensor.rs485_relay_online') data.rs485_relay_ok = state === 'on';
+                if (id === 'binary_sensor.rs485_rtd1_online') data.rs485_rtd_ok = state === 'on';
+                if (id === 'binary_sensor.rtc_online') data.rtc_ok = state === 'on';
                 if (id === 'binary_sensor.sht31_online') data.sht31_ok = state === 'on';
                 if (id === 'binary_sensor.sht20_online') data.sht20_ok = state === 'on';
-                if (id === 'binary_sensor.wifi_connected') data.wifi_connected = state === 'on';
+                if (id === 'binary_sensor.controller_online') data.wifi_connected = state === 'on';
                 if (id === 'sensor.wifi_rssi') data.wifi_rssi = parseInt(state);
                 if (id === 'text_sensor.wifi_ssid_text') data.wifi_ssid = state;
-                if (id === 'binary_sensor.ctl_probe_fault') data.probe_fault = state === 'on';
+                if (id === 'binary_sensor.probe_fault_active') data.probe_fault = state === 'on';
                 if (id === 'switch.relay_light') data.light_on = state === 'on';
                 if (id === 'sensor.probe_internal_temp') data.int_temp = parseFloat(state);
                 if (id === 'sensor.probe_internal_humidity') data.int_humidity = parseFloat(state);
                 if (id === 'sensor.probe_external_temp') data.ext_temp = parseFloat(state);
                 if (id === 'sensor.probe_external_humidity') data.ext_humidity = parseFloat(state);
-                if (id === 'sensor.free_heap') data.heap_free_kb = parseInt(state);
-                if (id === 'number.ctl_alarm_high_delta') data.alarm_high = parseFloat(state);
-                if (id === 'number.ctl_alarm_low_delta') data.alarm_low = parseFloat(state);
-                if (id === 'number.ctl_comp_diff') data.comp_diff = parseFloat(state);
+                if (id === 'sensor.free_heap_kb') data.heap_free_kb = parseInt(state);
+                if (id === 'number.alarm_high_delta') data.alarm_high = parseFloat(state);
+                if (id === 'number.alarm_low_delta') data.alarm_low = parseFloat(state);
+                if (id === 'number.compressor_differential') data.comp_diff = parseFloat(state);
             });
             
             if (!data.uptime_seconds) data.uptime_seconds = Math.floor(Date.now() / 1000);
@@ -1207,6 +1239,8 @@
             const activeAlarms = [];
             if (data.alarm_high_active) activeAlarms.push('High Temp');
             if (data.alarm_low_active) activeAlarms.push('Low Temp');
+            if (data.alarm_door_active) activeAlarms.push('Door Open');
+            if (data.alarm_nocool_active) activeAlarms.push('No Cooling');
             if (data.alarm_ice_active) activeAlarms.push('Ice');
             setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : null);
             document.getElementById('iconAlarms').title = activeAlarms.length ? activeAlarms.join(', ') : 'No active alarms';
@@ -1228,6 +1262,8 @@
                     : '--°C · --%RH';
             document.getElementById('readingInternal').textContent = fmtReading(data.int_temp, data.int_humidity);
             document.getElementById('readingExternal').textContent = fmtReading(data.ext_temp, data.ext_humidity);
+            document.getElementById('readingEvaporator').textContent =
+                typeof data.evap_temp === 'number' && !isNaN(data.evap_temp) ? `${data.evap_temp.toFixed(1)}°C` : '--°C';
 
             let rs485Html = '';
             rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;
@@ -1255,7 +1291,17 @@
                 document.getElementById('compDiffInput').value = (data.comp_diff || 1).toFixed(1);
             }
 
+            const namedAlarms = [];
+            if (data.alarm_high_active) namedAlarms.push('HIGH TEMPERATURE');
+            if (data.alarm_low_active) namedAlarms.push('LOW TEMPERATURE');
+            if (data.alarm_door_active) namedAlarms.push('DOOR OPEN');
+            if (data.alarm_nocool_active) namedAlarms.push('NO COOLING');
+            if (data.alarm_ice_active) namedAlarms.push('ICE DETECTED');
+
             let alertsHtml = '';
+            if (namedAlarms.length) {
+                alertsHtml += `<div class="alarm-banner">🚨 ${namedAlarms.join(' &nbsp;·&nbsp; ')}</div>`;
+            }
             if (data.probe_fault) alertsHtml += '<div class="alert alert-danger">⚠️ Probe fault detected. Fallback mode active.</div>';
             if (data.wifi_connected === false) alertsHtml += '<div class="alert alert-warning">⚠️ WiFi disconnected.</div>';
             document.getElementById('alerts').innerHTML = alertsHtml || '';

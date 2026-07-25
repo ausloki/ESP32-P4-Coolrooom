@@ -2050,6 +2050,22 @@ interval:
             char buf[24];
             snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
             return std::string(buf);
+      - lvgl.widget.update:
+          id: lbl_home_alarm_banner
+          hidden: !lambda |-
+            return !(id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
+                     id(ctl_door_alarm_active) || id(ctl_no_cool_alarm_active) ||
+                     id(ctl_ice_alarm_active));
+      - lvgl.label.update:
+          id: lbl_home_alarm_banner
+          text: !lambda |-
+            std::string s;
+            if (id(ctl_alarm_high_active))    s += "HIGH TEMPERATURE   ";
+            if (id(ctl_alarm_low_active))     s += "LOW TEMPERATURE   ";
+            if (id(ctl_door_alarm_active))    s += "DOOR OPEN   ";
+            if (id(ctl_no_cool_alarm_active)) s += "NO COOLING   ";
+            if (id(ctl_ice_alarm_active))     s += "ICE DETECTED   ";
+            return s;
       - lambda: |-
           const bool motion_suppressed =
               id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
@@ -3242,6 +3258,23 @@ lvgl:
                   height: 8
                   color: col_green
                   brightness: 0%
+
+        # Named alarm banner — scrolls when the message overflows, hidden
+        # unless a named alarm is active. Sits in the gap between the left
+        # icon column (ends y:520) and the tab bar (starts y:552); shows the
+        # same named-alarm set as the web dashboard's pulsing banner so both
+        # surfaces read the same message.
+        - label:
+            id: lbl_home_alarm_banner
+            x: 96
+            y: 520
+            width: 912
+            height: 28
+            text: ""
+            text_font: font_small
+            text_color: col_red
+            long_mode: SCROLL_CIRCULAR
+            hidden: true
 
         # Tab bar buttons at bottom
         - button:

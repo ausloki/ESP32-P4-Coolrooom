@@ -1448,4 +1448,70 @@ auto-recovered on retry — same known flake as prior sessions, unrelated to thi
 **Hardware-gated follow-up**: none of this — including the page-navigation fix — has been tested
 on the physical touchscreen yet. That's the first thing to verify once the device is connected.
 
+## 2026-07-25 — Named Alarm Warning Banners + Web Dashboard Reading Gaps Closed
+
+Follow-up to the "have we achieved visual parity" review: the user picked two of four proposed
+items — add visible named-alarm warning banners on both the LVGL touchscreen and the web
+dashboard (previously only a bell-icon color change existed), and close the missing-readings gap
+on the web dashboard. Explicitly did **not** select a full LVGL main-screen redesign to match the
+old project's meter/needle layout — out of scope for this entry.
+
+- **Discovered while investigating (not user-reported): `assets/dashboard.html`'s `parseStates()`
+  had been reading the wrong entity IDs since the dashboard was first built.** It referenced
+  internal `ctl_*` global variable names and guessed at domains instead of the actual published
+  `id:` fields, so several status indicators on the live web dashboard have never reflected real
+  device state:
+  - `binary_sensor.ctl_alarm_high`/`ctl_alarm_low`/`ctl_ice_alarm_active`/`ctl_probe_fault` — none
+    of these entities exist; correct IDs are `binary_sensor.alarm_high_active`,
+    `alarm_low_active`, `ice_alarm_sensor`, `probe_fault_active`.
+  - `binary_sensor.relay_compressor`/`relay_defrost` — wrong domain; these are `switch:` platform
+    entities (`switch.relay_compressor`/`switch.relay_defrost`), so the compressor/defrost status
+    badges and gauge status text have never worked either.
+  - `binary_sensor.hw_rs485_relay_ok`/`hw_rs485_rtd1_ok`/`hw_rtc_ok` — those are internal globals,
+    not entities; the real diagnostic `binary_sensor`s are `rs485_relay_online`,
+    `rs485_rtd1_online`, `rtc_online`.
+  - `binary_sensor.wifi_connected` — no such entity; closest real equivalent is the `platform:
+    status` sensor `binary_sensor.controller_online`.
+  - `sensor.free_heap` — real ID is `sensor.free_heap_kb`.
+  - `number.ctl_setpoint`/`ctl_alarm_high_delta`/`ctl_alarm_low_delta`/`ctl_comp_diff` — all
+    globals, not entities; real `number:` IDs are `setpoint`, `alarm_high_delta`,
+    `alarm_low_delta`, `compressor_differential`.
+  All of the above fixed in `parseStates()`. This means the web dashboard's compressor/defrost
+  badges, alarm bell state, probe-fault alert, RS485/RTC health row, and Wi-Fi/heap readouts have
+  been silently wrong since they were written — not a regression from this session, a pre-existing
+  bug this investigation surfaced. `switch.relay_light`, the humidity/temp sensors, and
+  `sensor.wifi_rssi`/`text_sensor.wifi_ssid_text` were already correct.
+- Added parsing for `binary_sensor.door_alarm_active` and `binary_sensor.no_cool_alarm_sensor` —
+  entities that already existed but the dashboard never read.
+- **Web dashboard named alarm banner**: new `.alarm-banner` — pulsing red pill above the gauge
+  card (`@keyframes alarm-pulse`, box-shadow ring, disabled under `prefers-reduced-motion`),
+  listing whichever of HIGH TEMPERATURE / LOW TEMPERATURE / DOOR OPEN / NO COOLING / ICE DETECTED
+  are currently active. Kept separate from the existing plain `.alert-danger`/`.alert-warning`
+  boxes (probe fault, Wi-Fi disconnect), which stay as-is.
+- **Web dashboard evaporator reading**: added a third `.gauge-reading` pill (`sensor.probe2_temp`)
+  alongside the existing Internal (SHT31) / External (SHT20) pills. Lockout/defrost/drip
+  countdown timers were considered and dropped — no backing sensor entities exist for them (only
+  LVGL-only labels and the configured-duration `number:` entities, not live countdowns); adding
+  those would mean new backend entities, out of scope for a reading-gap close-up.
+- **LVGL `page_home` scrolling alarm banner**: new `label` widget `lbl_home_alarm_banner` in the
+  32px gap between the left icon column (ends y:520) and the tab bar (starts y:552) — `x:96,
+  y:520, width:912, height:28`, `long_mode: SCROLL_CIRCULAR`, `text_color: col_red`, hidden by
+  default. Driven from the existing "Phase 4: 1s LVGL display updates" `interval:` block via a new
+  `lvgl.widget.update` (hidden) + `lvgl.label.update` (text) pair, reading the same five
+  `ctl_*_active` globals the web banner uses — both surfaces show the same named-alarm set.
+  Deliberately excludes probe fault: that already has its own dedicated indicator
+  (`lbl_status_text` "PROBE FAULT"/"OK" + `led_probe_fault`), so folding it into the new banner
+  too would duplicate an existing signal rather than close a gap.
+- `assets/dashboard_virtual_preview.html`: mirrored the CSS and added a evaporator reading pill
+  plus a demo `.alarm-banner` instance (shown active — "HIGH TEMPERATURE · DOOR OPEN" — so the
+  static preview actually demonstrates the new banner; the live dashboard only renders it when a
+  named alarm is genuinely active). Artifact republished at the same URL.
+
+**Build**: RAM 20.0% (115,424/576,464 B), Flash 20.7% (1,517,672/7,340,032 B). Compile clean on
+the first attempt this time — no ninja/native-IDF flake.
+
+**Hardware-gated follow-up**: the LVGL banner's scroll behavior and the corrected web dashboard
+status badges are both untested on the physical touchscreen/device — still blocked, hardware not
+connected this session.
+
 ---

@@ -136,6 +136,31 @@
     .gauge-reading span:last-child { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
     .gauge-reading.internal span:last-child { color: #00BCD4; }
     .gauge-reading.external span:last-child { color: #FF1493; }
+    .gauge-reading.evaporator span:last-child { color: #FF9F0A; }
+
+    /* Named alarm banner — visible, pulsing; only rendered when a named
+       alarm (high/low temp, door, no-cool, ice) is active. Distinct from
+       the generic fault/connectivity alerts, which stay plain boxes. */
+    .alarm-banner {
+      background: rgba(255, 69, 58, 0.14);
+      border: 1px solid #FF453A;
+      color: #FF453A;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      animation: alarm-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes alarm-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.35); }
+      50% { box-shadow: 0 0 0 8px rgba(255, 69, 58, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .alarm-banner { animation: none; }
+    }
     @media (max-width: 440px) {
       .gauge-panel { grid-template-columns: 1fr; }
       .gauge-icons { grid-column: 1; flex-direction: row; justify-content: center; }
@@ -232,6 +257,11 @@
       </div>
     </header>
 
+    <!-- Named alarm banner demo — shown active here so the preview
+         demonstrates the feature; the live dashboard only renders this
+         when a named alarm (high/low temp, door, no-cool, ice) is active. -->
+    <div class="alarm-banner">🚨 HIGH TEMPERATURE &nbsp;·&nbsp; DOOR OPEN</div>
+
     <div class="gauge-section">
       <h2 class="gauge-title">Coolroom Status</h2>
       <div class="gauge-panel">
@@ -270,6 +300,10 @@
         <div class="gauge-reading external">
           <span class="gauge-reading-label">External (SHT20)</span>
           <span>18.6°C · 41%RH</span>
+        </div>
+        <div class="gauge-reading evaporator">
+          <span class="gauge-reading-label">Evaporator</span>
+          <span>-4.2°C</span>
         </div>
       </div>
     </div>

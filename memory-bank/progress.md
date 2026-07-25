@@ -1,5 +1,24 @@
 # Progress Tracking
 
+## 2026-07-25 Named Alarm Warning Banners + Web Dashboard Reading Gaps Closed
+
+- User selected 2 of 4 proposed follow-ups from a visual-parity status check: named alarm warning
+  banners on both surfaces, and closing the missing-readings gap on the web dashboard. A full LVGL
+  main-screen redesign was explicitly not selected.
+- **Found and fixed a pre-existing bug while investigating, not user-reported**:
+  `assets/dashboard.html`'s `parseStates()` had been reading wrong entity IDs (internal `ctl_*`
+  globals and guessed domains) since the dashboard was first built. Compressor/defrost badges,
+  alarm bell, probe-fault alert, RS485/RTC health row, and settings input pre-fill have never
+  reflected real device state on the live web dashboard until this fix. Full ID mapping in
+  `reference/session_recaps.md`'s matching 2026-07-25 entry.
+- Added pulsing `.alarm-banner` (web) and scrolling `lbl_home_alarm_banner` (LVGL `page_home`),
+  both reading the same five alarm globals: HIGH TEMPERATURE / LOW TEMPERATURE / DOOR OPEN / NO
+  COOLING / ICE DETECTED. Probe fault intentionally excluded (already has its own indicator).
+- Added Evaporator reading pill to web dashboard (`sensor.probe2_temp`). Lockout/defrost/drip
+  countdowns dropped — no backing live-countdown entities exist.
+- Build: RAM 20.0%, Flash 20.7%. Compile clean, no flake. Untested on physical hardware (not
+  connected).
+
 ## 2026-07-25 Touchscreen PIN Gate + LVGL Page-Navigation Fix
 
 - Added a 4-digit PIN lock on the LVGL settings screens (djb2 hash, default `0000`, changeable

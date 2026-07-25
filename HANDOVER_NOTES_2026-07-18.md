@@ -2,11 +2,50 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — touchscreen PIN gate added; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `3a0ef1f` (feat(security): touchscreen PIN gate + fix broken LVGL page navigation)
+**Status**: In Progress — named alarm warning banners added (both surfaces) + web dashboard entity-ID bugs fixed; hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Named Alarm Warning Banners + Web Dashboard Reading Gaps Closed
+
+Scope for this addendum was set by the user picking 2 of 4 options from a status-check question
+("have we achieved LVGL/webgui visual parity with the old project?"): add named alarm warning
+banners on both surfaces, and close the missing-readings gap on the web dashboard. A full LVGL
+main-screen redesign to match the old project's meter/needle layout was explicitly **not**
+selected — do not treat that as still open.
+
+- **Pre-existing bug found and fixed**: `assets/dashboard.html`'s `parseStates()` had been reading
+  wrong entity IDs since the dashboard was first built — internal `ctl_*` global names and guessed
+  domains instead of the actual published `id:` fields. Concretely wrong before this session:
+  alarm high/low/ice/probe-fault binary sensors, compressor/defrost switches (wrong domain —
+  `binary_sensor.*` instead of `switch.*`), RS485/RTC health binary sensors, the Wi-Fi-connected
+  indicator, the free-heap sensor, and every `number.ctl_*` settings readback. Practical effect:
+  the compressor/defrost status badges, the alarm bell, the probe-fault alert, the RS485/RTC health
+  row, and the setpoint/alarm-delta/comp-diff input pre-fill have never reflected real device state
+  on the live web dashboard, since it was first built. All corrected — see
+  `reference/session_recaps.md`'s 2026-07-25 "Named Alarm Warning Banners..." entry for the full
+  before/after ID mapping.
+- Named alarm banner added to both surfaces (pulsing red `.alarm-banner` on the web dashboard,
+  scrolling `lbl_home_alarm_banner` label on LVGL `page_home`), both driven from the same five
+  alarm globals so they show the same message: HIGH TEMPERATURE / LOW TEMPERATURE / DOOR OPEN /
+  NO COOLING / ICE DETECTED. Probe fault deliberately excluded — it already has its own indicator
+  (`lbl_status_text` + `led_probe_fault` on LVGL, a separate `.alert-danger` box on the web).
+- Web dashboard gained an Evaporator reading pill (`sensor.probe2_temp`) alongside the existing
+  Internal/External humidity pills. Lockout/defrost/drip countdown timers were considered and
+  dropped — no backing sensor entities exist for them yet, only LVGL-only labels and configured
+  durations; would need new backend entities, out of scope here.
+- `assets/dashboard_virtual_preview.html` synced (evaporator pill + a demo active alarm banner)
+  and republished at the existing artifact URL:
+  `https://claude.ai/code/artifact/a5947d8c-7dfc-4b4f-adb0-fcf77b175ca3`.
+- Build: RAM 20.0% (115,424/576,464 B), Flash 20.7% (1,517,672/7,340,032 B). Compile clean, no
+  flake this time.
+- **Untested on hardware** — same standing blocker as every other session this cycle, device not
+  connected. The corrected web dashboard status badges and the new LVGL banner's scroll behavior
+  are both first-priority checks once it is.
 
 ---
 
