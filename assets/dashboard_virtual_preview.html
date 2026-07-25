@@ -203,6 +203,31 @@
     }
     .field input:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 
+    /* Setting help balloons — same pattern as the live dashboard. */
+    .field-label-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .field-label-row label { margin-bottom: 0; }
+    .help-icon {
+      all: unset;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent-soft); color: var(--accent);
+      font-size: 12px; font-weight: 700; line-height: 1;
+      cursor: pointer; flex-shrink: 0;
+    }
+    .help-icon:hover, .help-icon:focus-visible { background: var(--accent); color: #fff; outline: none; }
+    .help-popover {
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: #fbfcfe;
+      border: 1px solid rgba(15,23,42,0.07);
+      border-left: 3px solid var(--accent);
+      border-radius: 8px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .help-popover strong { color: var(--text-primary); }
+
     .modal {
       position: fixed;
       inset: 0;
@@ -316,10 +341,55 @@
         <span class="lock-chip" id="settingsLockChip">🔒 Login to edit</span>
       </div>
       <div class="form-row">
-        <div class="field"><label>Setpoint</label><input type="number" value="2.0" disabled /></div>
-        <div class="field"><label>High Alarm Delta</label><input type="number" value="3.0" disabled /></div>
-        <div class="field"><label>Low Alarm Delta</label><input type="number" value="3.0" disabled /></div>
-        <div class="field"><label>Compressor Hysteresis</label><input type="number" value="1.0" disabled /></div>
+        <div class="field">
+          <div class="field-label-row">
+            <label>Setpoint</label>
+            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-setpoint')" aria-label="What does Setpoint do?">i</button>
+          </div>
+          <input type="number" value="2.0" disabled />
+          <div id="help-setpoint" class="help-popover hidden">
+            The target coolroom temperature. The compressor switches <strong>ON</strong> once the room is half
+            the Compressor Hysteresis value above this, and <strong>OFF</strong> the same amount below it.
+            Compared live against the <strong>Coolroom Temperature (Primary Control)</strong> probe — the big
+            number in the center of the gauge.
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label-row">
+            <label>High Alarm Delta</label>
+            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-alarm-high')" aria-label="What does High Alarm Delta do?">i</button>
+          </div>
+          <input type="number" value="3.0" disabled />
+          <div id="help-alarm-high" class="help-popover hidden">
+            How far <strong>above Setpoint</strong> the room can drift, held for 5 minutes straight, before the
+            <strong>High Temperature</strong> alarm fires. Example: Setpoint 2.0°C + 3.0°C = alarm above 5.0°C.
+            Drives the pulsing "HIGH TEMPERATURE" banner and the 🔔 alarm icon.
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label-row">
+            <label>Low Alarm Delta</label>
+            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-alarm-low')" aria-label="What does Low Alarm Delta do?">i</button>
+          </div>
+          <input type="number" value="3.0" disabled />
+          <div id="help-alarm-low" class="help-popover hidden">
+            Same idea as High Alarm Delta, but for the room running <strong>too cold</strong> — fires the
+            <strong>Low Temperature</strong> alarm once the room is this many degrees below Setpoint for a full
+            5 minutes.
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label-row">
+            <label>Compressor Hysteresis</label>
+            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-comp-diff')" aria-label="What does Compressor Hysteresis do?">i</button>
+          </div>
+          <input type="number" value="1.0" disabled />
+          <div id="help-comp-diff" class="help-popover hidden">
+            The temperature band the compressor cycles within around Setpoint. Smaller = closer to Setpoint but
+            more cycling/wear; larger = less cycling but more drift per cycle. Also sets the threshold for the
+            <strong>No-Cooling alarm</strong>.
+          </div>
+        </div>
       </div>
       <div style="margin-top:10px; display:flex; gap:8px;">
         <button class="btn" disabled>Update Setpoint</button>
@@ -346,6 +416,12 @@
         <button class="btn danger" disabled>⚙️ Hardware Config</button>
         <input type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" disabled style="width: 140px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
         <button class="btn" disabled>🔒 Change PIN</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-pin')" aria-label="What does the Touchscreen Access PIN do?">i</button>
+      </div>
+      <div id="help-pin" class="help-popover hidden">
+        The 4-digit code required to reach the Settings screens on the physical touchscreen unit — it doesn't
+        affect any sensor, it only controls who can change settings at the coolroom itself. Starts at
+        <strong>0000</strong> until changed here or from the touchscreen's own keypad.
       </div>
     </section>
 
@@ -395,7 +471,12 @@
       const section = document.getElementById(sectionId);
       const chip = document.getElementById(chipId);
       if (chip) chip.classList.toggle('hidden', enabled);
-      section.querySelectorAll('input, button').forEach((el) => { el.disabled = !enabled; });
+      // Help balloons stay clickable regardless of role — explaining a
+      // setting isn't a privileged action, only changing one is.
+      section.querySelectorAll('input, button').forEach((el) => {
+        if (el.classList.contains('help-icon')) return;
+        el.disabled = !enabled;
+      });
     }
 
     function applyRole() {
@@ -421,6 +502,25 @@
       }
       document.getElementById('iconLight').classList.toggle('is-warn');
     }
+
+    // Setting help balloons — click the small "i" icon to reveal/hide its
+    // plain-English explanation. Only one open at a time.
+    function toggleHelp(event, id) {
+      event.stopPropagation();
+      document.querySelectorAll('.help-popover').forEach((el) => {
+        if (el.id !== id) el.classList.add('hidden');
+      });
+      document.getElementById(id).classList.toggle('hidden');
+    }
+    document.addEventListener('click', (event) => {
+      if (event.target.closest('.help-icon') || event.target.closest('.help-popover')) return;
+      document.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        document.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
+      }
+    });
 
     function openLogin() {
       document.getElementById('username').value = '';

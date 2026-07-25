@@ -1569,4 +1569,45 @@ back: that a reboot on an already-cold room does *not* trigger defrost, and that
 a warm room holds off high-temp alarms until setpoint is actually reached (or the 4h ceiling, if
 something's genuinely wrong).
 
+## 2026-07-25 — Setting Help Balloons on the Web Dashboard
+
+User asked for each admin setting on the web dashboard to have a clickable help balloon explaining
+in plain English what it does and how it correlates to a sensor. Added to the four Operational
+Settings fields (Setpoint, Alarm High Delta, Alarm Low Delta, Compressor Hysteresis) and the
+Touchscreen Access PIN field in System Administration — the actual configurable "settings" on the
+page, as opposed to one-shot admin actions (Backup/Restore/Logs/WiFi/Hardware buttons), which were
+left without balloons since they're actions, not values a user tunes.
+
+- Small circular "i" icon button next to each field's label (`.help-icon`, Lovelace-token-styled
+  using the existing `--accent`/`--accent-soft` custom properties). Click toggles a card-style
+  popover (`.help-popover`) below the field — only one open at a time, closes on click-away or
+  Escape. Deliberately click-to-toggle rather than hover-only, so it works on touch devices too.
+- Content is grounded in the actual control logic (`p4_control.h`), not generic descriptions:
+  Setpoint explains the ON/OFF thresholds relative to Compressor Hysteresis and names the
+  Coolroom Temperature (Primary Control) probe it's compared against; the alarm deltas name the
+  same probe and the 5-minute persist requirement and note what they drive (the named alarm
+  banner, the 🔔 icon); Compressor Hysteresis notes it also sets the No-Cooling alarm's threshold
+  (`setpoint + diff/2 + 0.5°C`, confirmed from `p4_ctl_no_cool_alarm()` — NOT derived from the
+  Alarm High Delta, which is a separate, independent threshold); the PIN field notes it has no
+  sensor correlation at all — it only gates the touchscreen's Settings screens.
+- **Found while wiring this up (not user-reported)**: `setSectionInteractive()` — the function
+  that disables every `input, button` in the Settings/Admin sections for guest role — would have
+  also disabled the new help icons, since guests can't submit changes there. Explaining a setting
+  isn't a privileged action (only changing one is), so both `dashboard.html` and
+  `dashboard_virtual_preview.html`'s copies of that function now explicitly skip
+  `.help-icon`-classed buttons.
+- **Also noticed while in this code (not fixed, flagging only)**: the four Operational Settings
+  "Update" buttons (`updateSetpoint()`/`updateAlarmHigh()`/`updateAlarmLow()`/`updateCompDiff()`)
+  are stubs — they only call `showAlert('info', ...)`, they never actually POST to the device,
+  despite a code comment claiming "no backing endpoint exists in the firmware yet". That's stale:
+  ESPHome's `web_server` auto-generates `POST /number/<id>/set?value=X` for every `number:` entity
+  by default, the same mechanism `changeTouchscreenPin()` and `toggleLight()` already use
+  successfully elsewhere on this page. Wiring these four buttons up for real is a separate,
+  reasonably small follow-up — not done here, out of scope for a help-balloon request.
+- `assets/dashboard_virtual_preview.html` mirrored (same balloons, same content, static disabled
+  inputs). Artifact republished at the same URL.
+
+No firmware/yaml changes this session — pure static asset edit. Compile re-run anyway as a
+sanity check: RAM 20.0%, Flash 20.7% (unchanged, as expected).
+
 ---

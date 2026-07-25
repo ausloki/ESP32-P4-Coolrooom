@@ -201,6 +201,50 @@
             white-space: nowrap;
         }
 
+        /* Setting help balloons — click an info icon next to a setting's
+           label to reveal a plain-English explanation of what it does and
+           which sensor/entity it's compared against. */
+        .field-label-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .help-icon {
+            all: unset;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .help-icon:hover, .help-icon:focus-visible {
+            background: var(--accent);
+            color: #fff;
+            outline: none;
+        }
+        .help-popover {
+            position: relative;
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: #fbfcfe;
+            border: var(--card-border);
+            border-left: 3px solid var(--accent);
+            border-radius: 8px;
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+        .help-popover strong { color: var(--text-primary); }
+        .help-popover.hidden { display: none; }
+
         .alert {
             padding: 15px;
             border-radius: 8px;
@@ -532,24 +576,66 @@
             <div id="settingsContent">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
                     <div>
-                        <label for="setpointInput">Setpoint (°C)</label>
+                        <div class="field-label-row">
+                            <label for="setpointInput">Setpoint (°C)</label>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-setpoint')" aria-label="What does Setpoint do?">i</button>
+                        </div>
                         <input type="number" id="setpointInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateSetpoint()" style="margin-top: 10px;">Update Setpoint</button>
+                        <div id="help-setpoint" class="help-popover hidden">
+                            The target coolroom temperature. The compressor switches <strong>ON</strong> once the
+                            room is half the Compressor Hysteresis value above this, and <strong>OFF</strong> the
+                            same amount below it — so the room cycles evenly around whatever you set here.
+                            Compared live against the <strong>Coolroom Temperature (Primary Control)</strong>
+                            probe, shown as the big number in the center of the gauge above.
+                        </div>
                     </div>
                     <div>
-                        <label for="alarmHighInput">Alarm High Delta (°C)</label>
+                        <div class="field-label-row">
+                            <label for="alarmHighInput">Alarm High Delta (°C)</label>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-alarm-high')" aria-label="What does Alarm High Delta do?">i</button>
+                        </div>
                         <input type="number" id="alarmHighInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateAlarmHigh()" style="margin-top: 10px;">Update</button>
+                        <div id="help-alarm-high" class="help-popover hidden">
+                            How far <strong>above Setpoint</strong> the room can drift before the
+                            <strong>High Temperature</strong> alarm fires — and it has to stay that warm for a
+                            full 5 minutes straight first, so a brief door-open blip won't trigger it. Example:
+                            Setpoint 2.0°C + this value 3.0°C = alarm above 5.0°C. Measured against the same
+                            Coolroom Temperature probe as Setpoint, and drives the pulsing "HIGH TEMPERATURE"
+                            banner and the 🔔 alarm icon.
+                        </div>
                     </div>
                     <div>
-                        <label for="alarmLowInput">Alarm Low Delta (°C)</label>
+                        <div class="field-label-row">
+                            <label for="alarmLowInput">Alarm Low Delta (°C)</label>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-alarm-low')" aria-label="What does Alarm Low Delta do?">i</button>
+                        </div>
                         <input type="number" id="alarmLowInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateAlarmLow()" style="margin-top: 10px;">Update</button>
+                        <div id="help-alarm-low" class="help-popover hidden">
+                            The same idea as Alarm High Delta, but for the room running <strong>too cold</strong>.
+                            Fires the <strong>Low Temperature</strong> alarm once the room is this many degrees
+                            below Setpoint for a full 5 minutes. Also measured against the Coolroom Temperature
+                            probe.
+                        </div>
                     </div>
                     <div>
-                        <label for="compDiffInput">Compressor Hysteresis (°C)</label>
+                        <div class="field-label-row">
+                            <label for="compDiffInput">Compressor Hysteresis (°C)</label>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-comp-diff')" aria-label="What does Compressor Hysteresis do?">i</button>
+                        </div>
                         <input type="number" id="compDiffInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateCompDiff()" style="margin-top: 10px;">Update</button>
+                        <div id="help-comp-diff" class="help-popover hidden">
+                            The temperature band the compressor cycles within around Setpoint (sometimes called
+                            the "differential"). A smaller value keeps the room closer to Setpoint but cycles the
+                            compressor on and off more often — more wear; a larger value cycles it less often but
+                            lets the room drift further each cycle. Compared against the Coolroom Temperature
+                            probe, and also sets the threshold for the <strong>No-Cooling alarm</strong> (which
+                            fires if the compressor has run for over an hour but the room still hasn't dropped
+                            below Setpoint + half this value).
+                        </div>
                     </div>
                 </div>
             </div>
@@ -597,9 +683,19 @@
                     <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
                 </div>
                 <div>
-                    <h3>Touchscreen Access PIN</h3>
+                    <div class="field-label-row">
+                        <h3>Touchscreen Access PIN</h3>
+                        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-pin')" aria-label="What does the Touchscreen Access PIN do?">i</button>
+                    </div>
                     <input type="password" id="newPinInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New 4-digit PIN" style="width: 140px; padding: 8px;">
                     <button onclick="changeTouchscreenPin()" style="margin-left: 5px;">🔒 Change PIN</button>
+                    <div id="help-pin" class="help-popover hidden">
+                        The 4-digit code required to reach the Settings screens on the physical touchscreen unit
+                        itself — it doesn't affect any sensor or reading, it only controls who can change
+                        settings by walking up to the coolroom. Starts at <strong>0000</strong> until changed
+                        here or from the touchscreen's own "Change PIN" screen; changing it in either place
+                        updates the same PIN.
+                    </div>
                 </div>
             </div>
         </div>
@@ -1016,7 +1112,10 @@
             const section = document.getElementById(sectionId);
             const chip = document.getElementById(chipId);
             if (chip) chip.classList.toggle('hidden', enabled);
+            // Help balloons stay clickable regardless of role — explaining a
+            // setting isn't a privileged action, only changing one is.
             section.querySelectorAll('input, button, select').forEach((el) => {
+                if (el.classList.contains('help-icon')) return;
                 el.disabled = !enabled;
             });
         }
@@ -1313,6 +1412,26 @@
             const alertsDiv = document.getElementById('alerts');
             alertsDiv.innerHTML = alertHtml + alertsDiv.innerHTML;
         }
+
+        // Setting help balloons — click the small "i" icon next to a setting
+        // to reveal/hide its plain-English explanation. Only one open at a
+        // time; click elsewhere or press Escape to dismiss.
+        function toggleHelp(event, id) {
+            event.stopPropagation();
+            document.querySelectorAll('.help-popover').forEach((el) => {
+                if (el.id !== id) el.classList.add('hidden');
+            });
+            document.getElementById(id).classList.toggle('hidden');
+        }
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('.help-icon') || event.target.closest('.help-popover')) return;
+            document.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
+            }
+        });
 
         // Light toggle — the one control on this page wired to a real endpoint.
         // ESPHome's web_server exposes POST /switch/<id>/toggle for switch entities,

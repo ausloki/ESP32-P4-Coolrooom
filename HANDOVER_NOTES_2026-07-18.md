@@ -2,11 +2,39 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — control logic benchmarked against Carel IR33 series, two divergences fixed (defrost-on-reboot, flat startup alarm grace); hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `937e356` (fix(control): align defrost-on-reboot and startup alarm grace with Carel IR33 baseline)
+**Status**: In Progress — web dashboard settings now have plain-English help balloons; hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Setting Help Balloons on the Web Dashboard
+
+User asked for each admin setting to have a clickable help balloon explaining what it does in
+plain English and how it correlates to a sensor. Added to Setpoint, Alarm High Delta, Alarm Low
+Delta, Compressor Hysteresis, and the Touchscreen Access PIN — the actual tunable settings, not
+the one-shot admin action buttons (Backup/Restore/Logs/WiFi/Hardware), which were left alone.
+
+- Small "i" icon next to each label opens a card-style popover (click-to-toggle, not hover-only —
+  works on touch); closes on click-away or Escape; only one open at a time.
+- Content is grounded in the real control logic, not generic text — e.g. Compressor Hysteresis's
+  balloon correctly notes it drives the No-Cooling alarm threshold, while the Alarm High/Low
+  Deltas are independent of it (confirmed against `p4_ctl_no_cool_alarm()` in `p4_control.h`).
+- **Found while wiring this up**: the guest-mode `setSectionInteractive()` disable-all-inputs
+  function would have disabled the new help icons too. Fixed in both `dashboard.html` and
+  `dashboard_virtual_preview.html` to exempt `.help-icon` buttons — explaining a setting isn't
+  privileged, only changing one is.
+- **Noticed, not fixed**: the four Operational Settings "Update" buttons are stubs (only show an
+  info alert, never POST anywhere), despite a code comment claiming no backing endpoint exists —
+  that's stale, ESPHome's `web_server` already auto-generates `POST /number/<id>/set` for every
+  `number:` entity, the same pattern `changeTouchscreenPin()`/`toggleLight()` already use
+  successfully. Worth wiring up as a small separate follow-up; out of scope here.
+- Virtual preview mirrored and artifact republished at the same URL.
+
+No firmware/yaml touched this session — pure static asset change. Compile re-run as a sanity
+check anyway: RAM 20.0%, Flash 20.7% (unchanged).
 
 ---
 

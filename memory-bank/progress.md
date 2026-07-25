@@ -1,5 +1,21 @@
 # Progress Tracking
 
+## 2026-07-25 Setting Help Balloons on the Web Dashboard
+
+- Added clickable "i" help balloons to the web dashboard's five tunable settings (Setpoint, Alarm
+  High Delta, Alarm Low Delta, Compressor Hysteresis, Touchscreen Access PIN) explaining each in
+  plain English and naming which sensor/entity it correlates to, grounded in the actual
+  `p4_control.h` logic (e.g. correctly attributes the No-Cooling alarm threshold to Compressor
+  Hysteresis, not the alarm deltas). Admin action buttons (Backup/Restore/etc.) left without
+  balloons — out of scope, they're actions not settings.
+- Found and fixed a related bug while wiring this up: guest-mode `setSectionInteractive()` would
+  have disabled the new help icons along with real controls. Now exempts `.help-icon` buttons.
+- Flagged, not fixed: the four Operational Settings "Update" buttons are non-functional stubs —
+  a stale code comment claims no backend endpoint exists, but ESPHome's `web_server` already
+  auto-generates one for every `number:` entity (same pattern already used elsewhere on the page).
+- Pure static asset change, no firmware/yaml touched. Compile re-run as a sanity check: unchanged.
+- Virtual preview mirrored, artifact republished at the same URL.
+
 ## 2026-07-25 Control Logic Benchmarked Against Carel IR33 Series; Two Fixes Applied
 
 - Compared `p4_control.h` + the main control tick against a commercial Carel IR33-series
