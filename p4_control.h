@@ -269,6 +269,33 @@ inline bool p4_ctl_fallback_should_run(
     return phase_on;
 }
 
+// ─── Dew point (Magnus formula) ─────────────────────────────────────────────
+
+/// Dew point via the Magnus formula (valid roughly -40..50°C, 1..100% RH).
+/// Returns NAN for invalid inputs.
+inline float p4_calc_dew_point_c(float temp_c, float humidity_pct) {
+    if (isnan(temp_c) || isnan(humidity_pct) || humidity_pct <= 0.0f || humidity_pct > 100.0f)
+        return NAN;
+    const float a = 17.27f, b = 237.7f;
+    float alpha = ((a * temp_c) / (b + temp_c)) + logf(humidity_pct / 100.0f);
+    return (b * alpha) / (a - alpha);
+}
+
+/// True when the evaporator is cold enough for frost to actually be forming
+/// right now — below both freezing and the surrounding air's dew point.
+/// An early-defrost trigger layered on top of the fixed interval, not a
+/// replacement for it: catches real frost formation between scheduled
+/// cycles instead of only defrosting on a timer.
+inline bool p4_ctl_dew_point_defrost_ready(
+    float evap_c,
+    float dew_point_c,
+    bool  already_triggered_this_cycle
+) {
+    if (!p4_rtd_valid(evap_c) || isnan(dew_point_c)) return false;
+    if (already_triggered_this_cycle) return false;
+    return evap_c < dew_point_c && evap_c < 0.0f;
+}
+
 // ─── Probe fault check ─────────────────────────────────────────────────────
 
 /// True when probe 1 is considered faulted (stale reading or out-of-range).

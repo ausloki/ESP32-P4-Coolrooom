@@ -199,6 +199,9 @@ esphome:
               bool smart_def_en = id(input_smart_defrost_enabled);
               bool hum_int_en = id(input_humidity_internal_enabled);
               bool hum_ext_en = id(input_humidity_external_enabled);
+              float p1_off = id(ctl_probe1_offset_c);
+              float p2_off = id(ctl_probe2_offset_c);
+              bool dew_trigger_en = id(input_dew_point_trigger_enabled);
               if (p4_sd_restore_params(
                   sp, cd, ah, al,
                   lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -206,7 +209,8 @@ esphome:
                   fb_on, fb_off, smart_delta, smart_dwell,
                   probe2_en, door_mode_nc, door_en, siren_en,
                   defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
-                  hum_int_en, hum_ext_en)) {
+                  hum_int_en, hum_ext_en,
+                  p1_off, p2_off, dew_trigger_en)) {
                     id(ctl_setpoint)         = sp;
                     id(ctl_comp_diff)        = cd;
                     id(ctl_alarm_high_delta) = ah;
@@ -237,6 +241,9 @@ esphome:
                 id(input_smart_defrost_enabled) = smart_def_en;
                 id(input_humidity_internal_enabled) = hum_int_en;
                 id(input_humidity_external_enabled) = hum_ext_en;
+                id(ctl_probe1_offset_c) = p1_off;
+                id(ctl_probe2_offset_c) = p2_off;
+                id(input_dew_point_trigger_enabled) = dew_trigger_en;
                 if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
                 ESP_LOGI("sd", "All control settings restored from SD backup");
@@ -633,6 +640,29 @@ switch:
           ESP_LOGI("door", "Door sensor mode: NO (Normally Open) + Light OFF");
     lambda: 'return id(ctl_door_sensor_mode_is_nc);'
 
+  # ── Dew-point-triggered early defrost — an early-defrost trigger layered
+  # on top of the fixed interval, not a replacement for it. See the control
+  # tick's dew-point section for the actual trigger condition.
+  - platform: template
+    id: sw_dew_point_trigger
+    name: "Dew Point Early Defrost Trigger"
+    icon: "mdi:water-percent"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 6
+    turn_on_action:
+      - lambda: |-
+          id(input_dew_point_trigger_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Dew point early defrost trigger ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_dew_point_trigger_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Dew point early defrost trigger DISABLED");
+    lambda: 'return id(input_dew_point_trigger_enabled);'
+
 ##############################################################################
 # Sensors — all temperature probes are RS485 RTD
 ##############################################################################
@@ -727,6 +757,11 @@ sensor:
       sorting_group_id: group_probes
       sorting_weight: 1
     lambda: 'return p4_rtd_or_nan(id(rtd1_ch1_raw).state);'
+    filters:
+      # Manual calibration offset — fine-tunes this probe against a
+      # reference thermometer. Applied after conversion, before every
+      # downstream consumer (control, alarms, logs, display) sees it.
+      - lambda: 'return isnan(x) ? x : x + id(ctl_probe1_offset_c);'
     on_value:
       - lvgl.label.update:
           id: lbl_coolroom_temp_large
@@ -770,6 +805,8 @@ sensor:
     lambda: |-
       if (!id(input_probe2_enabled)) return NAN;
       return p4_rtd_or_nan(id(rtd1_ch2_raw).state);
+    filters:
+      - lambda: 'return isnan(x) ? x : x + id(ctl_probe2_offset_c);'
     on_value:
       - lvgl.label.update:
           id: lbl_evap_temp_large
@@ -1672,6 +1709,47 @@ number:
             snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
             return std::string(buf);
 
+  # ── Manual per-probe calibration offset — fine-tuning against a reference
+  # thermometer, not an automated calibration routine (no "start calibration"
+  # sequence like the earlier S3 project's; just a direct offset entry).
+  - platform: template
+    id: probe1_offset_c
+    name: "Probe 1 (Coolroom) Calibration Offset (°C)"
+    icon: "mdi:plus-minus-variant"
+    unit_of_measurement: "°C"
+    min_value: -10
+    max_value: 10
+    step: 0.1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 10
+    lambda: 'return id(ctl_probe1_offset_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_probe1_offset_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Probe 1 calibration offset set to %.2f", (double) x);
+
+  - platform: template
+    id: probe2_offset_c
+    name: "Probe 2 (Evaporator) Calibration Offset (°C)"
+    icon: "mdi:plus-minus-variant"
+    unit_of_measurement: "°C"
+    min_value: -10
+    max_value: 10
+    step: 0.1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 11
+    lambda: 'return id(ctl_probe2_offset_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_probe2_offset_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Probe 2 calibration offset set to %.2f", (double) x);
+
 ##############################################################################
 # Text — web-side "Change PIN" control (touchscreen has its own keypad, see
 # page_set_pin). Mirrors the same djb2-hash storage as the LVGL side.
@@ -1815,6 +1893,7 @@ button:
           id(ctl_manual_defrost_req) = false;
           id(ctl_defrost_dripping) = false;
           id(ctl_defrost_last_end_ms) = millis();
+          id(ctl_dew_point_defrost_triggered) = false;
           ESP_LOGI("ctl", "Manual defrost stopped via button");
           p4_sd_log_event("DEFROST_MANUAL_STOP", "button");
   - platform: template
@@ -1842,7 +1921,9 @@ button:
           id(input_siren_enabled), id(input_defrost_enabled),
           id(input_fallback_enabled), id(input_defrost_term_temp_enabled),
           id(input_defrost_drip_enabled), id(input_smart_defrost_enabled),
-          id(input_humidity_internal_enabled), id(input_humidity_external_enabled));
+          id(input_humidity_internal_enabled), id(input_humidity_external_enabled),
+          id(ctl_probe1_offset_c), id(ctl_probe2_offset_c),
+          id(input_dew_point_trigger_enabled));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -1886,6 +1967,9 @@ button:
           bool smart_def_en = id(input_smart_defrost_enabled);
           bool hum_int_en = id(input_humidity_internal_enabled);
           bool hum_ext_en = id(input_humidity_external_enabled);
+          float p1_off = id(ctl_probe1_offset_c);
+          float p2_off = id(ctl_probe2_offset_c);
+          bool dew_trigger_en = id(input_dew_point_trigger_enabled);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -1893,7 +1977,8 @@ button:
               fb_on, fb_off, smart_delta, smart_dwell,
               probe2_en, door_mode_nc, door_en, siren_en,
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
-              hum_int_en, hum_ext_en)) {
+              hum_int_en, hum_ext_en,
+              p1_off, p2_off, dew_trigger_en)) {
               id(ctl_setpoint)         = sp;
               id(ctl_comp_diff)        = cd;
               id(ctl_alarm_high_delta) = ah;
@@ -1924,6 +2009,9 @@ button:
             id(input_smart_defrost_enabled) = smart_def_en;
             id(input_humidity_internal_enabled) = hum_int_en;
             id(input_humidity_external_enabled) = hum_ext_en;
+            id(ctl_probe1_offset_c) = p1_off;
+            id(ctl_probe2_offset_c) = p2_off;
+            id(input_dew_point_trigger_enabled) = dew_trigger_en;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");
@@ -2038,6 +2126,7 @@ interval:
                   if (end_by_temp || end_by_time) {
                       id(relay_defrost).turn_off();
                       id(ctl_defrost_last_end_ms) = now_ms;
+                      id(ctl_dew_point_defrost_triggered) = false;
                       p4_sd_log_event("DEFROST_END", end_by_temp ? "evap_temp" : "timeout");
                       if (id(input_defrost_drip_enabled) && drip_ms > 0) {
                           id(ctl_defrost_dripping) = true;
@@ -2066,7 +2155,23 @@ interval:
                           (uint32_t)(15UL * 60000UL),  // 15 min min comp run
                           false);
                   bool time_start = p4_ctl_defrost_due(id(ctl_defrost_last_end_ms), def_interval_ms);
-                  if (manual_start || smart_start || time_start) {
+
+                  // ── Dew-point-triggered early defrost ─────────────────────
+                  // Uses the internal SHT31 (temp+humidity) as the reference
+                  // for the surrounding air's dew point — an early trigger
+                  // layered on top of the interval/smart triggers above, not
+                  // a replacement for them.
+                  bool dew_point_start = false;
+                  if (id(input_dew_point_trigger_enabled) && id(input_humidity_internal_enabled)) {
+                      float internal_t = id(probe_internal_temp).state;
+                      float internal_rh = id(probe_internal_humidity).state;
+                      id(ctl_last_dew_point_c) = p4_calc_dew_point_c(internal_t, internal_rh);
+                      dew_point_start = p4_ctl_dew_point_defrost_ready(
+                          evap, id(ctl_last_dew_point_c), id(ctl_dew_point_defrost_triggered));
+                      if (dew_point_start) id(ctl_dew_point_defrost_triggered) = true;
+                  }
+
+                  if (manual_start || smart_start || time_start || dew_point_start) {
                       id(ctl_manual_defrost_req) = false;
                       id(ctl_defrost_delta_since_ms) = 0;
                       if (id(relay_compressor).state) {
@@ -2076,7 +2181,9 @@ interval:
                       }
                       id(relay_defrost).turn_on();
                       id(ctl_defrost_on_since_ms) = now_ms;
-                      const char* reason = manual_start ? "manual" : (smart_start ? "smart_delta" : "interval");
+                      const char* reason = manual_start ? "manual" :
+                                           (smart_start ? "smart_delta" :
+                                           (dew_point_start ? "dew_point" : "interval"));
                       ESP_LOGI("ctl", "Defrost started: %s", reason);
                       p4_sd_log_event("DEFROST_START", reason);
                   }
@@ -2408,6 +2515,19 @@ globals:
     restore_value: yes
     initial_value: ${default_alarm_low_c}
 
+  # Manual per-probe calibration offset (°C), added to the published reading
+  # after unit conversion. Range ±10°C, default 0 — for fine-tuning against
+  # a reference thermometer, not an automated calibration routine.
+  - id: ctl_probe1_offset_c
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
+
+  - id: ctl_probe2_offset_c
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
+
   # ── Runtime state ─────────────────────────────────────────────────────────
   - id: ctl_boot_ms
     type: uint32_t
@@ -2722,6 +2842,25 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
+
+  # ── Dew-point-triggered early defrost ───────────────────────────────────
+  # Last calculated dew point (°C) from the internal SHT31 temp+humidity.
+  - id: ctl_last_dew_point_c
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  # True once the dew-point trigger has fired for the current frost cycle —
+  # cleared when defrost ends, so it can fire again next cycle.
+  - id: ctl_dew_point_defrost_triggered
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: input_dew_point_trigger_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
 
   - id: ctl_sensor_fallback_active
     type: bool

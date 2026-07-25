@@ -1,74 +1,92 @@
 # Active Context — Current Session State
 
 **Date:** 2026-07-25
-**Session:** Backup/Restore + Operational Settings buttons wired to real endpoints; live compressor/defrost countdown timers added; a related dead LVGL label fixed along the way
+**Session:** Dew-point-triggered early defrost ported from the old S3 project; manual per-probe calibration offset added (auto-calibration routine deliberately not ported)
 **Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING (blocked on hardware)
 
 ## Current Focus
 
 ### What Was Confirmed This Session
 
-- Asked "do we have any outstandings" and given a 9-item punch list drawn from the prior
-  activeContext.md's Outstanding Items. User picked items 6, 7, and 9 to implement; item 8 (real
-  server-side dashboard authorization) was a design-constraint note, not an actionable task with
-  clear scope — set aside for a separate clarifying question rather than guessed at.
+- Follow-up to explaining what the old S3 project's calibration-offset/dew-point/primary-probe-
+  override features actually did (read directly from `esp32-coolroom.yaml` and
+  `esphome_includes.h` in the old `ESP32-Coolroom-Prescision` project, not from memory). User
+  decision: **scrap primary-probe-override entirely**, **port dew-point early defrost as-is**,
+  **add only the manual offset entry** from calibration — explicitly not the old project's
+  automated 15-20-sample "Start Calibration" averaging routine.
+- Confirmed the internal SHT31 in this project is the correct analog to the old project's dew-point
+  reference sensor: this project's SHT31 is the *internal/coolroom-air* sensor, SHT20 is
+  *external/ambient* — same pairing role the old project needed, just different physical sensor
+  models. This resolves the exact ambiguity that got these features deferred in an earlier session.
 
 ### Latest Completed Work
 
-- **#6 — Backup/Restore wired**: `backupSettings()`/`restoreSettings()` in `assets/dashboard.html`
-  now POST to `/button/btn_sd_backup/press` / `/button/btn_sd_restore/press` — real `button:`
-  entities that already existed and already called `p4_sd_backup_params()`/`p4_sd_restore_params()`.
-  Pure frontend wiring, no backend change. Restore confirms first (overwrites every current
-  parameter). Help balloon text updated from "isn't wired yet" to describe real behavior.
-- **#7 — Operational Settings Update buttons wired**: `updateSetpoint()`/`updateAlarmHigh()`/
-  `updateAlarmLow()`/`updateCompDiff()` now POST to `/number/<id>/set?value=X` for `setpoint`,
-  `alarm_high_delta`, `alarm_low_delta`, `compressor_differential` via a new shared
-  `submitNumberSetting()` helper (NaN validation, shared error handling). Also pure frontend.
-- **#9 — Live countdown timers (new backend capability)**: four new `sensor: platform: template`
-  entities in `esp32-p4-coolroom.yaml` — `comp_lockout_remaining_sec`, `defrost_countdown_sec`,
-  `defrost_duration_remaining_sec`, `defrost_drip_remaining_sec` — all computed directly from
-  globals the control tick already maintains (no new state added). New "⏱️ Timers" card on the web
-  dashboard (Compressor Lockout + a Defrost line that shows whichever of
-  defrosting/dripping/next-in is currently active).
-- **Found and fixed a related pre-existing bug while in this area**: LVGL's
-  `lbl_lockout_timer_display` label (Settings 3 / Fallback page) was defined but never updated by
-  any lambda anywhere — permanently stuck at its literal "0 min" placeholder. Now wired into the
-  existing "Phase 4: 1s LVGL display updates" interval block, showing the live countdown as
-  `"Xm YYs"` / `"Ready"`. **Noted but not fixed**: the same page's `lbl_probe1_status` label and
-  two entirely unlabeled (no `id:`, truly unreachable) compressor/defrost LED+label pairs are
-  equally dead — out of scope for a countdown-timer request, unclear what they were originally
-  meant to show without deeper digging. Flag for a future session if the Settings 3 page's
-  "System Status" block is ever revisited.
-- `assets/dashboard_virtual_preview.html` mirrored (static mock Timers card + updated Backup/
-  Restore help text; the preview's Update buttons have no `onclick` at all — pure decoration,
-  nothing to wire there). Artifact republished at the same URL.
+- **Dew-point early defrost**: new pure functions in `p4_control.h` — `p4_calc_dew_point_c()`
+  (Magnus formula) and `p4_ctl_dew_point_defrost_ready()` (evap colder than both freezing and the
+  dew point → frost is actually forming right now). New globals `ctl_last_dew_point_c`,
+  `ctl_dew_point_defrost_triggered` (reset on every defrost end — automatic end-by-temp,
+  end-by-timeout, or manual stop via `btn_manual_defrost_stop` — so it can fire again next frost
+  cycle), `input_dew_point_trigger_enabled`. Added as a fourth defrost-start trigger
+  (`dew_point_start`) alongside manual/smart/interval in the control tick's "not defrosting"
+  branch — layered on top of the existing triggers, not replacing any of them. **Exposed as a real
+  switch entity** `sw_dew_point_trigger` (`platform: template`, `group_defrost`) so it's actually
+  reachable — unlike its conceptual siblings.
+- **Found, not fixed, while wiring that switch**: `input_smart_defrost_enabled`,
+  `input_defrost_drip_enabled`, `input_defrost_term_temp_enabled` have **no way to be toggled at
+  runtime at all** — no `switch:` entity, no LVGL control, nothing. Permanently stuck at their
+  YAML compile-time defaults unless hand-edited into a backup.json. Deliberately didn't replicate
+  this gap for the new dew-point trigger (an unreachable toggle would defeat implementing the
+  feature) but didn't fix the three pre-existing ones either — flagged for a future session.
+- **Manual per-probe calibration offset**: new `number:` entities `probe1_offset_c` /
+  `probe2_offset_c` (±10°C, 0.1°C step, `entity_category: config`, `group_probes`), backed by new
+  globals `ctl_probe1_offset_c`/`ctl_probe2_offset_c`. Applied via a `filters: - lambda:` on
+  `probe1_temp`/`probe2_temp` (after unit conversion, NaN-safe) so every downstream consumer
+  (control, alarms, logs, LVGL display) sees the calibrated value transparently — same effect as
+  the old project's offsets, just without the auto-averaging-against-SHT31 sequence behind them.
+- **Consistency follow-through**: extended `p4_sd_backup_params()`/`p4_sd_restore_params()`
+  (`p4_logging.h`) and all three call sites (`on_boot` restore, `btn_sd_backup`, `btn_sd_restore`)
+  to round-trip the two new offsets and the trigger flag through SD backup/restore, matching every
+  sibling parameter. Made restore backward-compatible on purpose: the three new fields seed from
+  the caller's current value (not `NAN`) before parsing and are excluded from the all-or-nothing
+  `isfinite` gate, so an **older backup.json without these keys still restores successfully**
+  instead of failing the whole restore over fields that didn't exist when it was written.
+- **Noticed, unrelated, not fixed**: this build surfaced `opendir`/`readdir`/`closedir is not
+  implemented and will always fail` linker warnings, stemming from the SD log manager
+  (`p4_log_manager.h`, added two sessions ago) using `dirent.h`. Very likely benign — a known
+  ESP-IDF pattern where the default newlib stub triggers this warning at link time, but real
+  directory operations get dispatched through the mounted FATFS VFS at runtime instead. Cannot
+  confirm without hardware. Added to the priority list for the log manager's first real test:
+  confirm `/logs` actually lists files, not just that it compiles.
+- **Not done, deliberately**: no custom web dashboard UI for either feature. The new `number:`/
+  `switch:` entities are reachable via ESPHome's own auto-generated web_server UI and the API —
+  that satisfies "allowing an offset value to be entered," which is what was asked, without
+  dashboard.html work that wasn't part of this request.
 
 ### Build Status
 
+Compiled clean at every incremental step (control functions → globals/entities → control-tick
+wiring → backup/restore threading) rather than writing everything and debugging one large failure:
+
 ```text
-Compile: successful via ./tools/esphome_compile.sh, clean at every incremental step
-RAM:   20.1% (116,052 / 576,464 bytes, +288 B for the four new sensors)
-Flash: 20.8% (1,525,016 / 7,340,032 bytes, +1.4 KB)
+Compile: successful via ./tools/esphome_compile.sh, clean
+RAM:   20.2% (116,532 / 576,464 bytes)
+Flash: 20.8% (1,528,664 / 7,340,032 bytes)
 ```
-
-### Resolved This Session
-
-**Item 8**: asked the user to pick a direction (skip / build a minimal reverse-proxy / wait for
-ESPHome upstream multi-account support) rather than guess at scope. **Answer: skip for now** — no
-concrete need identified yet (e.g. multiple staff needing separate accounts/audit trails). Revisit
-only if that changes. No code written; this closes out the punch-list item with a decision, not a
-build.
 
 ### Immediate Next Actions
 
-1. Hardware validation, once connected, should now also cover: the new countdown sensors and the
-   fixed LVGL lockout label through a real compressor/defrost cycle, and the Backup/Restore +
-   Settings Update buttons actually reaching the device.
-2. The WiFi reconnect path and SD log manager (prior session) remain the top hardware-validation
-   priority — a mistake in the WiFi path affects whether the device stays reachable at all.
-3. Decide on the four open Carel-comparison divergences from an earlier session — still pending.
-4. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below).
-5. Reflash the physical device once connected — every firmware change since credential rotation
+1. Hardware validation, once connected, should now also cover: dew-point trigger firing correctly
+   during a real frost cycle, and the calibration offsets actually shifting the published reading
+   as expected against a reference thermometer.
+2. Specifically check whether the `opendir`/`readdir`/`closedir` linker warning is actually benign
+   at runtime — test `/logs` (list/download/delete) against the real SD card early.
+3. Two well-scoped stub-wiring follow-ups remain available if picked up: Backup/Restore →
+   already wired (done two sessions ago); the sibling enable-flag gap
+   (`input_smart_defrost_enabled` etc. having no runtime toggle) is a new, larger follow-up if
+   ever wanted — would need three new switch entities plus LVGL controls, not just one.
+4. Decide on the four open Carel-comparison divergences from an earlier session — still pending.
+5. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below).
+6. Reflash the physical device once connected — every firmware change since credential rotation
    is still un-flashed, same standing hardware blocker.
 
 ### Outstanding Items
@@ -77,16 +95,23 @@ build.
 2. Hardware validation required for: offline-safe/SD-card behavior, RTC identity (0x51 vs 0x68),
    SHT31/SHT20 sensors, the LVGL page-navigation + PIN gate flow, the web dashboard status
    indicators + alarm banners, the defrost-on-reboot/pulldown-aware-alarm-grace fixes, the SD log
-   manager + WiFi reconnect, and now the new countdown sensors + fixed lockout label. All blocked.
+   manager + WiFi reconnect, the live countdown timers, and now dew-point defrost + calibration
+   offsets. All blocked — device not currently connected.
 3. Device reflash for rotated credentials + all firmware changes since is still outstanding, same
    hardware blocker.
-4. Decide whether the old S3 project's calibration-offset/dew-point/primary-probe-override
-   features are worth porting later — deliberately left out of the humidity-sensor sessions.
+4. Decide whether the old S3 project's remaining ported-vs-not decisions need revisiting — primary-
+   probe-override was explicitly scrapped this session, not deferred; no further action needed
+   there unless the user changes their mind.
 5. Four Carel-comparison divergences left open from an earlier session — awaiting a decision.
 6. Two dead LVGL widgets on the Settings 3 / Fallback page (`lbl_probe1_status`, two unlabeled
-   compressor/defrost LED+label pairs) — noted this session, not fixed, unclear original intent.
-7. Real server-side dashboard authorization — explicitly deferred (user chose "skip for now"),
-   revisit only if a concrete multi-user need arises. Don't reintroduce fake role tiers meanwhile.
+   compressor/defrost LED+label pairs) — noted, not fixed, unclear original intent.
+7. Real server-side dashboard authorization — explicitly deferred (user chose skip), revisit only
+   if a concrete multi-user need arises.
+8. `input_smart_defrost_enabled`/`input_defrost_drip_enabled`/`input_defrost_term_temp_enabled`
+   have no runtime toggle at all (no switch entity, no LVGL control) — found this session, not
+   fixed, flagged for later if ever wanted.
+9. `opendir`/`readdir`/`closedir` linker warnings on the SD log manager — likely benign (known
+   ESP-IDF FATFS VFS pattern) but unconfirmed without hardware; verify on first real SD test.
 
 ### Key Anchors For Resume
 
@@ -95,6 +120,9 @@ build.
 - Custom HTTP endpoint: `p4_log_manager.h` (`/logs` — list/download/delete SD log files)
 - Web dashboard: `assets/dashboard.html` (live), `assets/dashboard_virtual_preview.html` (static
   mock, kept in sync, published as the Artifact)
+- Old S3 reference project (read-only, for porting decisions):
+  `/Volumes/Scratch/Documents/ESP32-Coolroom-Prescision/esp32-coolroom.yaml` +
+  `esphome_includes.h`
 - Current recap history: `reference/session_recaps.md`
 - Main resume handover: `HANDOVER_NOTES_2026-07-18.md`
 - Hardware/I2C reference: `reference/hardware_pins.md`
@@ -103,8 +131,9 @@ build.
 
 ---
 
-**Ready for:** A decision on item 8's scope/approach. Also ready for hardware validation whenever
-the device is connected — the backlog of untested firmware changes keeps growing (WiFi reconnect,
-SD log manager, countdown timers, alarm banners, defrost/alarm-grace fixes) and all of it should
-be checked in roughly that priority order, WiFi reconnect first since it's the one that could
-affect reachability itself.
+**Ready for:** Hardware validation — the backlog of untested firmware changes keeps growing
+(WiFi reconnect, SD log manager, countdown timers, alarm banners, defrost/alarm-grace fixes, and
+now dew-point defrost + calibration offsets). WiFi reconnect and the SD log manager's dirent
+warning should be checked first since they touch core reachability and a totally new code path
+respectively; dew-point/calibration are lower-risk (pure control-logic additions layered on
+already-working paths) but still worth a real frost-cycle observation before trusting them.

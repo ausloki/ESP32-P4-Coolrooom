@@ -2,11 +2,54 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — Backup/Restore + Operational Settings buttons wired, live compressor/defrost countdown timers added, a related dead LVGL label fixed, item 8 (real dashboard auth) explicitly deferred by decision; hardware validation + device reflash both blocked  
-**Last Commit**: `47c61c5` (docs: resolve outstanding item 8 (skip real dashboard auth for now))
+**Status**: In Progress — dew-point-triggered early defrost ported from the old S3 project, manual per-probe calibration offset added; hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Dew-Point Early Defrost Ported; Manual Calibration Offset Added
+
+Follow-up to explaining what the old S3 project's calibration-offset/dew-point/primary-probe-
+override features actually did. User decision: scrap primary-probe-override, port dew-point early
+defrost as-is, add only the manual offset entry from calibration (not the automated 15-20-sample
+"Start Calibration" routine).
+
+- **Dew-point early defrost**: ported the Magnus-formula dew point calc and trigger condition as
+  new pure functions in `p4_control.h`. Uses the internal SHT31 as the air reference (correct
+  analog to the old project's SHT31, since this project's SHT31 is the internal/coolroom sensor —
+  SHT20 is external, a different pairing, which is exactly why this was deferred earlier pending
+  this decision). New `dew_point_start` trigger added alongside manual/smart/interval in the
+  control tick — layered on top, not a replacement. New switch entity `sw_dew_point_trigger` to
+  enable/disable it.
+- **Found, not fixed, while wiring that switch**: `input_smart_defrost_enabled`,
+  `input_defrost_drip_enabled`, `input_defrost_term_temp_enabled` have no way to be toggled at
+  runtime at all — no switch entity, no LVGL control, permanently stuck at their compile-time
+  defaults. Didn't extend that gap to the new dew-point trigger (it gets a real switch), but didn't
+  fix the three existing ones either — flagged for a future session.
+- **Manual calibration offset**: new `number:` entities `probe1_offset_c`/`probe2_offset_c` (±10°C,
+  0.1°C step), applied via a `filters:` lambda on `probe1_temp`/`probe2_temp` so every downstream
+  consumer sees the calibrated value. No auto-calibration sequence — direct entry only, as asked.
+- Extended SD backup/restore (`p4_logging.h` + all three call sites) to include the two offsets
+  and the trigger flag, matching every sibling parameter. Made restore backward-compatible on
+  purpose: the three new fields default to the caller's current value if missing from an older
+  backup.json, rather than failing the whole restore over fields that didn't exist yet when it was
+  written.
+- **Noticed, unrelated**: this build surfaced `opendir`/`readdir`/`closedir is not implemented`
+  linker warnings from the SD log manager (prior session). Very likely a benign, known ESP-IDF
+  pattern (real dirent calls route through the mounted FATFS VFS at runtime) but unconfirmed
+  without hardware — added to the priority list for the log manager's first real test.
+
+**Build**: RAM 20.2% (116,532/576,464 B), Flash 20.8% (1,528,664/7,340,032 B). Compile clean at
+every incremental step.
+
+**Not done**: no custom web dashboard UI for either feature — the new entities are reachable via
+ESPHome's own auto-generated web UI and the API, satisfying "allowing an offset value to be
+entered" without dashboard.html work that wasn't requested this time.
+
+**Untested on hardware** — neither feature has seen a real frost cycle or thermometer comparison.
 
 ---
 

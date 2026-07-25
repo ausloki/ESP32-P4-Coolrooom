@@ -1,5 +1,24 @@
 # Progress Tracking
 
+## 2026-07-25 Dew-Point Early Defrost Ported; Manual Calibration Offset Added
+
+- User decision on the old S3 project's three deferred features: scrap primary-probe-override,
+  port dew-point-triggered early defrost as-is, add only manual calibration offset entry (not the
+  automated averaging routine).
+- Dew-point defrost: Magnus-formula calc + trigger condition ported as pure functions, uses
+  internal SHT31 as the air reference (correct pairing for this project). New `dew_point_start`
+  trigger layered alongside manual/smart/interval. New real switch entity to enable/disable it —
+  unlike three sibling enable-flags discovered to have no runtime toggle at all (found, not fixed).
+- Manual calibration offset: new `probe1_offset_c`/`probe2_offset_c` number entities (±10°C),
+  applied via filter lambda so every downstream consumer sees the calibrated value. No
+  auto-calibration sequence, direct entry only.
+- Extended SD backup/restore to round-trip the two offsets + trigger flag, made backward-compatible
+  so older backup.json files without these keys still restore successfully.
+- Noticed (not fixed): `opendir`/`readdir`/`closedir` linker warnings on the log manager — likely
+  benign ESP-IDF pattern, unconfirmed without hardware.
+- Build: RAM 20.2%, Flash 20.8%. Compile clean at every incremental step. Untested on hardware —
+  no custom dashboard UI built (new entities reachable via ESPHome's own web UI, which was enough).
+
 ## 2026-07-25 Item 8 Resolved — Skip Real Dashboard Auth For Now
 
 - Asked user to pick a direction for item 8 (real server-side dashboard authorization) rather than

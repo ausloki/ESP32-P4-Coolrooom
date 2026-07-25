@@ -220,7 +220,10 @@ inline bool p4_sd_backup_params(
     bool  defrost_drip_enabled,
     bool  smart_defrost_enabled,
     bool  humidity_internal_enabled,
-    bool  humidity_external_enabled
+    bool  humidity_external_enabled,
+    float probe1_offset_c,
+    float probe2_offset_c,
+    bool  dew_point_trigger_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -264,7 +267,10 @@ inline bool p4_sd_backup_params(
         "  \"defrost_drip_enabled\": %s,\n"
         "  \"smart_defrost_enabled\": %s,\n"
         "  \"humidity_internal_enabled\": %s,\n"
-        "  \"humidity_external_enabled\": %s\n"
+        "  \"humidity_external_enabled\": %s,\n"
+        "  \"probe1_offset_c\": %.2f,\n"
+        "  \"probe2_offset_c\": %.2f,\n"
+        "  \"dew_point_trigger_enabled\": %s\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -283,7 +289,9 @@ inline bool p4_sd_backup_params(
         defrost_drip_enabled ? "true" : "false",
         smart_defrost_enabled ? "true" : "false",
         humidity_internal_enabled ? "true" : "false",
-        humidity_external_enabled ? "true" : "false");
+        humidity_external_enabled ? "true" : "false",
+        probe1_offset_c, probe2_offset_c,
+        dew_point_trigger_enabled ? "true" : "false");
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              setpoint, comp_diff, alarm_high, alarm_low);
@@ -323,7 +331,10 @@ inline bool p4_sd_restore_params(
     bool&  defrost_drip_enabled,
     bool&  smart_defrost_enabled,
     bool&  humidity_internal_enabled,
-    bool&  humidity_external_enabled
+    bool&  humidity_external_enabled,
+    float& probe1_offset_c,
+    float& probe2_offset_c,
+    bool&  dew_point_trigger_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -362,6 +373,14 @@ inline bool p4_sd_restore_params(
     bool b_smart_def_en = smart_defrost_enabled;
     bool b_hum_int_en = humidity_internal_enabled;
     bool b_hum_ext_en = humidity_external_enabled;
+    // Seeded with the caller's current value, not NAN — these three were
+    // added after the JSON format was already in use, so an older
+    // backup.json simply won't have these keys. Falling back to the current
+    // value (rather than failing the whole restore) keeps old backups
+    // restorable instead of breaking them retroactively.
+    float p1_off = probe1_offset_c;
+    float p2_off = probe2_offset_c;
+    bool b_dew_trigger = dew_point_trigger_enabled;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
         const char* p = strstr(buf, key);
@@ -412,6 +431,9 @@ inline bool p4_sd_restore_params(
     parse_bool("\"smart_defrost_enabled\"", b_smart_def_en);
     parse_bool("\"humidity_internal_enabled\"", b_hum_int_en);
     parse_bool("\"humidity_external_enabled\"", b_hum_ext_en);
+    parse_field("\"probe1_offset_c\"", p1_off);
+    parse_field("\"probe2_offset_c\"", p2_off);
+    parse_bool("\"dew_point_trigger_enabled\"", b_dew_trigger);
 
     if (!std::isfinite(sp) || !std::isfinite(cd) ||
         !std::isfinite(ah) || !std::isfinite(al) ||
@@ -457,6 +479,9 @@ inline bool p4_sd_restore_params(
     smart_defrost_enabled = b_smart_def_en;
     humidity_internal_enabled = b_hum_int_en;
     humidity_external_enabled = b_hum_ext_en;
+    probe1_offset_c = p1_off;
+    probe2_offset_c = p2_off;
+    dew_point_trigger_enabled = b_dew_trigger;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

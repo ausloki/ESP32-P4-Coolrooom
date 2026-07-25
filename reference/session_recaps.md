@@ -1816,4 +1816,71 @@ the meantime, continue not reintroducing fake role tiers in the dashboard (the o
 this note was protecting against). This closes the outstanding-items punch list from earlier today
 with a decision rather than a build, and completes it — items 6, 7, 9 built, 8 explicitly deferred.
 
+## 2026-07-25 — Dew-Point Early Defrost Ported; Manual Calibration Offset Added
+
+Follow-up to the earlier "what did the old S3 project's calibration-offset/dew-point/primary-
+probe-override features actually do" explanation. User decision: scrap primary-probe-override
+entirely (item 3), port dew-point-triggered early defrost as-is (item 2), and add only the manual
+per-probe offset entry from calibration (item 1) — explicitly **not** the old project's automated
+15-20-sample "Start Calibration" routine, just a direct number field for fine-tuning.
+
+**Dew-point early defrost** (`p4_control.h`, `esp32-p4-coolroom.yaml`): ported the Magnus-formula
+dew point calculation (`p4_calc_dew_point_c()`) and trigger condition
+(`p4_ctl_dew_point_defrost_ready()`) as new pure functions. Uses the internal SHT31
+(`probe_internal_temp`/`probe_internal_humidity`) as the air reference — the correct analog to the
+old project's SHT31, since this project's SHT31 is explicitly the internal/coolroom-air sensor
+(SHT20 is external/ambient, a different pairing than the source project, which is exactly why this
+was deferred in an earlier session pending this decision). New global `ctl_last_dew_point_c`,
+new `ctl_dew_point_defrost_triggered` flag (reset whenever defrost ends — automatic end-by-temp,
+end-by-timeout, or manual stop — so it can fire again next frost cycle), and a new
+`input_dew_point_trigger_enabled` global, this one **exposed as a real switch entity**
+(`sw_dew_point_trigger`) unlike its sibling enable flags. Added `dew_point_start` as a fourth
+defrost-start trigger alongside manual/smart/interval in the control tick's "not defrosting"
+branch — layered on top of, not replacing, the existing triggers.
+
+**Discovered while wiring the switch, not fixed**: `input_smart_defrost_enabled`,
+`input_defrost_drip_enabled`, and `input_defrost_term_temp_enabled` have **no way to be toggled at
+runtime at all** — no `switch:` entity, no LVGL checkbox, nothing. They're stuck at their YAML
+compile-time defaults forever unless hand-edited into a backup.json. Deliberately did *not* follow
+that same pattern for the new dew-point trigger — an unreachable toggle permanently `false` would
+defeat the point of "implementing" the feature — but flagging the sibling gap for a future session
+rather than silently fixing three unrelated toggles while asked to add one new one.
+
+**Manual per-probe calibration offset** (not the auto-calibration routine): new
+`number:` entities `probe1_offset_c` / `probe2_offset_c` (±10°C, 0.1°C step, `entity_category:
+config`, matching `group_probes`), backed by new globals `ctl_probe1_offset_c`/`ctl_probe2_offset_c`.
+Applied via a `filters: - lambda:` on `probe1_temp`/`probe2_temp` (added after unit conversion,
+NaN-safe) — every downstream consumer (control, alarms, logs, LVGL display) sees the calibrated
+value transparently, same as the old project's design, just without the auto-averaging-against-
+SHT31 routine behind it.
+
+**Consistency follow-through**: extended `p4_sd_backup_params()`/`p4_sd_restore_params()`
+(`p4_logging.h`) and all three call sites (`on_boot` restore, `btn_sd_backup`, `btn_sd_restore`) to
+include the two new offsets and the dew-point trigger flag, matching how every sibling parameter
+already round-trips through SD backup. Made the restore path backward-compatible on purpose: the
+three new fields are seeded from the caller's current value (not `NAN`) before parsing, and
+excluded from the all-or-nothing `isfinite` gate, so an **older backup.json without these keys
+still restores successfully** instead of failing the whole restore over three missing fields that
+didn't exist when it was written.
+
+**Also noticed (unrelated, not fixed)**: this build surfaced linker warnings —
+`opendir`/`readdir`/`closedir is not implemented and will always fail` — stemming from the SD log
+manager's (`p4_log_manager.h`, prior session) use of `dirent.h`. Very likely benign: this is a
+known ESP-IDF pattern where the default newlib stub warns at link time, but real directory
+operations get dispatched through the mounted FATFS VFS at runtime instead. Can't confirm without
+hardware. Added to the priority list for the log manager's first real-hardware test — confirm
+`/logs` actually lists files, not just that it compiles.
+
+**Build**: RAM 20.2% (116,532/576,464 B), Flash 20.8% (1,528,664/7,340,032 B). Compile clean at
+every incremental step (control functions → globals/entities → control-tick wiring → backup/
+restore threading), same discipline as the log manager/WiFi work two sessions ago.
+
+**Not done**: no web dashboard UI for either feature — the new `number:`/`switch:` entities are
+reachable via ESPHome's own auto-generated web_server UI and the API, which satisfies "allowing an
+offset value to be entered" without custom dashboard.html work that wasn't asked for this time.
+
+**Hardware-gated follow-up**: neither feature has been observed against a real frost cycle or a
+real thermometer comparison — first things to check once hardware is connected, alongside the
+dirent.h warning above.
+
 ---
