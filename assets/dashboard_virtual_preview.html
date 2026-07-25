@@ -408,6 +408,14 @@
     </section>
 
     <section class="section">
+      <h2>⏱️ Timers</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+        <div><strong>Compressor Lockout</strong><div style="margin-top: 8px;">Ready</div></div>
+        <div><strong>Defrost</strong><div style="margin-top: 8px;">Next in 3h 12m</div></div>
+      </div>
+    </section>
+
+    <section class="section">
       <h2>🩺 Health</h2>
       <p style="margin-top: 10px; color: var(--text-secondary); font-size: 13px;">RS485: ✓ &nbsp;|&nbsp; RTD: ✓ &nbsp;|&nbsp; RTC: ✓ &nbsp;|&nbsp; Heap: 108 KB free &nbsp;|&nbsp; Probe freshness: ✓</p>
     </section>
@@ -431,13 +439,14 @@
       </div>
       <div id="help-backup" class="help-popover hidden">
         Saves every control parameter (Setpoint, Alarm Deltas, Compressor Hysteresis, defrost timing, alarm
-        thresholds) to <strong>backup.json</strong> on the SD card, for recovery after a factory reset. The
-        firmware has a real button for this (<code>btn_sd_backup</code>) — this preview button doesn't call it.
+        thresholds) to <strong>backup.json</strong> on the SD card, for recovery after a factory reset. Also
+        runs automatically whenever the setpoint changes, not just on click. (Static preview — doesn't call a
+        real device.)
       </div>
       <div id="help-restore" class="help-popover hidden">
         Reads <strong>backup.json</strong> back off the SD card and applies every saved parameter immediately,
-        overwriting current values. Runs automatically once at boot if a backup exists; also has a real manual
-        button (<code>btn_sd_restore</code>) — this preview button doesn't call it.
+        overwriting current values. Also runs automatically once at boot if a backup exists — this button is
+        for restoring manually without a reboot. (Static preview — doesn't call a real device.)
       </div>
       <div id="logs-panel" class="help-popover hidden">
         <p style="margin-bottom: 8px;">Lists the daily temperature log files on the SD card (one per day, plus a

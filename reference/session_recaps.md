@@ -1753,4 +1753,57 @@ not part of this request) — left as-is.
 WiFi reconnect attempt — both are now first-priority checks once hardware is connected, especially
 the WiFi reconnect path since a mistake there affects whether the device stays reachable at all.
 
+## 2026-07-25 — Outstanding Items 6, 7, 9 Closed (Backup/Restore Wiring, Settings Update Wiring, Live Timers)
+
+Asked "do we have any outstandings" and given a 9-item punch list drawn from `activeContext.md`'s
+Outstanding Items; user asked for items 6, 7, and 9 (item 8 — real server-side dashboard auth —
+was a design-constraint note, not an actionable task, and was set aside for a separate
+clarification rather than guessed at).
+
+**#6 — Backup/Restore wired to their real endpoints**: `backupSettings()`/`restoreSettings()` in
+`assets/dashboard.html` now POST to `/button/btn_sd_backup/press` and `/button/btn_sd_restore/press`
+(real `button:` entities that already existed and already called
+`p4_sd_backup_params()`/`p4_sd_restore_params()` — this was pure frontend wiring, no backend
+change). Restore now confirms first, since it silently overwrites every current control parameter.
+Updated the two help balloons (previously "isn't wired to it yet") to describe the real behavior;
+mirrored in the (non-functional, static) preview's help text for consistency.
+
+**#7 — Operational Settings "Update" buttons wired**: `updateSetpoint()`/`updateAlarmHigh()`/
+`updateAlarmLow()`/`updateCompDiff()` now POST to `/number/<id>/set?value=X` for `setpoint`,
+`alarm_high_delta`, `alarm_low_delta`, `compressor_differential` respectively (all real, already-
+existing entities), via a new shared `submitNumberSetting()` helper with NaN validation. Also pure
+frontend wiring. The virtual preview's matching buttons have no `onclick` at all (pure decoration,
+consistent with the rest of that section's static mock values) — nothing to mirror there.
+
+**#9 — Live countdown timers added (new backend capability, not just wiring)**: four new
+`sensor: platform: template` entities computed directly from globals the control tick already
+maintains, no new state added — `comp_lockout_remaining_sec`, `defrost_countdown_sec`,
+`defrost_duration_remaining_sec`, `defrost_drip_remaining_sec`
+([esp32-p4-coolroom.yaml](../esp32-p4-coolroom.yaml)). Previously only the *configured durations*
+(comp_lockout_min etc.) were visible anywhere — these are the first live progress readouts.
+**Found and fixed a related pre-existing dead-label bug while in this area**: the LVGL
+`lbl_lockout_timer_display` label (on the Settings 3 / Fallback page) was defined but never once
+updated by any lambda — permanently stuck at its literal "0 min" placeholder text since whenever it
+was added. Now wired into the existing "Phase 4: 1s LVGL display updates" interval block, showing
+the live `comp_lockout_remaining_sec` countdown as `"Xm YYs"` or `"Ready"`. **Noted but not fixed**:
+the same page's `lbl_probe1_status` label and two unlabeled (no `id:` at all — truly unreachable)
+compressor/defrost status LED+label pairs are equally dead; out of scope for a countdown-timer ask,
+and unclear what they were originally meant to show without deeper investigation — flagged for a
+future session, not guessed at here.
+
+- New "⏱️ Timers" card added to `assets/dashboard.html` (Compressor Lockout, Defrost — the latter
+  dynamically shows "Defrosting"/"Dripping"/"Next in" depending on which of the three defrost
+  sensors is currently non-zero, since only one is ever active at a time) and mirrored with static
+  mock values in `dashboard_virtual_preview.html`.
+
+**Build**: RAM 20.1% (116,052/576,464 B, +288 B for four new sensors), Flash 20.8%
+(1,525,016/7,340,032 B, +1.4 KB). Compile clean.
+
+**Item 8 not started** — see the follow-up clarifying question asked directly after this entry;
+no code written for it pending the answer.
+
+**Hardware-gated follow-up**: the new countdown sensors and the fixed LVGL lockout label are
+untested against real compressor/defrost cycles — first thing to watch once hardware is connected
+and the control loop is actually running through real cycles, not just compiling.
+
 ---

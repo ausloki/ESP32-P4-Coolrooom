@@ -2,11 +2,41 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — SD log file manager (list/download/delete) and simple WiFi reconnect implemented as new firmware capabilities; hardware validation + device reflash both blocked  
-**Last Commit**: `d2edb91` (feat(admin): SD log file manager (list/download/delete) + simple WiFi reconnect)
+**Status**: In Progress — Backup/Restore + Operational Settings buttons wired, live compressor/defrost countdown timers added, a related dead LVGL label fixed; hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Backup/Restore + Settings Wiring, Live Timers
+
+Asked "do we have any outstandings" and given a 9-item punch list; user picked items 6, 7, and 9
+(item 8 — real server-side dashboard auth — was a design-constraint note, not an actionable task;
+set aside for a separate clarification rather than guessed at).
+
+- **#6**: `backupSettings()`/`restoreSettings()` now POST to `/button/btn_sd_backup/press` and
+  `/button/btn_sd_restore/press` (real entities that already existed). Restore confirms first — it
+  overwrites every current control parameter. Help balloon text updated to match. Pure frontend.
+- **#7**: The four Operational Settings "Update" buttons now POST to `/number/<id>/set?value=X`
+  via a new shared `submitNumberSetting()` helper with NaN validation. Also pure frontend.
+- **#9**: Four new live countdown sensors — `comp_lockout_remaining_sec`, `defrost_countdown_sec`,
+  `defrost_duration_remaining_sec`, `defrost_drip_remaining_sec` — computed straight from existing
+  control-tick globals, no new state. New "⏱️ Timers" card on the web dashboard. **Found and fixed
+  a related bug while in this area**: LVGL's `lbl_lockout_timer_display` label existed but was
+  never once updated by any lambda — permanently stuck at "0 min". Now shows the live countdown.
+  Noted (not fixed): the same page has two other dead widgets (`lbl_probe1_status` and two
+  unlabeled compressor/defrost LED+label pairs) — out of scope here, flagged for later.
+
+**Build**: RAM 20.1% (+288 B), Flash 20.8% (+1.4 KB). Compile clean.
+
+**Item 8 not started** — a separate clarifying question was asked about it rather than guessing at
+scope (options included skip entirely, build a minimal reverse-proxy, or wait for ESPHome upstream
+support). See `reference/session_recaps.md`'s matching entry for the full punch-list context.
+
+**Untested on hardware** — the new countdown sensors and the fixed lockout label haven't been
+observed through a real compressor/defrost cycle yet.
 
 ---
 

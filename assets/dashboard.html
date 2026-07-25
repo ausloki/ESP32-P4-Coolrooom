@@ -664,6 +664,24 @@
             </div>
         </div>
 
+        <!-- Timers: live countdowns for compressor lockout and defrost phases.
+             All four backing sensors are computed straight from the control
+             tick's own globals — no new state, just previously-invisible
+             progress on durations that were already configurable above. -->
+        <div class="chart-section">
+            <h2>⏱️ Timers</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+                <div>
+                    <strong>Compressor Lockout</strong>
+                    <div id="lockoutTimer" style="margin-top: 8px;">--</div>
+                </div>
+                <div>
+                    <strong>Defrost</strong>
+                    <div id="defrostTimer" style="margin-top: 8px;">--</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Health Status -->
         <div class="chart-section">
             <h2>System Health</h2>
@@ -700,15 +718,13 @@
                         Saves every control parameter — Setpoint, both Alarm Deltas, Compressor Hysteresis,
                         defrost timing, door/no-cool/ice alarm thresholds — to <strong>backup.json</strong> on
                         the SD card, so they can be recovered after a factory reset or lost device settings.
-                        The firmware already has a real button for this (<code>btn_sd_backup</code>) — this web
-                        dashboard button isn't wired to it yet, so clicking it here doesn't actually save
-                        anything at the moment.
+                        Also runs automatically whenever the setpoint changes, not just when you click this.
                     </div>
                     <div id="help-restore" class="help-popover hidden">
                         Reads <strong>backup.json</strong> back off the SD card and applies every saved
-                        parameter immediately, overwriting whatever is currently set. The firmware already does
-                        this automatically once at boot if a backup file exists, and has a real manual button
-                        too (<code>btn_sd_restore</code>) — this web dashboard button isn't wired to it yet.
+                        parameter immediately, overwriting whatever is currently set. Also runs automatically
+                        once at boot if a backup file exists — this button is for restoring it manually without
+                        a reboot.
                     </div>
                 </div>
                 <div>
@@ -1293,6 +1309,10 @@
                 if (id === 'sensor.chip_temp') data.chip_temp = parseFloat(state);
                 if (id === 'sensor.free_psram_kb') data.psram_free_kb = parseInt(state);
                 if (id === 'text_sensor.ip_address') data.ip_address = state;
+                if (id === 'sensor.comp_lockout_remaining_sec') data.comp_lockout_remaining_sec = parseFloat(state);
+                if (id === 'sensor.defrost_countdown_sec') data.defrost_countdown_sec = parseFloat(state);
+                if (id === 'sensor.defrost_duration_remaining_sec') data.defrost_duration_remaining_sec = parseFloat(state);
+                if (id === 'sensor.defrost_drip_remaining_sec') data.defrost_drip_remaining_sec = parseFloat(state);
             });
             
             if (!data.uptime_seconds) data.uptime_seconds = Math.floor(Date.now() / 1000);
@@ -1487,6 +1507,7 @@
 
             updateHardwarePanel(data);
             updateWifiPanel(data);
+            updateTimers(data);
 
             // Update settings inputs
             if (document.getElementById('setpointInput').value === '') {
@@ -1545,6 +1566,30 @@
             document.getElementById('wifiCurrentRssi').textContent =
                 typeof data.wifi_rssi === 'number' ? `${data.wifi_rssi} dBm` : '--';
             document.getElementById('wifiCurrentIp').textContent = data.ip_address || '--';
+        }
+
+        function formatCountdown(seconds) {
+            const total = Math.max(0, Math.round(seconds));
+            const m = Math.floor(total / 60);
+            const s = total % 60;
+            return `${m}m ${s.toString().padStart(2, '0')}s`;
+        }
+
+        function updateTimers(data) {
+            const lockout = data.comp_lockout_remaining_sec;
+            document.getElementById('lockoutTimer').textContent =
+                typeof lockout === 'number' && lockout > 0 ? formatCountdown(lockout) : 'Ready';
+
+            const defrostEl = document.getElementById('defrostTimer');
+            if (typeof data.defrost_duration_remaining_sec === 'number' && data.defrost_duration_remaining_sec > 0) {
+                defrostEl.textContent = `Defrosting — ${formatCountdown(data.defrost_duration_remaining_sec)} left`;
+            } else if (typeof data.defrost_drip_remaining_sec === 'number' && data.defrost_drip_remaining_sec > 0) {
+                defrostEl.textContent = `Dripping — ${formatCountdown(data.defrost_drip_remaining_sec)} left`;
+            } else if (typeof data.defrost_countdown_sec === 'number' && data.defrost_countdown_sec > 0) {
+                defrostEl.textContent = `Next in ${formatCountdown(data.defrost_countdown_sec)}`;
+            } else {
+                defrostEl.textContent = 'Due';
+            }
         }
 
         function showAlert(type, message) {
@@ -1620,13 +1665,30 @@
         }
 
         // Settings update functions (role-protected)
+        // Applies one Operational Settings field via ESPHome's standard
+        // POST /number/<id>/set?value=X, shared by all four Update buttons.
+        async function submitNumberSetting(entityId, inputId, label) {
+            const raw = document.getElementById(inputId).value;
+            const value = parseFloat(raw);
+            if (isNaN(value)) {
+                showAlert('warning', `Enter a valid number for ${label}`);
+                return;
+            }
+            const ok = await postWithFallback(`/number/${entityId}/set?value=${value}`);
+            if (!ok) {
+                showAlert('error', `Could not reach the device to update ${label}`);
+                return;
+            }
+            showAlert('success', `${label} updated to ${value}`);
+            fetchStatus();
+        }
+
         async function updateSetpoint() {
             if (!canPerformAction('setpoint')) {
                 showAlert('warning', 'Insufficient permissions to change setpoint');
                 return;
             }
-            const value = document.getElementById('setpointInput').value;
-            showAlert('info', `Setpoint update requested: ${value}°C (would call /api/number/ctl_setpoint/set)`);
+            submitNumberSetting('setpoint', 'setpointInput', 'Setpoint');
         }
 
         async function updateAlarmHigh() {
@@ -1634,8 +1696,7 @@
                 showAlert('warning', 'Insufficient permissions to change alarms');
                 return;
             }
-            const value = document.getElementById('alarmHighInput').value;
-            showAlert('info', `Alarm high update requested: ${value}°C`);
+            submitNumberSetting('alarm_high_delta', 'alarmHighInput', 'Alarm High Delta');
         }
 
         async function updateAlarmLow() {
@@ -1643,8 +1704,7 @@
                 showAlert('warning', 'Insufficient permissions to change alarms');
                 return;
             }
-            const value = document.getElementById('alarmLowInput').value;
-            showAlert('info', `Alarm low update requested: ${value}°C`);
+            submitNumberSetting('alarm_low_delta', 'alarmLowInput', 'Alarm Low Delta');
         }
 
         async function updateCompDiff() {
@@ -1652,8 +1712,7 @@
                 showAlert('warning', 'Insufficient permissions to change hysteresis');
                 return;
             }
-            const value = document.getElementById('compDiffInput').value;
-            showAlert('info', `Hysteresis update requested: ${value}°C`);
+            submitNumberSetting('compressor_differential', 'compDiffInput', 'Compressor Hysteresis');
         }
 
         // Admin functions (operator-only). These remain placeholders — no backing
@@ -1664,7 +1723,12 @@
                 showAlert('danger', 'Login required to backup settings');
                 return;
             }
-            showAlert('info', 'Backup requested - would call /api/backup endpoint');
+            const ok = await postWithFallback('/button/btn_sd_backup/press');
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to back up settings');
+                return;
+            }
+            showAlert('success', 'Settings backed up to backup.json on the SD card');
         }
 
         async function restoreSettings() {
@@ -1672,7 +1736,16 @@
                 showAlert('danger', 'Login required to restore settings');
                 return;
             }
-            showAlert('info', 'Restore requested - would upload backup.json');
+            if (!confirm('Restore settings from the SD card backup? This overwrites every current control parameter with whatever was last backed up.')) {
+                return;
+            }
+            const ok = await postWithFallback('/button/btn_sd_restore/press');
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to restore settings');
+                return;
+            }
+            showAlert('success', 'Settings restored from backup.json');
+            fetchStatus();
         }
 
         // Log file manager — talks to the custom /logs endpoint registered by

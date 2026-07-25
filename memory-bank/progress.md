@@ -1,5 +1,19 @@
 # Progress Tracking
 
+## 2026-07-25 Backup/Restore + Settings Buttons Wired; Live Compressor/Defrost Timers Added
+
+- Given a 9-item outstanding-work punch list on request; user picked items 6, 7, 9 (item 8 set
+  aside for clarification — not an actionable task as stated).
+- #6: Backup/Restore buttons now POST to their real `btn_sd_backup`/`btn_sd_restore` entities.
+  #7: The four Operational Settings Update buttons now POST to their real `number:` entities.
+  Both pure frontend wiring — no backend changes, entities already existed.
+- #9: Four new live countdown sensors (compressor lockout, defrost countdown/duration/drip
+  remaining), computed from existing control-tick globals, no new state. New "Timers" card on the
+  web dashboard. Found and fixed a related bug: LVGL's `lbl_lockout_timer_display` was defined but
+  never updated by anything — permanently stuck at "0 min" — now shows the live countdown.
+- Noted, not fixed: two other dead LVGL widgets on the same page, unclear original intent.
+- Build: RAM +288 B, Flash +1.4 KB. Compile clean. Untested on hardware.
+
 ## 2026-07-25 SD Log File Manager + Simple WiFi Reconnect Implemented
 
 - User picked the two options presented in the prior entry: full file manager for Delete/Download

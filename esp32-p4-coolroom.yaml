@@ -938,6 +938,76 @@ sensor:
       sorting_weight: 25
     lambda: 'return p4_sd_free_mb();'
 
+  # ── Live countdown timers (seconds remaining; 0 = not currently counting
+  # down) — computed directly from the same globals the control tick already
+  # maintains, no new state needed. Previously only the *configured durations*
+  # were visible (comp_lockout_min etc.); these are the first live progress
+  # readouts for any of them.
+  - platform: template
+    name: "Compressor Lockout Remaining (s)"
+    id: comp_lockout_remaining_sec
+    unit_of_measurement: "s"
+    update_interval: 1s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_compressor
+      sorting_weight: 50
+    lambda: |-
+      if (id(ctl_comp_last_off_ms) == 0) return 0.0f;
+      uint32_t lockout_ms = (uint32_t)(id(ctl_comp_lockout_min) * 60000.0f);
+      uint32_t elapsed = millis() - id(ctl_comp_last_off_ms);
+      if (elapsed >= lockout_ms) return 0.0f;
+      return (lockout_ms - elapsed) / 1000.0f;
+
+  - platform: template
+    name: "Next Defrost In (s)"
+    id: defrost_countdown_sec
+    unit_of_measurement: "s"
+    update_interval: 1s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 50
+    lambda: |-
+      if (id(relay_defrost).state || id(ctl_defrost_dripping)) return 0.0f;
+      if (id(ctl_defrost_last_end_ms) == 0) return 0.0f;
+      uint32_t interval_ms = (uint32_t)(id(ctl_defrost_interval_min) * 60000.0f);
+      uint32_t elapsed = millis() - id(ctl_defrost_last_end_ms);
+      if (elapsed >= interval_ms) return 0.0f;
+      return (interval_ms - elapsed) / 1000.0f;
+
+  - platform: template
+    name: "Defrost Duration Remaining (s)"
+    id: defrost_duration_remaining_sec
+    unit_of_measurement: "s"
+    update_interval: 1s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 51
+    lambda: |-
+      if (!id(relay_defrost).state) return 0.0f;
+      uint32_t duration_ms = (uint32_t)(id(ctl_defrost_duration_min) * 60000.0f);
+      uint32_t elapsed = millis() - id(ctl_defrost_on_since_ms);
+      if (elapsed >= duration_ms) return 0.0f;
+      return (duration_ms - elapsed) / 1000.0f;
+
+  - platform: template
+    name: "Defrost Drip Remaining (s)"
+    id: defrost_drip_remaining_sec
+    unit_of_measurement: "s"
+    update_interval: 1s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 52
+    lambda: |-
+      if (!id(ctl_defrost_dripping)) return 0.0f;
+      uint32_t drip_ms = (uint32_t)(id(ctl_defrost_drip_min) * 60000.0f);
+      uint32_t elapsed = millis() - id(ctl_drip_start_ms);
+      if (elapsed >= drip_ms) return 0.0f;
+      return (drip_ms - elapsed) / 1000.0f;
+
 ##############################################################################
 # Text Sensors
 ##############################################################################
@@ -2139,6 +2209,18 @@ interval:
           text: !lambda |-
             char buf[24];
             snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
+            return std::string(buf);
+      - lvgl.label.update:
+          # Previously a dead "0 min" label — never updated by anything.
+          # Now shows the live compressor lockout countdown, mirroring
+          # comp_lockout_remaining_sec on the web dashboard.
+          id: lbl_lockout_timer_display
+          text: !lambda |-
+            float remaining_s = id(comp_lockout_remaining_sec).state;
+            if (isnan(remaining_s) || remaining_s <= 0.0f) return std::string("Ready");
+            int total_s = (int) remaining_s;
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%dm %02ds", total_s / 60, total_s % 60);
             return std::string(buf);
       - lvgl.widget.update:
           id: lbl_home_alarm_banner
