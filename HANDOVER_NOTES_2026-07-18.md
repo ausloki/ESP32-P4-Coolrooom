@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
 **Status**: In Progress — decorative probe-source selects removed; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: pending — see `reference/session_recaps.md` 2026-07-25 "Removed Remaining Decorative Probe-Source Selects" entry
+**Last Commit**: `d13c3d7` (refactor(yaml): remove decorative probe-source select entities)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
