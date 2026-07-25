@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — Backup/Restore + Operational Settings buttons wired, live compressor/defrost countdown timers added, a related dead LVGL label fixed; hardware validation + device reflash both blocked  
+**Status**: In Progress — Backup/Restore + Operational Settings buttons wired, live compressor/defrost countdown timers added, a related dead LVGL label fixed, item 8 (real dashboard auth) explicitly deferred by decision; hardware validation + device reflash both blocked  
 **Last Commit**: `e79f1a7` (feat(dashboard,control): wire Backup/Restore + Settings buttons, add live defrost/compressor timers)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
@@ -31,9 +31,10 @@ set aside for a separate clarification rather than guessed at).
 
 **Build**: RAM 20.1% (+288 B), Flash 20.8% (+1.4 KB). Compile clean.
 
-**Item 8 not started** — a separate clarifying question was asked about it rather than guessing at
-scope (options included skip entirely, build a minimal reverse-proxy, or wait for ESPHome upstream
-support). See `reference/session_recaps.md`'s matching entry for the full punch-list context.
+**Item 8 — resolved by decision, not built**: asked the user to pick (skip / minimal reverse-proxy
+/ wait for ESPHome upstream multi-account support) rather than guess at scope. Answer: skip for
+now, no concrete multi-user need identified. Revisit only if that changes; keep not reintroducing
+fake role tiers meanwhile. See `reference/session_recaps.md`'s matching entry.
 
 **Untested on hardware** — the new countdown sensors and the fixed lockout label haven't been
 observed through a real compressor/defrost cycle yet.

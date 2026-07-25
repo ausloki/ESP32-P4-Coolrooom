@@ -1806,4 +1806,14 @@ no code written for it pending the answer.
 untested against real compressor/defrost cycles — first thing to watch once hardware is connected
 and the control loop is actually running through real cycles, not just compiling.
 
+## 2026-07-25 — Item 8 Resolved: Skip Real Dashboard Auth For Now
+
+Follow-up to the clarifying question asked at the end of the prior entry. Presented three options
+(skip / build a minimal reverse-proxy / wait for ESPHome upstream multi-account support) rather
+than guessing at scope. **User picked skip** — no concrete need identified (e.g. multiple staff
+needing separate accounts or an audit trail). No code written. Revisit only if that changes; in
+the meantime, continue not reintroducing fake role tiers in the dashboard (the original caution
+this note was protecting against). This closes the outstanding-items punch list from earlier today
+with a decision rather than a build, and completes it — items 6, 7, 9 built, 8 explicitly deferred.
+
 ---

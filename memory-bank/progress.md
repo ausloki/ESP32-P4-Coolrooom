@@ -1,5 +1,12 @@
 # Progress Tracking
 
+## 2026-07-25 Item 8 Resolved — Skip Real Dashboard Auth For Now
+
+- Asked user to pick a direction for item 8 (real server-side dashboard authorization) rather than
+  guess: skip / minimal reverse-proxy / wait for ESPHome upstream. Answer: skip for now, no
+  concrete multi-user need identified. No code written. Closes out today's outstanding-items punch
+  list (6, 7, 9 built earlier; 8 explicitly deferred by decision, not left ambiguous).
+
 ## 2026-07-25 Backup/Restore + Settings Buttons Wired; Live Compressor/Defrost Timers Added
 
 - Given a 9-item outstanding-work punch list on request; user picked items 6, 7, 9 (item 8 set

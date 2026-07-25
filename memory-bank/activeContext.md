@@ -51,25 +51,24 @@ RAM:   20.1% (116,052 / 576,464 bytes, +288 B for the four new sensors)
 Flash: 20.8% (1,525,016 / 7,340,032 bytes, +1.4 KB)
 ```
 
-### Not Started — Awaiting Clarification
+### Resolved This Session
 
-**Item 8**: "real server-side dashboard authorization" was flagged in an earlier session as a
-design constraint (don't reintroduce fake role tiers), not a scoped task. No clear single action —
-options range from doing nothing (ESPHome doesn't support multi-account auth today) to building a
-custom reverse-proxy (a real, non-trivial new component). Asked the user to pick a direction
-before writing anything; response pending as of this entry.
+**Item 8**: asked the user to pick a direction (skip / build a minimal reverse-proxy / wait for
+ESPHome upstream multi-account support) rather than guess at scope. **Answer: skip for now** — no
+concrete need identified yet (e.g. multiple staff needing separate accounts/audit trails). Revisit
+only if that changes. No code written; this closes out the punch-list item with a decision, not a
+build.
 
 ### Immediate Next Actions
 
-1. Awaiting direction on item 8.
-2. Hardware validation, once connected, should now also cover: the new countdown sensors and the
+1. Hardware validation, once connected, should now also cover: the new countdown sensors and the
    fixed LVGL lockout label through a real compressor/defrost cycle, and the Backup/Restore +
    Settings Update buttons actually reaching the device.
-3. The WiFi reconnect path and SD log manager (prior session) remain the top hardware-validation
+2. The WiFi reconnect path and SD log manager (prior session) remain the top hardware-validation
    priority — a mistake in the WiFi path affects whether the device stays reachable at all.
-4. Decide on the four open Carel-comparison divergences from an earlier session — still pending.
-5. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below).
-6. Reflash the physical device once connected — every firmware change since credential rotation
+3. Decide on the four open Carel-comparison divergences from an earlier session — still pending.
+4. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below).
+5. Reflash the physical device once connected — every firmware change since credential rotation
    is still un-flashed, same standing hardware blocker.
 
 ### Outstanding Items
@@ -81,12 +80,13 @@ before writing anything; response pending as of this entry.
    manager + WiFi reconnect, and now the new countdown sensors + fixed lockout label. All blocked.
 3. Device reflash for rotated credentials + all firmware changes since is still outstanding, same
    hardware blocker.
-4. Item 8 (real server-side dashboard authorization) — awaiting user direction, see above.
-5. Decide whether the old S3 project's calibration-offset/dew-point/primary-probe-override
+4. Decide whether the old S3 project's calibration-offset/dew-point/primary-probe-override
    features are worth porting later — deliberately left out of the humidity-sensor sessions.
-6. Four Carel-comparison divergences left open from an earlier session — awaiting a decision.
-7. Two dead LVGL widgets on the Settings 3 / Fallback page (`lbl_probe1_status`, two unlabeled
+5. Four Carel-comparison divergences left open from an earlier session — awaiting a decision.
+6. Two dead LVGL widgets on the Settings 3 / Fallback page (`lbl_probe1_status`, two unlabeled
    compressor/defrost LED+label pairs) — noted this session, not fixed, unclear original intent.
+7. Real server-side dashboard authorization — explicitly deferred (user chose "skip for now"),
+   revisit only if a concrete multi-user need arises. Don't reintroduce fake role tiers meanwhile.
 
 ### Key Anchors For Resume
 
