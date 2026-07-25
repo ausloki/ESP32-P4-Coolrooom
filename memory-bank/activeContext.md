@@ -1,69 +1,62 @@
 # Active Context — Current Session State
 
 **Date:** 2026-07-25
-**Session:** Setting help balloons added to the web dashboard's admin settings
+**Session:** Help balloons extended to all System Administration action buttons
 **Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING (blocked on hardware)
 
 ## Current Focus
 
 ### What Was Confirmed This Session
 
-- User asked for each admin setting on the web dashboard to have a clickable help balloon
-  explaining what it does in plain English and how it correlates to a sensor — a direct
-  implementation request, no confirmation step needed first.
-- Applied to the five actual tunable settings: Setpoint, Alarm High Delta, Alarm Low Delta,
-  Compressor Hysteresis (all in Operational Settings), and Touchscreen Access PIN (System
-  Administration). Deliberately **not** applied to the one-shot admin action buttons
-  (Backup/Restore/Logs/WiFi/Hardware Config) — those are actions, not values a user tunes.
+- Follow-up to the earlier same-day setting-help-balloons work: user asked for the same treatment
+  on the six System Administration action buttons (Backup, Restore, Delete Logs, Download Logs,
+  WiFi Settings, Hardware Config) — one balloon per button, not one per group, since Backup and
+  Restore in particular do very different things.
+- Checked each button's actual backend before writing content, rather than assuming: found
+  `btn_sd_backup`/`btn_sd_restore` are real ESPHome `button:` entities that call
+  `p4_sd_backup_params()`/`p4_sd_restore_params()` ([esp32-p4-coolroom.yaml:1688,1717](../esp32-p4-coolroom.yaml#L1688)) —
+  but the web dashboard's `backupSettings()`/`restoreSettings()` JS handlers are still stubs
+  (`showAlert('info', ...)` only) that never call them, same pattern as the Operational Settings
+  Update buttons flagged in the earlier addendum. Delete Logs, Download Logs, WiFi Settings, and
+  Hardware Config have **no backend at all** — genuinely undefined placeholders, not just unwired.
 
 ### Latest Completed Work
 
-- New `.help-icon` (small circular "i" button) + `.help-popover` (card-style balloon) UI pattern
-  in both `assets/dashboard.html` and `assets/dashboard_virtual_preview.html`, styled from the
-  existing `--accent`/`--accent-soft` design tokens. Click-to-toggle (not hover-only, so it works
-  on touch), only one balloon open at a time, closes on click-away or Escape.
-- Balloon content is grounded in the real control logic in `p4_control.h`, not generic text:
-  Setpoint's explains the ON/OFF thresholds relative to Compressor Hysteresis and names the
-  Coolroom Temperature (Primary Control) probe; the alarm deltas name the same probe, the 5-min
-  persist requirement, and what they drive (the named alarm banner, 🔔 icon); Compressor
-  Hysteresis correctly notes it also sets the No-Cooling alarm's threshold
-  (`setpoint + diff/2 + 0.5°C`, confirmed from `p4_ctl_no_cool_alarm()`) — independent of the
-  Alarm High Delta, which is a separate threshold; the PIN field notes it has no sensor
-  correlation, it only gates the touchscreen's Settings screens.
-- **Found while wiring this up (not user-reported)**: the guest-mode `setSectionInteractive()`
-  function disables every `input, button` in the Settings/Admin sections — this would have
-  disabled the new help icons for guests too, even though explaining a setting isn't a
-  privileged action. Fixed in both files to exempt `.help-icon`-classed buttons.
-- **Noticed, not fixed (flagged only)**: the four Operational Settings "Update" buttons
-  (`updateSetpoint()` etc.) are stubs — only show an info alert, never actually POST to the
-  device — despite a code comment claiming no backing endpoint exists. That's stale: ESPHome's
-  `web_server` auto-generates `POST /number/<id>/set?value=X` for every `number:` entity by
-  default, the same mechanism `changeTouchscreenPin()`/`toggleLight()` already use successfully
-  elsewhere on the page. Worth a small separate follow-up session; out of scope for a
-  help-balloon request.
+- Added one `.help-icon`/`.help-popover` pair per admin action button in both
+  `assets/dashboard.html` (grouped grid layout, icon after each button inline) and
+  `assets/dashboard_virtual_preview.html` (flat button row layout, same inline pattern).
+- Balloon content says what each button is *meant* to do, and honestly notes whether it's
+  actually wired up — treating "this doesn't do anything yet" as useful information for the user
+  reading it before clicking, not just a code-comment detail. Backup/Restore balloons name the
+  real entity IDs (`btn_sd_backup`/`btn_sd_restore`) they'd need to be wired to if ever completed.
 - Artifact republished at the same URL:
   `https://claude.ai/code/artifact/a5947d8c-7dfc-4b4f-adb0-fcf77b175ca3`.
+- No firmware/yaml touched — pure static asset edit, same as the prior same-day session. Compile
+  re-run as a sanity check anyway, unchanged.
 
 ### Build Status
 
-No firmware/yaml touched this session — pure static HTML/CSS/JS asset change. Compile re-run as
-a sanity check anyway (unchanged from last session):
-
 ```text
-Compile: successful via ./tools/esphome_compile.sh, clean
+Compile: successful via ./tools/esphome_compile.sh, clean (no firmware changes)
 RAM:   20.0% (115,440 / 576,464 bytes)
 Flash: 20.7% (1,517,848 / 7,340,032 bytes)
 ```
 
 ### Immediate Next Actions
 
-1. If asked to continue dashboard admin work: wire the four stub Update buttons to real
-   `POST /number/<id>/set` calls (flagged above, not done this session).
-2. Decide on the four open Carel-comparison divergences from the prior session (symmetric vs
+1. If asked to continue dashboard admin work: two well-scoped follow-ups are now flagged and
+   ready to pick up —
+   (a) wire `backupSettings()`/`restoreSettings()` to `POST /button/btn_sd_backup/press` and
+       `POST /button/btn_sd_restore/press` (real entities already exist),
+   (b) wire the four Operational Settings "Update" buttons to `POST /number/<id>/set?value=X`
+       (real entities already exist for all four).
+   Delete Logs / Download Logs / WiFi Settings / Hardware Config would need new firmware-side
+   work first (no backend exists at all) — bigger scope, not just a wiring fix.
+2. Decide on the four open Carel-comparison divergences from an earlier session (symmetric vs
    asymmetric hysteresis band especially) — still pending, unrelated to this session's work.
 3. Hardware validation, once connected: confirm a reboot on an already-cold room doesn't trigger
-   defrost, and a warm-start pulldown holds off high-temp alarms appropriately (prior session's
-   fixes, still unverified on real hardware).
+   defrost, and a warm-start pulldown holds off high-temp alarms appropriately (Carel-alignment
+   session's fixes, still unverified on real hardware).
 4. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below).
 5. Reflash the physical device once connected — every firmware change since credential rotation
    is still un-flashed, same standing hardware blocker.
@@ -85,11 +78,14 @@ Flash: 20.7% (1,517,848 / 7,340,032 bytes)
 6. No live-countdown entities exist for compressor lockout/defrost/drip — only LVGL-only labels
    and configured-duration `number:` entities. Would need new backend entities if ever wanted on
    the web dashboard.
-7. Four Carel-comparison divergences left open from the prior session — awaiting a decision on
+7. Four Carel-comparison divergences left open from an earlier session — awaiting a decision on
    each, not to be changed without the user weighing in.
-8. The four Operational Settings "Update" buttons are non-functional stubs — real
-   `POST /number/<id>/set` endpoints already exist in the firmware and are unused. Small,
-   well-scoped follow-up if/when requested.
+8. Two well-scoped stub-button wiring follow-ups (Backup/Restore, the four Operational Settings
+   Update buttons — see Immediate Next Actions above) — real backend entities already exist for
+   all of them, this is pure frontend wiring.
+9. Delete Logs / Download Logs / WiFi Settings / Hardware Config admin buttons have no backend
+   at all yet — bigger scope than a wiring fix if ever requested; currently honest placeholders
+   with help balloons explaining as much.
 
 ### Key Anchors For Resume
 
@@ -109,5 +105,5 @@ Flash: 20.7% (1,517,848 / 7,340,032 bytes)
 **Ready for:** Hardware validation — several sessions' worth of unvalidated firmware changes are
 stacked up waiting on the device being connected. This session's work (help balloons) is a pure
 UI change and needs no hardware to verify, just a visual check in a browser. Also awaiting a user
-decision on the four open Carel divergences and the stub-button follow-up before touching either
-area further.
+decision on the four open Carel divergences, and ready to pick up either stub-button wiring
+follow-up whenever asked.

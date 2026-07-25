@@ -670,17 +670,61 @@
                 <div>
                     <h3>Backup & Restore</h3>
                     <button onclick="backupSettings()" class="danger">📦 Backup Settings</button>
+                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-backup')" aria-label="What does Backup Settings do?">i</button>
                     <button onclick="restoreSettings()" class="danger" style="margin-left: 5px;">📥 Restore Settings</button>
+                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-restore')" aria-label="What does Restore Settings do?">i</button>
+                    <div id="help-backup" class="help-popover hidden">
+                        Saves every control parameter — Setpoint, both Alarm Deltas, Compressor Hysteresis,
+                        defrost timing, door/no-cool/ice alarm thresholds — to <strong>backup.json</strong> on
+                        the SD card, so they can be recovered after a factory reset or lost device settings.
+                        The firmware already has a real button for this (<code>btn_sd_backup</code>) — this web
+                        dashboard button isn't wired to it yet, so clicking it here doesn't actually save
+                        anything at the moment.
+                    </div>
+                    <div id="help-restore" class="help-popover hidden">
+                        Reads <strong>backup.json</strong> back off the SD card and applies every saved
+                        parameter immediately, overwriting whatever is currently set. The firmware already does
+                        this automatically once at boot if a backup file exists, and has a real manual button
+                        too (<code>btn_sd_restore</code>) — this web dashboard button isn't wired to it yet.
+                    </div>
                 </div>
                 <div>
                     <h3>Logs Management</h3>
                     <button onclick="deleteLogs()" class="danger">🗑️ Delete Old Logs</button>
+                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-delete-logs')" aria-label="What does Delete Old Logs do?">i</button>
                     <button onclick="downloadLogs()" style="margin-left: 5px;">📥 Download Logs</button>
+                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-download-logs')" aria-label="What does Download Logs do?">i</button>
+                    <div id="help-delete-logs" class="help-popover hidden">
+                        Meant to clean up old daily temperature/event CSV log files from the SD card to free up
+                        space. No log-deletion logic exists in the firmware yet — this button is currently a
+                        placeholder and doesn't delete anything.
+                    </div>
+                    <div id="help-download-logs" class="help-popover hidden">
+                        Meant to let you pull the daily temperature log (Coolroom/Evaporator/External temps,
+                        Setpoint, compressor/defrost state, alarms — one row every 5 minutes, see
+                        <code>log_interval_min</code>) and the separate alarm/event log off the SD card for
+                        review. No download endpoint exists in the firmware yet — this button is currently a
+                        placeholder.
+                    </div>
                 </div>
                 <div>
                     <h3>Network & Hardware</h3>
                     <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
+                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi')" aria-label="What does WiFi Settings do?">i</button>
                     <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
+                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-hardware')" aria-label="What does Hardware Config do?">i</button>
+                    <div id="help-wifi" class="help-popover hidden">
+                        Meant to let you change which WiFi network the controller connects to. Right now that's
+                        only configurable at build time (<code>secrets.yaml</code>), or by connecting to the
+                        device's own <strong>"CoolroomP4-Setup"</strong> fallback access point if it can't reach
+                        the configured network. This button doesn't do anything yet.
+                    </div>
+                    <div id="help-hardware" class="help-popover hidden">
+                        Placeholder with no defined function yet. All current hardware-related settings (probe
+                        enable/disable, door sensor mode, siren, defrost enable, etc.) already live in the
+                        Operational Settings above and on the touchscreen's Settings screens — this button
+                        doesn't do anything.
+                    </div>
                 </div>
                 <div>
                     <div class="field-label-row">

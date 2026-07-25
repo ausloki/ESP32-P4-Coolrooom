@@ -1,5 +1,16 @@
 # Progress Tracking
 
+## 2026-07-25 Help Balloons Extended to System Administration Buttons
+
+- Follow-up to the same-day setting-help-balloons work: added one help balloon per admin action
+  button (Backup, Restore, Delete Logs, Download Logs, WiFi Settings, Hardware Config), not one
+  per group — Backup/Restore especially needed separate explanations.
+- Checked real backend status first: `btn_sd_backup`/`btn_sd_restore` are real entities the web
+  dashboard's JS doesn't call yet (stub); Delete/Download Logs, WiFi, Hardware have no backend at
+  all. Balloon text says what each button is meant to do and honestly flags whether it's wired up.
+- Pure static asset change again, no firmware/yaml touched. Compile re-run: unchanged. Virtual
+  preview mirrored, artifact republished at the same URL.
+
 ## 2026-07-25 Setting Help Balloons on the Web Dashboard
 
 - Added clickable "i" help balloons to the web dashboard's five tunable settings (Setpoint, Alarm

@@ -2,11 +2,29 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — web dashboard settings now have plain-English help balloons; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `94566a2` (feat(dashboard): add plain-English help balloons to admin settings)
+**Status**: In Progress — help balloons now cover every admin control (settings + action buttons); hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Help Balloons Extended to System Administration Buttons
+
+Follow-up to the setting-help-balloons addendum below: user asked for the same treatment on the
+six System Administration action buttons (Backup, Restore, Delete Logs, Download Logs, WiFi
+Settings, Hardware Config) — one balloon per button, not per group.
+
+- Checked each button's actual backend before writing content: `btn_sd_backup`/`btn_sd_restore`
+  are real ESPHome entities calling `p4_sd_backup_params()`/`p4_sd_restore_params()`, but the web
+  dashboard's JS handlers are still stubs that never call them (same stub pattern as the
+  Operational Settings Update buttons noted below). Delete Logs, Download Logs, WiFi Settings, and
+  Hardware Config have no backend at all — genuinely undefined placeholders.
+- Balloon text says what each button is meant to do, and honestly notes whether it's wired up —
+  that's useful information for someone about to click it, not just a code-comment detail.
+- Virtual preview mirrored, artifact republished at the same URL.
+- No firmware/yaml changes — static asset edit only, compile re-run as a sanity check, unchanged.
 
 ---
 

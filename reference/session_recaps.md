@@ -1610,4 +1610,30 @@ left without balloons since they're actions, not values a user tunes.
 No firmware/yaml changes this session — pure static asset edit. Compile re-run anyway as a
 sanity check: RAM 20.0%, Flash 20.7% (unchanged, as expected).
 
+## 2026-07-25 — Help Balloons Extended to System Administration Buttons
+
+Follow-up to the setting-help-balloons work: user asked for the same treatment on Backup, Restore,
+Delete Logs, Download Logs, WiFi Settings, and Hardware Config in the System Administration
+section — one icon/popover per button (not per group), since Backup and Restore in particular do
+very different things and deserve separate explanations.
+
+- Verified backend status of each before writing content, rather than guessing:
+  `btn_sd_backup`/`btn_sd_restore` are real ESPHome `button:` entities that call
+  `p4_sd_backup_params()`/`p4_sd_restore_params()` ([esp32-p4-coolroom.yaml:1688,1717](../esp32-p4-coolroom.yaml#L1688)) — but the web dashboard's
+  `backupSettings()`/`restoreSettings()` JS are still stubs (`showAlert('info', ...)` only, same
+  pattern as the Operational Settings Update buttons flagged last session), so they don't actually
+  call those buttons yet. Delete Logs, Download Logs, WiFi Settings, and Hardware Config have **no
+  backend at all** — not even an unwired entity — genuinely undefined placeholders.
+- Wrote each balloon to say what the button is *meant* to do, and honestly note whether it's
+  wired up yet — including that note directly in the help text rather than only in code comments,
+  since "this doesn't actually do anything yet" is itself useful information for someone reading
+  the balloon before clicking. Backup/Restore balloons also name the real button entity IDs
+  (`btn_sd_backup`/`btn_sd_restore`) they'd need to be wired to.
+- `assets/dashboard_virtual_preview.html` mirrored with the same six balloons (flat button row
+  layout there vs. the live dashboard's grouped grid, so icons sit inline after each button in
+  both rather than one per `<h3>` group). Artifact republished at the same URL.
+
+No firmware/yaml changes — pure static asset edit again. Compile re-run as a sanity check:
+unchanged.
+
 ---

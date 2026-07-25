@@ -409,14 +409,48 @@
       </div>
       <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
         <button class="btn danger" disabled>📦 Backup</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-backup')" aria-label="What does Backup do?">i</button>
         <button class="btn danger" disabled>📥 Restore</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-restore')" aria-label="What does Restore do?">i</button>
         <button class="btn danger" disabled>🗑️ Delete Logs</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-delete-logs')" aria-label="What does Delete Logs do?">i</button>
         <button class="btn" disabled>📥 Download Logs</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-download-logs')" aria-label="What does Download Logs do?">i</button>
         <button class="btn danger" disabled>📡 WiFi Settings</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi')" aria-label="What does WiFi Settings do?">i</button>
         <button class="btn danger" disabled>⚙️ Hardware Config</button>
+        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-hardware')" aria-label="What does Hardware Config do?">i</button>
         <input type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" disabled style="width: 140px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
         <button class="btn" disabled>🔒 Change PIN</button>
         <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-pin')" aria-label="What does the Touchscreen Access PIN do?">i</button>
+      </div>
+      <div id="help-backup" class="help-popover hidden">
+        Saves every control parameter (Setpoint, Alarm Deltas, Compressor Hysteresis, defrost timing, alarm
+        thresholds) to <strong>backup.json</strong> on the SD card, for recovery after a factory reset. The
+        firmware has a real button for this (<code>btn_sd_backup</code>) — this preview button doesn't call it.
+      </div>
+      <div id="help-restore" class="help-popover hidden">
+        Reads <strong>backup.json</strong> back off the SD card and applies every saved parameter immediately,
+        overwriting current values. Runs automatically once at boot if a backup exists; also has a real manual
+        button (<code>btn_sd_restore</code>) — this preview button doesn't call it.
+      </div>
+      <div id="help-delete-logs" class="help-popover hidden">
+        Meant to clean up old daily temperature/event CSV log files from the SD card. No log-deletion logic
+        exists in the firmware yet — placeholder only.
+      </div>
+      <div id="help-download-logs" class="help-popover hidden">
+        Meant to let you pull the daily temperature log (temps, Setpoint, compressor/defrost state, alarms —
+        one row every 5 minutes) and the alarm/event log off the SD card. No download endpoint exists yet —
+        placeholder only.
+      </div>
+      <div id="help-wifi" class="help-popover hidden">
+        Meant to change which WiFi network the controller connects to. Currently only configurable at build
+        time (<code>secrets.yaml</code>), or via the device's own "CoolroomP4-Setup" fallback access point.
+        This button doesn't do anything yet.
+      </div>
+      <div id="help-hardware" class="help-popover hidden">
+        Placeholder with no defined function yet. Hardware-related settings (probe enable/disable, door sensor
+        mode, siren, defrost enable) already live in Operational Settings and on the touchscreen.
       </div>
       <div id="help-pin" class="help-popover hidden">
         The 4-digit code required to reach the Settings screens on the physical touchscreen unit — it doesn't
