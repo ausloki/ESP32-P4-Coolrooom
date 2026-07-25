@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
 **Status**: In Progress — web dashboard settings now have plain-English help balloons; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
+**Last Commit**: `94566a2` (feat(dashboard): add plain-English help balloons to admin settings)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
