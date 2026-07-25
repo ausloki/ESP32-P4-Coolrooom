@@ -20,6 +20,30 @@ Display: 7 inch 1024×600 MIPI-DSI (touch via GT911)
 Source: Waveshare ESP-IDF tutorial, section 3 I2C Example.  
 Note: External pullups provided on-board. Do NOT enable internal pullups in software.
 
+**Devices on this bus (shared — I2C is a multi-drop bus, not point-to-point):**
+
+| Device | I2C Address | Role |
+| --- | --- | --- |
+| PCF8563 RTC | 0x51 | On-board real-time clock |
+| GT911 touch controller | 0x5D | Display touch (required — do not remove/repurpose this bus) |
+| SHT31 | 0x44 (0x45 on some breakouts — check ADDR pin strapping before flashing) | Internal (coolroom) humidity + temperature |
+| SHT20 (HTU21D-compatible) | 0x40 (fixed) | External (ambient) humidity + temperature |
+
+No address conflicts — all four devices sit on distinct addresses. Both new humidity/temp
+sensors wire to this same item-19 4-pin header in parallel with the RTC (SDA/SCL/VCC/GND);
+there is no second I2C connector on this board, and none is needed since I2C already supports
+multiple devices sharing one bus. On-board pullups (noted above) are shared across all devices
+on the bus — do not add per-sensor pullup resistors, that would over-pull the bus.
+
+Phase 2 deliberately kept this bus free of temperature sensors (RS485 RTD handles all
+temperature sensing on this project) — that decision is unchanged. Humidity has no RS485
+alternative, so the SHT31/SHT20 additions are new capability, not a duplicate temperature path.
+
+Cable-length caution: the external (SHT20) sensor's cable run leaves the enclosure. Standard
+100kHz I2C over an unshielded multi-meter cable can become unreliable; keep the run as short as
+practical, use twisted/shielded cable if it must be long, and treat `SHT20 (External Humidity)
+Online` (diagnostics) as the signal that the run is marginal if it flaps.
+
 ### TF Card SDMMC (4-wire SDIO 3.0 slot — item 25)
 | Signal | GPIO |
 |--------|------|

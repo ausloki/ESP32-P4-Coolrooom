@@ -404,6 +404,27 @@
         .gauge-temp { font-size: 46px; font-weight: 300; color: #30D158; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
         .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
         .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+        /* Humidity/temp reading pills — same idea as the old project's
+           .cr-reading side panel, condensed into a row under the gauge. */
+        .gauge-readings {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        .gauge-reading {
+            flex: 1 1 160px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .gauge-reading-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.5); }
+        .gauge-reading span:last-child { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+        .gauge-reading.internal span:last-child { color: #00BCD4; }
+        .gauge-reading.external span:last-child { color: #FF1493; }
     </style>
 </head>
 <body>
@@ -457,6 +478,16 @@
                 <div class="gauge-info">
                     <div class="gauge-info-line" id="gaugeWifi">📶 --</div>
                     <div class="gauge-info-line" id="gaugeUptime">⏱ --</div>
+                </div>
+            </div>
+            <div class="gauge-readings">
+                <div class="gauge-reading internal">
+                    <span class="gauge-reading-label">Internal (SHT31)</span>
+                    <span id="readingInternal">--°C · --%RH</span>
+                </div>
+                <div class="gauge-reading external">
+                    <span class="gauge-reading-label">External (SHT20)</span>
+                    <span id="readingExternal">--°C · --%RH</span>
                 </div>
             </div>
         </div>
@@ -1010,6 +1041,10 @@
                 if (id === 'text_sensor.wifi_ssid_text') data.wifi_ssid = state;
                 if (id === 'binary_sensor.ctl_probe_fault') data.probe_fault = state === 'on';
                 if (id === 'switch.relay_light') data.light_on = state === 'on';
+                if (id === 'sensor.probe_internal_temp') data.int_temp = parseFloat(state);
+                if (id === 'sensor.probe_internal_humidity') data.int_humidity = parseFloat(state);
+                if (id === 'sensor.probe_external_temp') data.ext_temp = parseFloat(state);
+                if (id === 'sensor.probe_external_humidity') data.ext_humidity = parseFloat(state);
                 if (id === 'sensor.free_heap') data.heap_free_kb = parseInt(state);
                 if (id === 'number.ctl_alarm_high_delta') data.alarm_high = parseFloat(state);
                 if (id === 'number.ctl_alarm_low_delta') data.alarm_low = parseFloat(state);
@@ -1182,6 +1217,13 @@
             const days = Math.floor(uptime / 86400);
             const hours = Math.floor((uptime % 86400) / 3600);
             document.getElementById('gaugeUptime').textContent = `⏱ ${days}d ${hours}h`;
+
+            const fmtReading = (temp, rh) =>
+                (typeof temp === 'number' && !isNaN(temp) && typeof rh === 'number' && !isNaN(rh))
+                    ? `${temp.toFixed(1)}°C · ${rh.toFixed(0)}%RH`
+                    : '--°C · --%RH';
+            document.getElementById('readingInternal').textContent = fmtReading(data.int_temp, data.int_humidity);
+            document.getElementById('readingExternal').textContent = fmtReading(data.ext_temp, data.ext_humidity);
 
             let rs485Html = '';
             rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;

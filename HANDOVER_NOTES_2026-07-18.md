@@ -1,12 +1,43 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-24  
-**Status**: In Progress — security fix + dashboard gauge session captured at `288f76b`; gauge now visually verified via published preview; device reflash blocked, hardware not currently connected  
-**Last Commit**: `288f76b` (feat(dashboard): central horseshoe gauge matching LVGL touchscreen)
+**Resume State Updated**: 2026-07-25  
+**Status**: In Progress — I2C humidity/temp sensors added (SHT31 internal + SHT20 external); hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending (this session's commit not yet made — see session_recaps.md 2026-07-25 entry)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — I2C Humidity/Temp Sensors: SHT31 (Internal) + SHT20 (External)
+
+- Added `sht3xd` (SHT31, 0x44) inside the coolroom and `htu21d` (SHT20, 0x40) as an external
+  ambient reference, both on the existing shared I2C bus (GPIO7/8, item-19 4-pin header) — no
+  GPIO conflicts, no new connector needed (RTC 0x51 and GT911 touch 0x5D already share this bus
+  at distinct addresses). Confirmed via clarifying question: SHT31 = internal, SHT20 = external.
+- The `i2c:` block previously said "NOT for temperature sensors" (Phase 2 decision to keep all
+  temperature sensing on RS485 RTD). Judged humidity as a genuinely new capability RS485 can't
+  provide at all, not a reopening of that decision — updated the comment to explain both.
+- Added enable-gated `probe_internal_temp/humidity` and `probe_external_temp/humidity` sensors
+  (mirrors the probe2/probe3 pattern), `input_humidity_internal_enabled` /
+  `input_humidity_external_enabled` NVS globals, `sht31_online`/`sht20_online` diagnostics, two
+  new LVGL right-panel readouts (panel spacing retightened from 100px to 88px to fit 5 items),
+  and matching reading pills on the web dashboard + preview.
+- **Found and fixed a real bug** while wiring backup/restore: `p4_sd_restore_params()`'s read
+  buffer was `char buf[256]`, but `backup.json` is already ~840 bytes — most bool fields were
+  silently never parsed and restore was quietly keeping in-memory defaults for much of the
+  existing toggle set. Grown to 1536 bytes. The new humidity toggles would have landed past the
+  old truncation point and been dead on arrival, so this fix was required, not optional.
+- `reference/hardware_pins.md` updated with the I2C address table, shared-bus wiring note, and a
+  cable-length caution for the external sensor's run outside the enclosure.
+- Did not port the old project's calibration-offset/dew-point/primary-probe-override features —
+  out of scope for this request (sensing + display + backup only).
+- Build: RAM 19.6% (112,992/576,464 B), Flash 20.4% (1,498,584/7,340,032 B). Compile clean.
+- **Hardware validation still outstanding**: no physical SHT31/SHT20 has been tested against this
+  firmware yet (device not connected this session, same standing blocker as the credential
+  reflash). Verify actual I2C addresses on the physical breakouts before flashing — some SHT31
+  boards ship with ADDR pulled to 0x45 instead of 0x44.
 
 ---
 

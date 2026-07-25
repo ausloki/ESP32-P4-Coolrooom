@@ -182,13 +182,16 @@ esphome:
               bool def_term_en = id(input_defrost_term_temp_enabled);
               bool def_drip_en = id(input_defrost_drip_enabled);
               bool smart_def_en = id(input_smart_defrost_enabled);
+              bool hum_int_en = id(input_humidity_internal_enabled);
+              bool hum_ext_en = id(input_humidity_external_enabled);
               if (p4_sd_restore_params(
                   sp, cd, ah, al,
                   lockout, def_grace, def_int, def_dur, def_drip, def_end,
                   alarm_persist, alarm_hyst, door_delay, no_cool, ice_delta,
                   fb_on, fb_off, smart_delta, smart_dwell,
                   probe2_en, probe3_en, door_mode_nc, door_en, siren_en,
-                  defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en)) {
+                  defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
+                  hum_int_en, hum_ext_en)) {
                     id(ctl_setpoint)         = sp;
                     id(ctl_comp_diff)        = cd;
                     id(ctl_alarm_high_delta) = ah;
@@ -218,6 +221,8 @@ esphome:
                 id(input_defrost_term_temp_enabled) = def_term_en;
                 id(input_defrost_drip_enabled) = def_drip_en;
                 id(input_smart_defrost_enabled) = smart_def_en;
+                id(input_humidity_internal_enabled) = hum_int_en;
+                id(input_humidity_external_enabled) = hum_ext_en;
                 if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
                 ESP_LOGI("sd", "All control settings restored from SD backup");
@@ -409,7 +414,18 @@ web_server:
       sorting_weight: 100
 
 ##############################################################################
-# I2C — Reserved for onboard RTC (NOT for temperature sensors)
+# I2C — RTC + GT911 touch + external I2C header (item 19, PH2.0 4-PIN: SDA/SCL
+# GPIO7/8, on-board pullups already present, do not enable internal pullups).
+#
+# Phase 2 deliberately kept this bus temperature-free (RS485 RTD handles all
+# temperature sensing) — that constraint is unchanged. What's new here is
+# humidity, which RS485 RTD cannot provide at all, so the SHT31 (internal)
+# and SHT20 (external) humidity/temp sensors below share this same bus rather
+# than opening a second I2C bus or connector. All four devices coexist at
+# distinct addresses (RTC 0x51, GT911 0x5D, SHT31 0x44/0x45, SHT20 0x40) — no
+# conflicts. See reference/hardware_pins.md for the full address table and
+# physical wiring (both new sensors land on the same item-19 4-pin header,
+# wired in parallel — I2C is a shared bus, not a point-to-point link).
 ##############################################################################
 
 i2c:
@@ -786,6 +802,124 @@ sensor:
             if (!p4_rtd_valid(x)) return 0;
             return (int)((x + 20.0f) / 35.0f * 100.0f);
 
+  # ── Humidity/temp sensors — I2C, on the shared bus (see i2c: block above) ──
+  # SHT31 (internal, inside the coolroom): fixed address 0x44 on most breakouts
+  # (ADDR pin low); some ship with ADDR pulled high = 0x45 instead — check the
+  # physical board/datasheet before flashing. Raw readings are internal; the
+  # public probe*_humidity/probe*_temp sensors below gate on their enable flag
+  # the same way probe2_temp/probe3_temp already do.
+  - platform: sht3xd
+    address: 0x44
+    update_interval: 30s
+    temperature:
+      id: sht31_internal_temp_raw
+      internal: true
+    humidity:
+      id: sht31_internal_humidity_raw
+      internal: true
+
+  # SHT20 (external, ambient/outside reference): HTU21D-compatible, fixed
+  # address 0x40 (not configurable — SHT20/SHT21/SHT25/HTU21D all use 0x40).
+  - platform: htu21d
+    update_interval: 30s
+    temperature:
+      id: sht20_external_temp_raw
+      internal: true
+    humidity:
+      id: sht20_external_humidity_raw
+      internal: true
+
+  - platform: template
+    id: probe_internal_temp
+    name: "Internal Temperature (SHT31)"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    state_class: measurement
+    device_class: temperature
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 4
+    lambda: |-
+      if (!id(input_humidity_internal_enabled)) return NAN;
+      return id(sht31_internal_temp_raw).state;
+    on_value:
+      # Composes both lines from current sensor state on every update (not
+      # just this sensor's own value) — humidity updates independently on its
+      # own interval and would otherwise clobber this line, and vice versa.
+      - lvgl.label.update:
+          id: lbl_int_humidity_large
+          text: !lambda |-
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Int %.1f°C\n%.0f%%RH", x, id(probe_internal_humidity).state);
+            return std::string(buf);
+
+  - platform: template
+    id: probe_internal_humidity
+    name: "Internal Humidity (SHT31)"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    device_class: humidity
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 5
+    lambda: |-
+      if (!id(input_humidity_internal_enabled)) return NAN;
+      return id(sht31_internal_humidity_raw).state;
+    on_value:
+      - lvgl.label.update:
+          id: lbl_int_humidity_large
+          text: !lambda |-
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Int %.1f°C\n%.0f%%RH", id(probe_internal_temp).state, x);
+            return std::string(buf);
+
+  - platform: template
+    id: probe_external_temp
+    name: "External Temperature (SHT20)"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    state_class: measurement
+    device_class: temperature
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 6
+    lambda: |-
+      if (!id(input_humidity_external_enabled)) return NAN;
+      return id(sht20_external_temp_raw).state;
+    on_value:
+      - lvgl.label.update:
+          id: lbl_ext_humidity_large
+          text: !lambda |-
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Ext %.1f°C\n%.0f%%RH", x, id(probe_external_humidity).state);
+            return std::string(buf);
+
+  - platform: template
+    id: probe_external_humidity
+    name: "External Humidity (SHT20)"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: measurement
+    device_class: humidity
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 7
+    lambda: |-
+      if (!id(input_humidity_external_enabled)) return NAN;
+      return id(sht20_external_humidity_raw).state;
+    on_value:
+      - lvgl.label.update:
+          id: lbl_ext_humidity_large
+          text: !lambda |-
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Ext %.1f°C\n%.0f%%RH", id(probe_external_temp).state, x);
+            return std::string(buf);
+
   # ── Probe staleness diagnostics ────────────────────────────────────────────
   - platform: template
     name: "RTD1 CH1 Sample Age (s)"
@@ -1023,6 +1157,24 @@ binary_sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 33
     lambda: 'return id(hw_rtc_ok);'
+
+  - platform: template
+    id: sht31_online
+    name: "SHT31 (Internal Humidity) Online"
+    device_class: connectivity
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 34
+    lambda: 'return !isnan(id(sht31_internal_temp_raw).state);'
+
+  - platform: template
+    id: sht20_online
+    name: "SHT20 (External Humidity) Online"
+    device_class: connectivity
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 35
+    lambda: 'return !isnan(id(sht20_external_temp_raw).state);'
 
   # ── Phase 3: Alarm and fault indicators ───────────────────────────────────
   - platform: template
@@ -1617,7 +1769,8 @@ button:
           id(ctl_door_sensor_mode_is_nc), id(input_door_sensor_enabled),
           id(input_siren_enabled), id(input_defrost_enabled),
           id(input_fallback_enabled), id(input_defrost_term_temp_enabled),
-          id(input_defrost_drip_enabled), id(input_smart_defrost_enabled));
+          id(input_defrost_drip_enabled), id(input_smart_defrost_enabled),
+          id(input_humidity_internal_enabled), id(input_humidity_external_enabled));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -1660,13 +1813,16 @@ button:
           bool def_term_en = id(input_defrost_term_temp_enabled);
           bool def_drip_en = id(input_defrost_drip_enabled);
           bool smart_def_en = id(input_smart_defrost_enabled);
+          bool hum_int_en = id(input_humidity_internal_enabled);
+          bool hum_ext_en = id(input_humidity_external_enabled);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
               alarm_persist, alarm_hyst, door_delay, no_cool, ice_delta,
               fb_on, fb_off, smart_delta, smart_dwell,
               probe2_en, probe3_en, door_mode_nc, door_en, siren_en,
-              defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en)) {
+              defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
+              hum_int_en, hum_ext_en)) {
               id(ctl_setpoint)         = sp;
               id(ctl_comp_diff)        = cd;
               id(ctl_alarm_high_delta) = ah;
@@ -1696,6 +1852,8 @@ button:
             id(input_defrost_term_temp_enabled) = def_term_en;
             id(input_defrost_drip_enabled) = def_drip_en;
             id(input_smart_defrost_enabled) = smart_def_en;
+            id(input_humidity_internal_enabled) = hum_int_en;
+            id(input_humidity_external_enabled) = hum_ext_en;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");
@@ -2192,6 +2350,16 @@ globals:
     initial_value: "true"
 
   - id: input_probe3_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_humidity_internal_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+
+  - id: input_humidity_external_enabled
     type: bool
     restore_value: yes
     initial_value: "true"
@@ -3044,6 +3212,8 @@ lvgl:
                         id(ctl_alarm_low_active) = false;
 
               # RIGHT PANEL: Secondary Readings
+              # 5 items now (was 3) — spacing tightened from 100px to 88px
+              # steps to keep everything inside the 496px-tall container.
               - label:
                   id: lbl_ambient_temp_large
                   text: "Ambient\n--°C"
@@ -3058,16 +3228,34 @@ lvgl:
                   text: "Evap\n--°C"
                   align: CENTER
                   x: 850
-                  y: 180
+                  y: 168
                   text_font: font_small
                   text_color: col_text
+
+              - label:
+                  id: lbl_int_humidity_large
+                  text: "Int --°C\n--%RH"
+                  align: CENTER
+                  x: 850
+                  y: 256
+                  text_font: font_small
+                  text_color: col_cyan
+
+              - label:
+                  id: lbl_ext_humidity_large
+                  text: "Ext --°C\n--%RH"
+                  align: CENTER
+                  x: 850
+                  y: 344
+                  text_font: font_small
+                  text_color: col_pink
 
               - label:
                   id: lbl_power_info
                   text: "Heap: ---"
                   align: CENTER
                   x: 850
-                  y: 280
+                  y: 432
                   text_font: font_small
                   text_color: col_subtext
 

@@ -1244,3 +1244,64 @@ Synced assets/dashboard_virtual_preview.html, republished same Artifact URL. No 
 — compile re-verified anyway per policy: RAM 19.5%, Flash 20.3% (unchanged).
 
 ---
+
+## 2026-07-25 — I2C Humidity/Temperature Sensors: SHT31 (Internal) + SHT20 (External)
+
+**Session scope**: Add two new I2C sensors matching the earlier S3 project's approach — SHT31
+inside the coolroom, SHT20 as an external/ambient reference — each publishing both temperature
+and humidity. Confirmed via clarifying question: SHT31 = internal, SHT20 = external.
+
+**Hardware research first**: `esp32-p4-coolroom.yaml`'s `i2c:` block carried a Phase 2 comment
+saying the bus was "Reserved for onboard RTC (NOT for temperature sensors)" — a deliberate
+decision to do all temperature sensing via RS485 RTD instead of I2C. Judged this compatible with
+adding humidity sensors specifically: RS485 RTD has no humidity capability at all, so this isn't
+reopening the temperature-architecture question, it's adding a capability that had no RS485
+alternative. Updated the comment to explain both the original constraint and why it doesn't block
+this addition, rather than silently overriding it.
+
+**No hardware conflicts**: RTC (0x51) and GT911 touch (0x5D) already share the bus; SHT31
+(0x44, some breakouts ship 0x45 — check ADDR pin strapping) and SHT20/HTU21D (0x40, fixed) sit at
+distinct addresses. Both new sensors wire to the same item-19 4-pin external I2C header as the
+RTC (GPIO7 SDA / GPIO8 SCL) — I2C is a shared multi-drop bus, there's no second I2C connector on
+this board and none is needed. On-board pullups already cover all devices on the bus.
+
+**What changed**:
+
+- `esp32-p4-coolroom.yaml`: added `sht3xd` (0x44) and `htu21d` (0x40) raw sensors (internal,
+  30s update interval), wrapped in enable-gated `probe_internal_temp/humidity` and
+  `probe_external_temp/humidity` template sensors mirroring the existing probe2/probe3 pattern.
+  Added `input_humidity_internal_enabled` / `input_humidity_external_enabled` NVS-persistent
+  globals. Added `sht31_online` / `sht20_online` diagnostic binary sensors (NaN-state check,
+  same convention as the RS485 online sensors).
+- LVGL right panel: added two new secondary-reading labels (`lbl_int_humidity_large`,
+  `lbl_ext_humidity_large`) showing combined temp+RH per sensor. Tightened the panel's 3-item
+  100px spacing to 5-item 88px spacing so everything fits inside the existing 496px container —
+  no LVGL layout was untouched, all 5 right-panel items got repositioned.
+- **Bug found and fixed while wiring backup/restore**: `p4_logging.h`'s `p4_sd_restore_params()`
+  read `backup.json` into `char buf[256]`, but the actual file is ~840 bytes even before this
+  change — meaning most bool fields (everything past roughly `defrost_grace_min`) were silently
+  never found by `strstr` and restore was quietly keeping in-memory defaults instead of the
+  backed-up value, for probably a majority of the existing toggle fields. Fixed by growing the
+  buffer to 1536 bytes. Discovered because the two new humidity toggles would otherwise have
+  landed past the truncation point and been dead on arrival — the fix isn't scope creep, the new
+  fields would be meaningless without it.
+- `p4_sd_backup_params()` / `p4_sd_restore_params()`: added `humidity_internal_enabled` /
+  `humidity_external_enabled` bool params, threaded through all three call sites (boot restore,
+  manual backup button, manual restore button).
+- `assets/dashboard.html` + `dashboard_virtual_preview.html`: added an "Internal (SHT31)" /
+  "External (SHT20)" reading-pill row under the gauge panel (same `.cr-reading`-style pattern
+  already borrowed from the old project for the gauge itself). Preview uses mock values; Artifact
+  republished at the same URL.
+- `reference/hardware_pins.md`: documented the new I2C address table, shared-bus wiring, and a
+  cable-length caution for the external sensor's run outside the enclosure.
+
+**Not done** (out of scope for this request): the old project's calibration-offset system
+(SHT31-vs-RTD cross-check), dew-point calculation, and "use SHT31 as primary probe" override
+were not ported — this addition is sensing + display + backup only, matching what was asked.
+
+**Build**: RAM 19.6% (112,992/576,464 B), Flash 20.4% (1,498,584/7,340,032 B) — up from 19.5%/
+20.3%, expected for two new sensor components plus display/backup wiring. Compile clean (one
+transient native-IDF `REQUIRES` failure on first attempt, auto-recovered by the existing
+`esphome_compile.sh` retry path per its documented behavior — unrelated to this change).
+
+---

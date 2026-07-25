@@ -219,7 +219,9 @@ inline bool p4_sd_backup_params(
     bool  fallback_enabled,
     bool  defrost_term_temp_enabled,
     bool  defrost_drip_enabled,
-    bool  smart_defrost_enabled
+    bool  smart_defrost_enabled,
+    bool  humidity_internal_enabled,
+    bool  humidity_external_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -262,7 +264,9 @@ inline bool p4_sd_backup_params(
         "  \"fallback_enabled\": %s,\n"
         "  \"defrost_term_temp_enabled\": %s,\n"
         "  \"defrost_drip_enabled\": %s,\n"
-        "  \"smart_defrost_enabled\": %s\n"
+        "  \"smart_defrost_enabled\": %s,\n"
+        "  \"humidity_internal_enabled\": %s,\n"
+        "  \"humidity_external_enabled\": %s\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -280,7 +284,9 @@ inline bool p4_sd_backup_params(
         fallback_enabled ? "true" : "false",
         defrost_term_temp_enabled ? "true" : "false",
         defrost_drip_enabled ? "true" : "false",
-        smart_defrost_enabled ? "true" : "false");
+        smart_defrost_enabled ? "true" : "false",
+        humidity_internal_enabled ? "true" : "false",
+        humidity_external_enabled ? "true" : "false");
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              setpoint, comp_diff, alarm_high, alarm_low);
@@ -319,7 +325,9 @@ inline bool p4_sd_restore_params(
     bool&  fallback_enabled,
     bool&  defrost_term_temp_enabled,
     bool&  defrost_drip_enabled,
-    bool&  smart_defrost_enabled
+    bool&  smart_defrost_enabled,
+    bool&  humidity_internal_enabled,
+    bool&  humidity_external_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -329,7 +337,14 @@ inline bool p4_sd_restore_params(
         return false;
     }
 
-    char buf[256];
+    // Sized well past the full field set (~840 B at last count) so every key
+    // actually lands in buf — this was previously char buf[256], which
+    // silently truncated the file before most of the bool fields and caused
+    // them to never be found by strstr (restore quietly kept in-memory
+    // defaults instead of the backed-up value). Discovered while adding the
+    // humidity toggles below; fixed here since they'd otherwise be dead on
+    // arrival too.
+    char buf[1536];
     size_t n = fread(buf, 1, sizeof(buf) - 1, f);
     fclose(f);
     buf[n] = '\0';
@@ -350,6 +365,8 @@ inline bool p4_sd_restore_params(
     bool b_def_term_en = defrost_term_temp_enabled;
     bool b_def_drip_en = defrost_drip_enabled;
     bool b_smart_def_en = smart_defrost_enabled;
+    bool b_hum_int_en = humidity_internal_enabled;
+    bool b_hum_ext_en = humidity_external_enabled;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
         const char* p = strstr(buf, key);
@@ -399,6 +416,8 @@ inline bool p4_sd_restore_params(
     parse_bool("\"defrost_term_temp_enabled\"", b_def_term_en);
     parse_bool("\"defrost_drip_enabled\"", b_def_drip_en);
     parse_bool("\"smart_defrost_enabled\"", b_smart_def_en);
+    parse_bool("\"humidity_internal_enabled\"", b_hum_int_en);
+    parse_bool("\"humidity_external_enabled\"", b_hum_ext_en);
 
     if (!std::isfinite(sp) || !std::isfinite(cd) ||
         !std::isfinite(ah) || !std::isfinite(al) ||
@@ -443,6 +462,8 @@ inline bool p4_sd_restore_params(
     defrost_term_temp_enabled = b_def_term_en;
     defrost_drip_enabled = b_def_drip_en;
     smart_defrost_enabled = b_smart_def_en;
+    humidity_internal_enabled = b_hum_int_en;
+    humidity_external_enabled = b_hum_ext_en;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

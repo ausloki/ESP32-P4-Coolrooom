@@ -1,5 +1,18 @@
 # Progress Tracking
 
+## 2026-07-25 I2C Humidity/Temp Sensors
+
+- Added SHT31 (internal, 0x44) + SHT20 (external, 0x40) on the existing shared I2C bus — no GPIO
+  conflicts, no new connector (both share the item-19 4-pin header with the RTC). Enable-gated
+  sensors, LVGL right-panel readouts, web dashboard reading pills, and backup/restore all wired.
+  Confirmed placement via clarifying question (SHT31=internal, SHT20=external).
+- **Found and fixed a real bug**: `p4_sd_restore_params()`'s 256-byte read buffer was too small
+  for the actual ~840-byte backup.json — most bool toggles were silently never restored. Grown
+  to 1536 bytes; see `reference/session_recaps.md` (2026-07-25 entry) for detail.
+- Did not port the old project's calibration/dew-point/primary-probe-override features —
+  out of scope. Hardware validation still outstanding (no physical sensor tested yet).
+- Build: RAM 19.6%, Flash 20.4%.
+
 ## 2026-07-24 Security Fix
 
 - Found and fixed a leaked credential: `assets/dashboard.html` (and the same-day

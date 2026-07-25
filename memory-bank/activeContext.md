@@ -1,87 +1,85 @@
 # Active Context — Current Session State
 
-**Date:** 2026-07-24  
-**Session:** Security fix (leaked dashboard credential + RBAC cleanup) + web dashboard central gauge  
+**Date:** 2026-07-25  
+**Session:** I2C humidity/temp sensors (SHT31 internal + SHT20 external) — sensing, display, backup/restore  
 **Status:** BUILDABLE, PHASE 5 STILL ACTIVE, DEVICE REFLASH PENDING (blocked on hardware)
 
 ## Current Focus
 
 ### What Was Confirmed This Session
 
-- A project evaluation found `assets/dashboard.html` and `assets/dashboard_virtual_preview.html`
-  hardcoded the real device password (`P@lli5ter`) as the "admin"/"superadmin" demo login,
-  committed to git since Phase 12. That value matched the real `web_server_password`/
-  `ota_password` in `secrets.yaml` — anyone viewing the dashboard's page source had the real
-  device/OTA credential.
-- The three-tier guest/admin/superadmin model was never backed by anything server-side —
-  ESPHome's `web_server.auth` supports exactly one username/password pair, so the tier split and
-  the `web_admin_users` role-mapping comment in `esp32-p4-coolroom.yaml` described a feature
-  that was never implemented.
+- Added SHT31 (0x44, internal/coolroom) and SHT20 (0x40, external/ambient) humidity+temp sensors
+  on the existing shared I2C bus (GPIO7/8, item-19 4-pin header) — no GPIO conflicts, no new
+  connector. RTC (0x51) and GT911 touch (0x5D) already share this bus at distinct addresses.
+  Confirmed sensor placement via a clarifying question: SHT31 = internal, SHT20 = external.
+- `esp32-p4-coolroom.yaml`'s `i2c:` block had a Phase 2 comment reserving the bus for RTC only
+  ("NOT for temperature sensors") — judged humidity as new capability RS485 RTD can't provide at
+  all, not a reopening of that decision, and updated the comment to explain both.
+- **Found and fixed a real pre-existing bug**: `p4_logging.h`'s `p4_sd_restore_params()` read
+  `backup.json` into `char buf[256]`, but the file is already ~840 bytes — most bool toggles were
+  silently never parsed by `strstr`, meaning restore was quietly keeping in-memory defaults for
+  much of the existing feature-toggle set (not just the new humidity ones). Grown to 1536 bytes.
 
 ### Latest Completed Work
 
-- Rotated `ota_password` and `web_server_password` in `secrets.yaml` (git-ignored, not
-  committed) to new random values.
-- Reworked `assets/dashboard.html`: login now verifies the entered credential against the live
-  device instead of a hardcoded value; collapsed to the two tiers that actually exist (guest /
-  operator); removed the fake "User Management" panel.
-- Fixed the same leaked-password issue in `assets/dashboard_virtual_preview.html`.
-- Rewrote `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md` to match the
-  real two-tier, UI-only-visibility model.
-- Removed the misleading `web_admin_users` comment from `esp32-p4-coolroom.yaml`.
-- Repo-wide grep confirmed no remaining references to the leaked password string.
-- Reworked the web dashboard's central display (`assets/dashboard.html`) into an SVG horseshoe
-  gauge mirroring the LVGL touchscreen's three concentric arcs (coolroom/setpoint/ambient temp),
-  same colors, sweep geometry, and `(temp+20)/35*100` percent formula as the firmware. Added
-  `sensor.probe3_temp` (ambient) to the dashboard's state parsing — previously unused.
-- Updated `assets/dashboard_virtual_preview.html` (static offline mock) with the same gauge and
-  mock readings, then published it via the Artifact tool for actual visual review. The gauge
-  renders correctly — this closes the "not visually verified" gap from the initial gauge work.
+- Added `sht3xd`/`htu21d` raw sensors + enable-gated `probe_internal_temp/humidity` and
+  `probe_external_temp/humidity` template sensors (mirrors the probe2/probe3 pattern), plus
+  `input_humidity_internal_enabled`/`input_humidity_external_enabled` NVS globals and
+  `sht31_online`/`sht20_online` diagnostics.
+- LVGL right panel: added `lbl_int_humidity_large`/`lbl_ext_humidity_large`, retightened all 5
+  right-panel items from 100px to 88px spacing to fit the 496px container.
+- `p4_sd_backup_params()`/`p4_sd_restore_params()`: added the two new bool params, threaded
+  through all three call sites (boot restore, manual backup button, manual restore button).
+- `assets/dashboard.html` + `dashboard_virtual_preview.html`: added an Internal/External
+  reading-pill row under the gauge panel; preview republished to the same Artifact URL.
+- `reference/hardware_pins.md`: documented the I2C address table, shared-bus wiring, and a
+  cable-length caution for the external sensor's run outside the enclosure.
+- Did **not** port the old project's calibration-offset/dew-point/primary-probe-override
+  features — out of scope for this request.
 
 ### Build Status
 
 ```text
 Compile: successful via ./tools/esphome_compile.sh
-RAM:   19.5% (112,176 / 576,464 bytes)
-Flash: 20.3% (1,491,976 / 7,340,032 bytes; about 1.49 MB of a 7 MB OTA slot)
+RAM:   19.6% (112,992 / 576,464 bytes)
+Flash: 20.4% (1,498,584 / 7,340,032 bytes; about 1.50 MB of a 7 MB OTA slot)
 Warning level: only generic ESP-IDF experimental-features warning remains
 ```
 
 ### Immediate Next Actions
 
-1. **Reflash the physical device** (`esphome upload`) so the rotated OTA/web credentials take
-   effect — this is the one item from this session that cannot be closed out from the repo
-   alone. Until reflashed, the device still expects the old (now-public-in-history) password.
-   **Blocked on hardware**: the ESP32-P4 board is not currently connected this session (no
-   USB/OTA path available) — do this first thing next time the board is on hand, before any
-   other hardware-gated work.
-2. Consider whether the leaked password should also be scrubbed from git history
-   (`git filter-repo`/BFG) — rotation matters more, but history scrubbing was flagged as an
-   option.
-3. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below) —
-   this session's work was a security fix + dashboard UI change, not Phase 5 feature progress.
+1. **Hardware validation for the new sensors** — no physical SHT31/SHT20 has been tested against
+   this firmware yet. Verify actual I2C addresses on the physical breakouts before flashing (some
+   SHT31 boards ship with ADDR pulled to 0x45 instead of 0x44) — blocked, device not connected.
+2. **Reflash the physical device** (`esphome upload`) — still pending from the prior session's
+   credential rotation, same standing hardware blocker.
+3. Resume the pre-existing Phase 5 hardware validation items (see Outstanding Items below).
 
 ### Outstanding Items
 
 1. Phase 5 is still open in the firmware header and instructions.
-2. Hardware validation is still required for the offline-safe and SD-card changes on this
-   ESP32-P4 board (no-reboot-on-WiFi-loss, SD write behavior, ntfy reconnect behavior).
-3. RTC identity (0x51 vs 0x68) still needs confirmation via I2C scan or chip marking inspection.
-4. Device reflash for the rotated credentials (see Immediate Next Actions #1) is outstanding and
-   blocked — hardware is not currently connected.
-5. If real server-side dashboard authorization is ever wanted, it requires either ESPHome
-   gaining multi-account/role support or a proxy in front of `web_server` — don't reintroduce
-   fake role tiers in the dashboard in the meantime.
+2. Hardware validation still required for: offline-safe/SD-card behavior, RTC identity (0x51 vs
+   0x68), and now the new SHT31/SHT20 sensors (address confirmation, physical wiring, cable-run
+   integrity check for the external sensor). All blocked — device not currently connected.
+3. Device reflash for the rotated web/OTA credentials (from the 2026-07-24 security-fix session)
+   is still outstanding, same hardware blocker.
+4. If real server-side dashboard authorization is ever wanted, it requires either ESPHome gaining
+   multi-account/role support or a proxy in front of `web_server` — don't reintroduce fake role
+   tiers in the dashboard in the meantime.
+5. Decide whether the old project's calibration-offset/dew-point/primary-probe-override features
+   are worth porting later — deliberately left out of this pass.
 
 ### Key Anchors For Resume
 
 - Firmware status header: `esp32-p4-coolroom.yaml`
 - Current recap history: `reference/session_recaps.md`
 - Main resume handover: `HANDOVER_NOTES_2026-07-18.md`
+- Hardware/I2C reference: `reference/hardware_pins.md`
 - Dashboard access model: `reference/RBAC_USER_GUIDE.md`, `reference/AUTHENTICATION_GUIDE.md`
 - Historical LVGL handover: `reference/HANDOVER_2026-07-18.md`
 
 ---
 
-**Ready for:** Device reflash to apply rotated credentials (blocked — hardware not connected this
-session), then Phase 5 hardware validation on the ESP32-P4 target.
+**Ready for:** Hardware validation of the new humidity/temp sensors plus the still-pending
+credential reflash (both blocked — hardware not connected this session), then Phase 5 hardware
+validation on the ESP32-P4 target.

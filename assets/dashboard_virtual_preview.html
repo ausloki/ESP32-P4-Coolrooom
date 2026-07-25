@@ -130,6 +130,12 @@
     .gauge-temp { font-size: 44px; font-weight: 300; color: #30D158; line-height: 1; letter-spacing: -0.01em; }
     .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
     .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .gauge-readings { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .gauge-reading { flex: 1 1 160px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+    .gauge-reading-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.5); }
+    .gauge-reading span:last-child { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+    .gauge-reading.internal span:last-child { color: #00BCD4; }
+    .gauge-reading.external span:last-child { color: #FF1493; }
     @media (max-width: 440px) {
       .gauge-panel { grid-template-columns: 1fr; }
       .gauge-icons { grid-column: 1; flex-direction: row; justify-content: center; }
@@ -254,6 +260,16 @@
         <div class="gauge-info">
           <div class="gauge-info-line">📶 -61 dBm</div>
           <div class="gauge-info-line">⏱ 2d 7h</div>
+        </div>
+      </div>
+      <div class="gauge-readings">
+        <div class="gauge-reading internal">
+          <span class="gauge-reading-label">Internal (SHT31)</span>
+          <span>4.1°C · 58%RH</span>
+        </div>
+        <div class="gauge-reading external">
+          <span class="gauge-reading-label">External (SHT20)</span>
+          <span>18.6°C · 41%RH</span>
         </div>
       </div>
     </div>
