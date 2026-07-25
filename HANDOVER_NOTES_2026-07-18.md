@@ -2,11 +2,40 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
-**Status**: In Progress — decorative probe-source selects removed; hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: `d13c3d7` (refactor(yaml): remove decorative probe-source select entities)
+**Status**: In Progress — touchscreen PIN gate added; hardware validation + device reflash both blocked, hardware not currently connected  
+**Last Commit**: pending — see `reference/session_recaps.md` 2026-07-25 "Touchscreen PIN Gate" entry
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-25 Addendum — Touchscreen PIN Gate + LVGL Page-Navigation Fix
+
+- Added a 4-digit PIN lock on the LVGL settings screens, matching the earlier S3 project's djb2-
+  hash design: default PIN `0000`, changeable from the touchscreen keypad (`page_set_pin`, via a
+  "Change PIN" button on `page_settings_1`) or the web dashboard's admin section (new
+  `input_change_pin_web` text entity). Plaintext PIN is never stored or published anywhere —
+  only a djb2 hash persists (`ctl_pin_hash`).
+- **Important discovery**: this project's LVGL tab-bar buttons never actually called
+  `lvgl.page.show`/`.next`/`.previous` — they only updated unused diagnostic globals. Confirmed
+  via ESPHome's own `lvgl/widgets/page.py` that `pages:` requires one of those three explicit
+  actions; there's no implicit swipe fallback. **The touchscreen's Settings/Info tab buttons have
+  never worked** — home rendered fine (it's page index 0, shown by default at boot), but nothing
+  else was reachable by touch. This went unnoticed because hardware validation has been
+  outstanding all along (device not connected any session so far). `memory-bank/progress.md`'s
+  "Phase 9 ... ✅ Complete" note did not reflect actual on-device behavior. Fixed as a
+  prerequisite for the PIN gate (had to redirect to a real page), not a separate detour.
+- Settings pages now branch on `ctl_settings_unlocked`: unlocked goes straight through, locked
+  redirects to a numeric keypad (`page_pin_entry`) and remembers which page was requested. Home
+  resets the unlock flag. Info stays ungated (read-only diagnostics).
+- Web-side change: `input_change_pin_web` (`text:` platform, `mode: password`) deliberately never
+  calls `publish_state()` — confirmed via ESPHome's `web_server.cpp` that password mode only
+  masks the JSON response's display field, not the underlying raw value, so the only way to keep
+  the plaintext PIN off the REST API entirely is to never let it become the entity's state.
+- Build: RAM 20.0% (115,360/576,464 B), Flash 20.7% (1,516,936/7,340,032 B). Compile clean.
+- **Untested on hardware** — including the page-navigation fix. First thing to verify once the
+  device is connected.
 
 ---
 

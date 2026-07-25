@@ -143,6 +143,42 @@ inline float p4_free_psram_kb() {
     return static_cast<float>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)) / 1024.0f;
 }
 
+// ─── Settings-screen PIN lock ──────────────────────────────────────────────
+// Same design as the earlier S3 project: the 4-digit PIN is never stored in
+// plaintext — only a djb2 hash (ctl_pin_hash global) persists across
+// restarts. ctl_pin_buf holds the digits currently being typed on either the
+// LVGL keypad (page_pin_entry / page_set_pin) and is cleared immediately
+// after each hash check or save.
+
+/// Append a digit to the PIN entry buffer, capped at max_len (default 4).
+inline bool p4_pin_append_digit(std::string& buf, char digit, size_t max_len = 4) {
+    if (buf.size() >= max_len) return false;
+    buf.push_back(digit);
+    return true;
+}
+
+/// Remove the last digit from the PIN entry buffer.
+inline bool p4_pin_backspace(std::string& buf) {
+    if (buf.empty()) return false;
+    buf.pop_back();
+    return true;
+}
+
+/// Mask the PIN entry buffer for on-screen display (each digit -> '*').
+inline std::string p4_pin_masked(const std::string& buf) {
+    return std::string(buf.size(), '*');
+}
+
+/// djb2 string hash — used to compare/store the PIN without keeping it in
+/// plaintext. Not cryptographic; sufficient for a 4-digit local keypad lock
+/// where the threat model is "don't leave the PIN sitting in flash/logs as
+/// plaintext", not "resist a targeted brute-force attack."
+inline uint32_t p4_pin_hash_djb2(const std::string& pin) {
+    uint32_t h = 5381;
+    for (char c : pin) h = ((h << 5) + h) + static_cast<uint8_t>(c);
+    return h;
+}
+
 // ─── RTC Notes ──────────────────────────────────────────────────────────────
 // The ESP32-P4 board has an onboard PCF8563 RTC (item 11, I2C addr 0x51).
 // ESPHome's pcf8563 component handles all RTC I2C communication.

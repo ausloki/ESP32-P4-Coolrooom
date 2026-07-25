@@ -1,5 +1,20 @@
 # Progress Tracking
 
+## 2026-07-25 Touchscreen PIN Gate + LVGL Page-Navigation Fix
+
+- Added a 4-digit PIN lock on the LVGL settings screens (djb2 hash, default `0000`, changeable
+  from the touchscreen keypad or the web dashboard's admin section) — same design as the earlier
+  S3 project.
+- **Correction to this file's own history**: while wiring the gate, found that the LVGL tab-bar
+  buttons never called `lvgl.page.show` — only diagnostic globals were updated. The "Phase 9 ...
+  Complete" note in `reference/session_recaps.md` (2026-07-18) did not reflect actual on-device
+  behavior; the Settings/Info tabs have never worked by touch. Fixed as part of this session
+  (required for the PIN gate to redirect anywhere real). See the 2026-07-25 "Touchscreen PIN
+  Gate" recap entry for the full explanation — not editing the 2026-07-18 entry itself, per this
+  project's convention of correcting history with a new dated entry rather than rewriting old
+  ones.
+- Build: RAM 20.0%, Flash 20.7%. Compile clean. Untested on physical hardware (not connected).
+
 ## 2026-07-25 Second RTD Board Removed, Ambient Remapped to SHT20
 
 - Removed the dedicated ambient RTD board (RS485 slave 101, `probe3_temp`) — SHT20 already

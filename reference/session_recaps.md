@@ -1374,3 +1374,78 @@ block/section header (`"Select Entities (Phase 7: Probe source profiles)"`) from
 again. Compile clean.
 
 ---
+
+## 2026-07-25 — Touchscreen PIN Gate (Same Design as Earlier S3 Project)
+
+**Session scope**: Add a 4-digit PIN lock on the LVGL settings screens, default 0000, changeable
+from either the touchscreen keypad or the web dashboard's admin section. User confirmed this
+should match the earlier S3 project's approach.
+
+**Researched the old project's implementation first**
+(`/Volumes/Scratch/Documents/ESP32-Coolroom-Prescision/esp32-coolroom.yaml` +
+`esphome_includes.h`): PIN stored as a djb2 string hash in a persistent `uint32_t` global
+(never plaintext), a runtime entry buffer cleared after every check, an `lvgl` numeric keypad
+page for unlock, a second keypad page reused for first-set/change, and a "Change PIN" button
+inside the (already-gated) settings area. Ported the same design rather than inventing a new one.
+
+**Significant discovery made while wiring the gate**: this project's LVGL tab-bar buttons
+(`switch_to_page_home`/`_settings_1/2/3`/`_info`) only ever flipped diagnostic-only
+`page_*_active` globals — none of them called `lvgl.page.show`, `lvgl.page.next`, or
+`lvgl.page.previous`. Confirmed by reading ESPHome's own `lvgl/widgets/page.py`: with `pages:`,
+navigation is exclusively driven by those three explicit actions — there is no implicit
+swipe-based default. **The on-screen tab bar has never actually changed the displayed page on
+this firmware.** `page_home` rendered correctly because it's page index 0 (shown at boot by
+default), which is exactly why this went unnoticed through every prior session — hardware
+validation has been outstanding the whole time (device not connected), so nobody has actually
+tapped "Settings"/"Info" on the physical unit and watched nothing happen. `progress.md`'s Phase 9
+entry ("LVGL page navigation ... ✅ Complete") was therefore incorrect for the actual on-device
+behavior, even though it compiled and looked complete in the YAML. Fixed as a prerequisite for
+the PIN gate to work at all (the gate has to redirect to a real page), not a separate detour.
+
+**What changed**:
+
+- `p4_helpers.h`: added `p4_pin_append_digit`/`p4_pin_backspace`/`p4_pin_masked`/
+  `p4_pin_hash_djb2` (same djb2 algorithm as the old project).
+- New globals: `ctl_pin_hash` (persistent, initial value = djb2("0000") = 2088252485 — PIN is
+  0000 out of the box, no forced first-boot setup flow needed since the default is already
+  baked into the global's initial value), `ctl_pin_buf` (transient entry buffer),
+  `ctl_settings_unlocked` (session flag, reset on Home), `ctl_pin_target` (which settings page
+  to land on after a successful unlock), `ctl_pin_save_ok` (explicit result flag for the Save
+  button — avoids inferring success from buffer emptiness, which was ambiguous for a 0-digit
+  Save press).
+- `switch_to_page_home`/`_settings_1/2/3`/`_info`: added the missing `lvgl.page.show` calls
+  (real navigation fix). The three settings scripts now branch on `ctl_settings_unlocked`:
+  unlocked goes straight to the requested page, locked redirects to `page_pin_entry` and
+  remembers which page was wanted via `ctl_pin_target`. `switch_to_page_home` resets
+  `ctl_settings_unlocked = false`. `switch_to_page_info` stays ungated — read-only diagnostics,
+  same treatment as the web dashboard's Health section.
+- Two new LVGL pages: `page_pin_entry` (unlock keypad, checks hash, routes to `ctl_pin_target`)
+  and `page_set_pin` (set/change keypad, requires exactly 4 digits, persists the new hash via
+  `global_preferences->sync()`). Numeric keypad grid (3×3 digits + backspace/0/OK-or-Save),
+  masked entry display, laid out for this board's 1024×600 canvas (the old project's layout was
+  800×480 and needed rescaling, not a direct copy).
+- "🔒 Change PIN" button added to `page_settings_1`'s header bar (top-right) — only reachable
+  from within already-unlocked settings, so no separate old-PIN re-verification was needed there
+  (unlike the web-side control below, which sits on an unauthenticated-by-default page).
+- New `text:` entity `input_change_pin_web` (`platform: template`, `mode: password`,
+  `min_length`/`max_length: 4`, `pattern: "^[0-9]{4}$"`) for changing the PIN from the web
+  dashboard. Deliberately never calls `publish_state()` in `set_action` — confirmed via
+  `web_server.cpp`'s `handle_text_request`/`text_json_` that `mode: password` only masks the
+  JSON response's `state` field, while the raw `value` field mirrors the same underlying
+  `obj->state` unmasked. The only way to guarantee the plaintext PIN never becomes readable via
+  the REST API is to never let it become this entity's published state at all.
+- `assets/dashboard.html` (+ `dashboard_virtual_preview.html`, static mock only): added a
+  password-masked 4-digit input + "Change PIN" button to the System Administration section,
+  `changeTouchscreenPin()` POSTs to `/text/input_change_pin_web/set?value=<pin>` using the same
+  `postWithFallback()` helper the light toggle already uses. Gated to `operator` like every
+  other admin control. Artifact republished at the same URL.
+
+**Build**: RAM 20.0% (115,360/576,464 B), Flash 20.7% (1,516,936/7,340,032 B) — up from two new
+LVGL pages plus the keypad widget count, still comfortably inside the 6.0 MB soft budget.
+Compile clean (one transient native-IDF `REQUIRES`/arm64-ninja failure on first attempt,
+auto-recovered on retry — same known flake as prior sessions, unrelated to this change).
+
+**Hardware-gated follow-up**: none of this — including the page-navigation fix — has been tested
+on the physical touchscreen yet. That's the first thing to verify once the device is connected.
+
+---

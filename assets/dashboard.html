@@ -567,6 +567,11 @@
                     <button onclick="configureWiFi()" class="danger">📡 WiFi Settings</button>
                     <button onclick="hardwareSettings()" class="danger" style="margin-left: 5px;">⚙️ Hardware Config</button>
                 </div>
+                <div>
+                    <h3>Touchscreen Access PIN</h3>
+                    <input type="password" id="newPinInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New 4-digit PIN" style="width: 140px; padding: 8px;">
+                    <button onclick="changeTouchscreenPin()" style="margin-left: 5px;">🔒 Change PIN</button>
+                </div>
             </div>
         </div>
 
@@ -1281,6 +1286,31 @@
                 return;
             }
             fetchStatus();
+        }
+
+        // Touchscreen PIN change — the other control wired to a real endpoint.
+        // ESPHome exposes POST /text/<id>/set?value=<x> for text entities;
+        // input_change_pin_web never publishes the submitted value back as its
+        // state (see the set_action comment in esp32-p4-coolroom.yaml), so
+        // there's nothing to read back here — just report success/failure.
+        async function changeTouchscreenPin() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to change the PIN');
+                return;
+            }
+            const input = document.getElementById('newPinInput');
+            const pin = input.value;
+            if (!/^[0-9]{4}$/.test(pin)) {
+                showAlert('warning', 'PIN must be exactly 4 digits');
+                return;
+            }
+            const ok = await postWithFallback(`/text/input_change_pin_web/set?value=${encodeURIComponent(pin)}`);
+            input.value = '';
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to change the PIN');
+                return;
+            }
+            showAlert('success', 'Touchscreen PIN updated');
         }
 
         // Settings update functions (role-protected)

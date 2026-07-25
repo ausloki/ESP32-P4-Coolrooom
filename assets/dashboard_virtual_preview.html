@@ -303,13 +303,15 @@
         <h2>🔐 System Administration</h2>
         <span class="lock-chip" id="adminLockChip">🔒 Login to edit</span>
       </div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
         <button class="btn danger" disabled>📦 Backup</button>
         <button class="btn danger" disabled>📥 Restore</button>
         <button class="btn danger" disabled>🗑️ Delete Logs</button>
         <button class="btn" disabled>📥 Download Logs</button>
         <button class="btn danger" disabled>📡 WiFi Settings</button>
         <button class="btn danger" disabled>⚙️ Hardware Config</button>
+        <input type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN" disabled style="width: 140px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
+        <button class="btn" disabled>🔒 Change PIN</button>
       </div>
     </section>
 
