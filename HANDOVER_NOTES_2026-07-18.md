@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
 **Status**: In Progress — dew-point-triggered early defrost ported from the old S3 project, manual per-probe calibration offset added; hardware validation + device reflash both blocked  
-**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
+**Last Commit**: `7260442` (feat(control): port dew-point early defrost, add manual per-probe calibration offset)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
