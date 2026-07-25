@@ -14,15 +14,22 @@
 # Schematic: https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/
 #
 # TEMPERATURE SENSOR ARCHITECTURE
-# All temperature probes are RS485 RTD (Waveshare BRT-PT100AD or equivalent).
-# There are NO I2C temperature sensors. I2C is reserved for the onboard RTC
-# (chip identity not confirmed from local schematic text extraction; verify on
-# physical hardware, with PCF8563 currently treated as the working assumption).
+# Coolroom + evaporator temperature are RS485 RTD (Waveshare BRT-PT100AD or
+# equivalent) — that decision is unchanged from Phase 2. External/ambient
+# temperature and all humidity readings come from I2C sensors instead (RS485
+# RTD has no humidity capability at all, and the second RTD board that used
+# to cover ambient has been decommissioned in favor of the I2C SHT20 — one
+# less RS485 board to wire/maintain, and humidity comes along for free). I2C
+# also carries the onboard RTC (chip identity not confirmed from local
+# schematic text extraction; verify on physical hardware, with PCF8563
+# currently treated as the working assumption) and the GT911 touch
+# controller. See reference/hardware_pins.md for the full I2C address table.
 #
 # PROBE MAP
-#   Probe 1 (coolroom primary)  — RTD board 1, CH1, addr 100
-#   Probe 2 (evaporator/defrost)— RTD board 1, CH2, addr 100
-#   Probe 3 (ambient reference) — RTD board 2, CH1, addr 101
+#   Probe 1 (coolroom primary)   — RTD board 1, CH1, addr 100
+#   Probe 2 (evaporator/defrost) — RTD board 1, CH2, addr 100
+#   Ambient (external reference) — I2C SHT20 @ 0x40 (probe_external_temp)
+#   Internal (secondary/humidity)— I2C SHT31 @ 0x44 (probe_internal_temp)
 #
 # RELAY MAP (Waveshare Modbus RTU Relay 4-CH, addr 1)
 #   Coil 0 = Defrost   Coil 1 = Compressor
@@ -30,7 +37,7 @@
 #
 # PHASE STATUS
 #   Phase 1: WiFi, HA native API, web server, OTA            ✓
-#   Phase 2: RS485 Modbus — relays + 3x RTD probes           ✓
+#   Phase 2: RS485 Modbus — relays + 2x RTD probes           ✓
 #   Phase 3: Coolroom control logic                          ✓
 #   Phase 4: LVGL 7" MIPI-DSI touchscreen UI                ✓
 #   Phase 5: SD card logging, ntfy, backup/restore           ← CURRENT
@@ -69,11 +76,6 @@ substitutions:
   rtd_temp_reg_ch1:             "1"
   rtd_temp_reg_ch2:             "2"
   rtd_temp_scale:               "0.1"
-
-  # ── RTD board 2: Ambient (CH1 only), addr 101 ─────────────────────────────
-  # ⚠️  Set this address on the physical device before deployment.
-  modbus_rtd2_address: "101"
-  rtd2_temp_reg_ch1:   "1"
 
   # ── WiFi co-processor (ESP32-C6 via SDIO) ─────────────────────────────────
   # ✅ CONFIRMED from Waveshare esp32_p4_function_ev_board.h (CONFIG_BSP_BOARD_TYPE_FIB)
@@ -173,7 +175,6 @@ esphome:
               float smart_delta = id(ctl_smart_delta_c);
               float smart_dwell = id(ctl_smart_dwell_min);
               bool probe2_en = id(input_probe2_enabled);
-              bool probe3_en = id(input_probe3_enabled);
               bool door_mode_nc = id(ctl_door_sensor_mode_is_nc);
               bool door_en = id(input_door_sensor_enabled);
               bool siren_en = id(input_siren_enabled);
@@ -189,7 +190,7 @@ esphome:
                   lockout, def_grace, def_int, def_dur, def_drip, def_end,
                   alarm_persist, alarm_hyst, door_delay, no_cool, ice_delta,
                   fb_on, fb_off, smart_delta, smart_dwell,
-                  probe2_en, probe3_en, door_mode_nc, door_en, siren_en,
+                  probe2_en, door_mode_nc, door_en, siren_en,
                   defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
                   hum_int_en, hum_ext_en)) {
                     id(ctl_setpoint)         = sp;
@@ -212,7 +213,6 @@ esphome:
                 id(ctl_smart_delta_c) = smart_delta;
                 id(ctl_smart_dwell_min) = smart_dwell;
                 id(input_probe2_enabled) = probe2_en;
-                id(input_probe3_enabled) = probe3_en;
                 id(ctl_door_sensor_mode_is_nc) = door_mode_nc;
                 id(input_door_sensor_enabled) = door_en;
                 id(input_siren_enabled) = siren_en;
@@ -483,20 +483,6 @@ modbus_controller:
           id(hw_rs485_rtd1_ok) = false;
           ESP_LOGW("rs485", "RTD board 1 OFFLINE");
 
-  - id: rtd_board_2
-    address: ${modbus_rtd2_address}
-    modbus_id: rs485_modbus
-    setup_priority: -10
-    update_interval: 10s
-    on_online:
-      - lambda: |-
-          id(hw_rs485_rtd2_ok) = true;
-          ESP_LOGI("rs485", "RTD board 2 (ambient) ONLINE");
-    on_offline:
-      - lambda: |-
-          id(hw_rs485_rtd2_ok) = false;
-          ESP_LOGW("rs485", "RTD board 2 (ambient) OFFLINE");
-
 ##############################################################################
 # Relay Switches — coils 0-3 on relay_board
 ##############################################################################
@@ -703,20 +689,6 @@ sensor:
           if (!isnan(x)) id(rtd1_ch2_last_ms) = millis();
           return x * ${rtd_temp_scale};
 
-  # ── RTD board 2 raw (internal — ambient) ──────────────────────────────────
-  - platform: modbus_controller
-    modbus_controller_id: rtd_board_2
-    id: rtd2_ch1_raw
-    internal: true
-    register_type: holding
-    address: ${rtd2_temp_reg_ch1}
-    value_type: S_WORD
-    accuracy_decimals: 1
-    filters:
-      - lambda: |-
-          if (!isnan(x)) id(rtd2_ch1_last_ms) = millis();
-          return x * ${rtd_temp_scale};
-
   # ── Published probe sensors ────────────────────────────────────────────────
   - platform: template
     id: probe1_temp
@@ -778,36 +750,16 @@ sensor:
           id: lbl_evap_temp_large
           text: !lambda 'return p4_fmt_temp(x, false);'
 
-  - platform: template
-    id: probe3_temp
-    name: "Ambient Temperature (External Reference)"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    state_class: measurement
-    device_class: temperature
-    update_interval: 10s
-    web_server:
-      sorting_group_id: group_probes
-      sorting_weight: 3
-    lambda: |-
-      if (!id(input_probe3_enabled)) return NAN;
-      return p4_rtd_or_nan(id(rtd2_ch1_raw).state);
-    on_value:
-      - lvgl.label.update:
-          id: lbl_ambient_temp_large
-          text: !lambda 'return p4_fmt_temp(x, false);'
-      - lvgl.arc.update:
-          id: home_ambient_arc
-          value: !lambda |-
-            if (!p4_rtd_valid(x)) return 0;
-            return (int)((x + 20.0f) / 35.0f * 100.0f);
-
   # ── Humidity/temp sensors — I2C, on the shared bus (see i2c: block above) ──
+  # probe_external_temp (SHT20) is now also the "Ambient" reading — it drives
+  # home_ambient_arc directly below. The dedicated ambient RTD board (probe3,
+  # RTD board 2 @ 101) was decommissioned: SHT20 covers the same external-
+  # reference role and adds humidity, which RTD never could.
   # SHT31 (internal, inside the coolroom): fixed address 0x44 on most breakouts
   # (ADDR pin low); some ship with ADDR pulled high = 0x45 instead — check the
   # physical board/datasheet before flashing. Raw readings are internal; the
   # public probe*_humidity/probe*_temp sensors below gate on their enable flag
-  # the same way probe2_temp/probe3_temp already do.
+  # the same way probe2_temp already does.
   - platform: sht3xd
     address: 0x44
     update_interval: 30s
@@ -897,6 +849,11 @@ sensor:
             char buf[32];
             snprintf(buf, sizeof(buf), "Ext %.1f°C\n%.0f%%RH", x, id(probe_external_humidity).state);
             return std::string(buf);
+      - lvgl.arc.update:
+          id: home_ambient_arc
+          value: !lambda |-
+            if (isnan(x)) return 0;
+            return (int)((x + 20.0f) / 35.0f * 100.0f);
 
   - platform: template
     id: probe_external_humidity
@@ -943,16 +900,6 @@ sensor:
       sorting_weight: 21
     lambda: 'return p4_sample_age_s(id(rtd1_ch2_last_ms));'
 
-  - platform: template
-    name: "RTD2 Ambient Sample Age (s)"
-    id: rtd2_ch1_age_s
-    unit_of_measurement: "s"
-    update_interval: 15s
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-      sorting_weight: 22
-    lambda: 'return p4_sample_age_s(id(rtd2_ch1_last_ms));'
 
   # ── Phase 5: SD card free space ───────────────────────────────────────────
   - platform: template
@@ -1078,10 +1025,8 @@ text_sensor:
     lambda: |-
       float age_p1 = p4_sample_age_s(id(rtd1_ch1_last_ms));
       float age_p2 = p4_sample_age_s(id(rtd1_ch2_last_ms));
-      float age_p3 = p4_sample_age_s(id(rtd2_ch1_last_ms));
-      char buf[80];
-      snprintf(buf, sizeof(buf), "P1: %.0fs | P2: %.0fs | P3: %.0fs",
-               age_p1, age_p2, age_p3);
+      char buf[48];
+      snprintf(buf, sizeof(buf), "P1: %.0fs | P2: %.0fs", age_p1, age_p2);
       return std::string(buf);
 
   - platform: template
@@ -1139,15 +1084,6 @@ binary_sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 31
     lambda: 'return id(hw_rs485_rtd1_ok);'
-
-  - platform: template
-    id: rs485_rtd2_online
-    name: "RS485 RTD Board 2 (Ambient) Online"
-    device_class: connectivity
-    web_server:
-      sorting_group_id: group_diagnostics
-      sorting_weight: 32
-    lambda: 'return id(hw_rs485_rtd2_ok);'
 
   - platform: template
     id: rtc_online
@@ -1678,22 +1614,6 @@ select:
         ESP_LOGD("select", "Probe 2 source changed to: %s", x.c_str());
         id(select_probe2_source).publish_state(x);
 
-  - platform: template
-    name: "Probe 3 Source"
-    id: select_probe3_source
-    options:
-      - "RTD Board Channel 3"
-      - "SHT20 I2C"
-      - "SHT31 I2C 0x44"
-    initial_option: "RTD Board Channel 3"
-    web_server:
-      sorting_group_id: group_diagnostics
-      sorting_weight: 52
-    set_action:
-      lambda: |-
-        ESP_LOGD("select", "Probe 3 source changed to: %s", x.c_str());
-        id(select_probe3_source).publish_state(x);
-
 ##############################################################################
 # Buttons
 ##############################################################################
@@ -1765,7 +1685,7 @@ button:
           id(ctl_door_alarm_delay_s), id(ctl_no_cool_alarm_min),
           id(ctl_ice_delta_c), id(ctl_fallback_on_min),
           id(ctl_fallback_off_min), id(ctl_smart_delta_c), id(ctl_smart_dwell_min),
-          id(input_probe2_enabled), id(input_probe3_enabled),
+          id(input_probe2_enabled),
           id(ctl_door_sensor_mode_is_nc), id(input_door_sensor_enabled),
           id(input_siren_enabled), id(input_defrost_enabled),
           id(input_fallback_enabled), id(input_defrost_term_temp_enabled),
@@ -1804,7 +1724,6 @@ button:
           float smart_delta = id(ctl_smart_delta_c);
           float smart_dwell = id(ctl_smart_dwell_min);
           bool probe2_en = id(input_probe2_enabled);
-          bool probe3_en = id(input_probe3_enabled);
           bool door_mode_nc = id(ctl_door_sensor_mode_is_nc);
           bool door_en = id(input_door_sensor_enabled);
           bool siren_en = id(input_siren_enabled);
@@ -1820,7 +1739,7 @@ button:
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
               alarm_persist, alarm_hyst, door_delay, no_cool, ice_delta,
               fb_on, fb_off, smart_delta, smart_dwell,
-              probe2_en, probe3_en, door_mode_nc, door_en, siren_en,
+              probe2_en, door_mode_nc, door_en, siren_en,
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en)) {
               id(ctl_setpoint)         = sp;
@@ -1843,7 +1762,6 @@ button:
             id(ctl_smart_delta_c) = smart_delta;
             id(ctl_smart_dwell_min) = smart_dwell;
             id(input_probe2_enabled) = probe2_en;
-            id(input_probe3_enabled) = probe3_en;
             id(ctl_door_sensor_mode_is_nc) = door_mode_nc;
             id(input_door_sensor_enabled) = door_en;
             id(input_siren_enabled) = siren_en;
@@ -2066,7 +1984,7 @@ interval:
           if (id(sd_card_ok) && id(log_tick_count) >= log_every_ticks) {
               id(log_tick_count) = 0;
               p4_sd_log_temps(
-                  id(probe1_temp).state, id(probe2_temp).state, id(probe3_temp).state,
+                  id(probe1_temp).state, id(probe2_temp).state, id(probe_external_temp).state,
                   id(ctl_setpoint), id(relay_compressor).state, id(relay_defrost).state,
                   id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_probe_fault));
           }
@@ -2247,7 +2165,7 @@ interval:
           text: !lambda |-
             char buf[64];
             bool relay_ok = id(hw_rs485_relay_ok);
-            bool rtd_ok = id(hw_rs485_rtd1_ok) && id(hw_rs485_rtd2_ok);
+            bool rtd_ok = id(hw_rs485_rtd1_ok);
             bool rtc_ok = id(hw_rtc_ok);
             snprintf(buf, sizeof(buf), "Relay:%s RTD:%s RTC:%s",
               relay_ok ? "✓" : "✗", rtd_ok ? "✓" : "✗", rtc_ok ? "✓" : "✗");
@@ -2255,11 +2173,13 @@ interval:
       - lvgl.label.update:
           id: lbl_info_probes
           text: !lambda |-
-            char buf[64];
-            bool p1_ok = id(hw_rs485_rtd1_ok);
-            bool p2_ok = id(hw_rs485_rtd2_ok);
-            snprintf(buf, sizeof(buf), "P1:%s P2:%s Fault:%s",
-              p1_ok ? "✓" : "✗", p2_ok ? "✓" : "✗", id(ctl_probe_fault) ? "YES" : "no");
+            char buf[80];
+            bool rtd_ok = id(hw_rs485_rtd1_ok);
+            bool sht31_ok = !isnan(id(sht31_internal_temp_raw).state);
+            bool sht20_ok = !isnan(id(sht20_external_temp_raw).state);
+            snprintf(buf, sizeof(buf), "RTD:%s SHT31:%s SHT20:%s Fault:%s",
+              rtd_ok ? "✓" : "✗", sht31_ok ? "✓" : "✗", sht20_ok ? "✓" : "✗",
+              id(ctl_probe_fault) ? "YES" : "no");
             return std::string(buf);
       - lvgl.led.update:
           id: led_rs485
@@ -2316,11 +2236,6 @@ globals:
     restore_value: no
     initial_value: "false"
 
-  - id: hw_rs485_rtd2_ok
-    type: bool
-    restore_value: no
-    initial_value: "false"
-
   # ── RTC health flag ────────────────────────────────────────────────────────
   - id: hw_rtc_ok
     type: bool
@@ -2338,18 +2253,8 @@ globals:
     restore_value: no
     initial_value: "0"
 
-  - id: rtd2_ch1_last_ms
-    type: uint32_t
-    restore_value: no
-    initial_value: "0"
-
   # ── Probe enable flags (NVS-persistent) ───────────────────────────────────
   - id: input_probe2_enabled
-    type: bool
-    restore_value: yes
-    initial_value: "true"
-
-  - id: input_probe3_enabled
     type: bool
     restore_value: yes
     initial_value: "true"
@@ -3212,23 +3117,17 @@ lvgl:
                         id(ctl_alarm_low_active) = false;
 
               # RIGHT PANEL: Secondary Readings
-              # 5 items now (was 3) — spacing tightened from 100px to 88px
-              # steps to keep everything inside the 496px-tall container.
-              - label:
-                  id: lbl_ambient_temp_large
-                  text: "Ambient\n--°C"
-                  align: CENTER
-                  x: 850
-                  y: 80
-                  text_font: font_small
-                  text_color: col_text
-
+              # 4 items — the old dedicated "Ambient" RTD reading is gone
+              # (RTD board 2 decommissioned); lbl_ext_humidity_large below
+              # already shows the SHT20 external/ambient temp + humidity, so
+              # there's no separate ambient-only label anymore. Spaced at
+              # 116px steps across the 496px-tall container.
               - label:
                   id: lbl_evap_temp_large
                   text: "Evap\n--°C"
                   align: CENTER
                   x: 850
-                  y: 168
+                  y: 80
                   text_font: font_small
                   text_color: col_text
 
@@ -3237,7 +3136,7 @@ lvgl:
                   text: "Int --°C\n--%RH"
                   align: CENTER
                   x: 850
-                  y: 256
+                  y: 196
                   text_font: font_small
                   text_color: col_cyan
 
@@ -3246,7 +3145,7 @@ lvgl:
                   text: "Ext --°C\n--%RH"
                   align: CENTER
                   x: 850
-                  y: 344
+                  y: 312
                   text_font: font_small
                   text_color: col_pink
 
@@ -3255,7 +3154,7 @@ lvgl:
                   text: "Heap: ---"
                   align: CENTER
                   x: 850
-                  y: 432
+                  y: 428
                   text_font: font_small
                   text_color: col_subtext
 

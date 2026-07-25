@@ -165,14 +165,16 @@ The background motion layer is driven from the same 1s LVGL update path as the c
 │  │  └─ NO:  arc value = 0, label = "--°C"                                   │
 │  └─ Update interval: 2000 ms                                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  PROBE3 TEMP UPDATE (every 10s)                                             │
+│  EXTERNAL TEMP UPDATE (every 30s, SHT20 I2C — probe_external_temp)          │
 │  ├─ on_value trigger                                                         │
-│  ├─ VALIDATION: p4_rtd_valid(x)?                                             │
-│  │  ├─ YES: calculate arc value = (int)((x + 20) / 35 * 100)%               │
+│  ├─ VALIDATION: isnan(x)? (NaN when disabled or sensor missing)             │
+│  │  ├─ NO:  calculate arc value = (int)((x + 20) / 35 * 100)%               │
 │  │  │       update home_ambient_arc widget                                   │
-│  │  │       update lbl_ambient_temp_large label                              │
-│  │  └─ NO:  arc value = 0, label = "--°C"                                   │
-│  └─ Update interval: 10000 ms                                               │
+│  │  │       update lbl_ext_humidity_large label (combined temp+RH)          │
+│  │  └─ YES: arc value = 0                                                    │
+│  └─ Update interval: 30000 ms                                               │
+│  (formerly probe3_temp / dedicated ambient RTD board — decommissioned;      │
+│   see reference/hardware_pins.md)                                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  SETPOINT NUMBER CHANGE (on user interaction)                               │
 │  ├─ set_action trigger                                                       │
@@ -200,7 +202,7 @@ The background motion layer is driven from the same 1s LVGL update path as the c
 |--------|-------|-----------|------|---------|-------------|
 | `home_temp_arc` | Blue #0A84FF | 372×372 | 16px | Coolroom temp (outer) | 2s (probe1) |
 | `home_setpoint_arc` | Cyan #00BCD4 | 322×322 | 12px | Setpoint (middle) | on-change |
-| `home_ambient_arc` | Pink #FF1493 | 272×272 | 10px | Ambient temp (inner) | 10s (probe3) |
+| `home_ambient_arc` | Pink #FF1493 | 272×272 | 10px | Ambient temp (inner) | 30s (probe_external_temp, SHT20 I2C) |
 
 All arcs:
 - **Rotation:** 225° start angle, 270° sweep (horseshoe)

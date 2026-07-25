@@ -100,7 +100,7 @@ If any step fails, treat the task as incomplete and resolve before closeout.
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | WiFi, HA API, web server, OTA | ✅ |
-| 2 | RS485 Modbus: relays + 3x RTD + PCF8563 RTC | ✅ |
+| 2 | RS485 Modbus: relays + 2x RTD + PCF8563 RTC | ✅ |
 | 3 | Coolroom control logic (hysteresis, alarms, defrost) | ✅ |
 | 4 | LVGL 7" MIPI-DSI touchscreen dashboard | ✅ |
 | 5 | SD card logging, ntfy notifications, backup/restore | ⏳ |

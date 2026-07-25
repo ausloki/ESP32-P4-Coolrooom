@@ -160,7 +160,7 @@ When firmware changes, **always update in same commit**:
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | WiFi, HA API, web server, OTA | ✅ |
-| 2 | RS485 Modbus: relays + 3x RTD + PCF8563 RTC | ✅ |
+| 2 | RS485 Modbus: relays + 2x RTD + PCF8563 RTC | ✅ |
 | 3 | Coolroom control logic (hysteresis, alarms, defrost) | ✅ |
 | 4 | LVGL 7" MIPI-DSI touchscreen dashboard | ✅ |
 | 5 | SD card logging, ntfy notifications, backup/restore | ⏳ |

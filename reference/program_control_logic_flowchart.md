@@ -4,7 +4,7 @@
 ```mermaid
 flowchart TD
     BOOT([Boot / Power On]) --> INIT[p4_log_boot\np4_ntp_set_fast_sync\nstatus = Booting...]
-    INIT --> RS485[RS485 Modbus\nControllers come online\nrelay_board / rtd_board_1 / rtd_board_2]
+    INIT --> RS485[RS485 Modbus\nControllers come online\nrelay_board / rtd_board_1]
     RS485 --> NTP{NTP Sync\nComplete?}
     NTP -->|No - retry 60s| NTP
     NTP -->|Yes| RTC[PCF8563 RTC synced\nhw_rtc_ok = true\nSNTP → 24h interval]
@@ -65,7 +65,6 @@ sequenceDiagram
     Boot->>RS485: Modbus controllers init (priority -10)
     RS485-->>Boot: relay_board online → hw_rs485_relay_ok = true
     RS485-->>Boot: rtd_board_1 online → hw_rs485_rtd1_ok = true
-    RS485-->>Boot: rtd_board_2 online → hw_rs485_rtd2_ok = true
     NTP-->>Boot: on_time_sync → p4_ntp_set_interval(86400000ms)
     RTC-->>Boot: on_time_sync → hw_rtc_ok = true
     Boot->>HA: API connection established
@@ -80,17 +79,27 @@ sequenceDiagram
 graph LR
     RTD1["RTD Board 1\nModbus addr 100\n9600 8N1"] -->|CH1 reg 1| R1C1["rtd1_ch1_raw\n(internal)"]
     RTD1 -->|CH2 reg 2| R1C2["rtd1_ch2_raw\n(internal)"]
-    RTD2["RTD Board 2\nModbus addr 101\n9600 8N1"] -->|CH1 reg 1| R2C1["rtd2_ch1_raw\n(internal)"]
+    SHT31["SHT31 I2C\naddr 0x44/0x45\nshared bus GPIO7/8"] --> S31R["sht31_internal_temp_raw\n+ humidity_raw (internal)"]
+    SHT20["SHT20 I2C\naddr 0x40\nshared bus GPIO7/8"] --> S20R["sht20_external_temp_raw\n+ humidity_raw (internal)"]
 
     R1C1 -->|p4_rtd_or_nan| P1["probe1_temp\nCoolroom Primary\n★ Control Probe"]
     R1C2 -->|p4_rtd_or_nan| P2["probe2_temp\nEvaporator"]
-    R2C1 -->|p4_rtd_or_nan| P3["probe3_temp\nAmbient"]
+    S31R --> P3I["probe_internal_temp/humidity\nInternal reference"]
+    S20R --> P3E["probe_external_temp/humidity\nAmbient / external reference"]
 
     P1 --> CTL["10s Control Loop\np4_ctl_compressor_eval\np4_ctl_alarm_high/low\np4_ctl_defrost_due"]
+    P2 --> CTL
     CTL --> REL1["relay_compressor\nCoil 1"]
     CTL --> REL0["relay_defrost\nCoil 0"]
     CTL --> REL3["relay_siren\nCoil 3"]
 ```
+
+Note: the dedicated ambient RTD board (RS485 slave 101, formerly `probe3_temp`) has been
+decommissioned. `probe_external_temp` (SHT20) now fills the ambient/external role and drives
+`home_ambient_arc` on the LVGL display — see `reference/hardware_pins.md` for the I2C wiring.
+Only `probe1_temp` and `probe2_temp` feed the 10s control loop; the I2C sensors are
+display/logging-only (see `reference/session_recaps.md`, 2026-07-24 entry, for what was
+deliberately not wired into control logic).
 
 ## Offline Operation Notes
 
@@ -105,7 +114,7 @@ graph LR
 | Phase | Description                                | Status      |
 |-------|--------------------------------------------|-------------|
 | 1     | WiFi, HA API, web server, OTA              | ✅ Complete |
-| 2     | RS485 Modbus: relays + 3x RTD probes, RTC  | ✅ Complete |
+| 2     | RS485 Modbus: relays + 2x RTD probes, RTC  | ✅ Complete |
 | 3     | Coolroom control logic                     | ✅ Complete |
 | 4     | LVGL 7" MIPI-DSI touchscreen UI            | ✅ Complete |
 | 5     | SD card logging, ntfy, backup/restore      | ✅ Complete |

@@ -1,5 +1,17 @@
 # Progress Tracking
 
+## 2026-07-25 Second RTD Board Removed, Ambient Remapped to SHT20
+
+- Removed the dedicated ambient RTD board (RS485 slave 101, `probe3_temp`) — SHT20 already
+  covers ambient and adds humidity. Remapped every consumer (LVGL ambient arc, web dashboard
+  inner ring, SD logging, backup/restore) onto `probe_external_temp`.
+- Found and fixed a mislabeling: LVGL info page + web dashboard "Probe Status" showed a "P2" flag
+  that actually meant "RTD board 2 online," not evaporator probe status. Replaced with
+  `sht31_online`/`sht20_online`.
+- Updated hardware docs, phase-status tables ("3x RTD" → "2x RTD"), and control-flow diagrams to
+  match. See `reference/session_recaps.md` (2026-07-25 entry) for the full change list.
+- Build: RAM 19.5%, Flash 20.4% (both down slightly — one fewer RS485 board).
+
 ## 2026-07-25 I2C Humidity/Temp Sensors
 
 - Added SHT31 (internal, 0x44) + SHT20 (external, 0x40) on the existing shared I2C bus — no GPIO

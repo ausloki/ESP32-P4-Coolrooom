@@ -211,7 +211,6 @@ inline bool p4_sd_backup_params(
     float smart_delta_c,
     float smart_dwell_min,
     bool  probe2_enabled,
-    bool  probe3_enabled,
     bool  door_sensor_mode_is_nc,
     bool  door_sensor_enabled,
     bool  siren_enabled,
@@ -256,7 +255,6 @@ inline bool p4_sd_backup_params(
         "  \"smart_delta_c\": %.1f,\n"
         "  \"smart_dwell_min\": %.1f,\n"
         "  \"probe2_enabled\": %s,\n"
-        "  \"probe3_enabled\": %s,\n"
         "  \"door_sensor_mode_is_nc\": %s,\n"
         "  \"door_sensor_enabled\": %s,\n"
         "  \"siren_enabled\": %s,\n"
@@ -276,7 +274,6 @@ inline bool p4_sd_backup_params(
         no_cool_alarm_min, ice_delta_c, fallback_on_min,
         fallback_off_min, smart_delta_c, smart_dwell_min,
         probe2_enabled ? "true" : "false",
-        probe3_enabled ? "true" : "false",
         door_sensor_mode_is_nc ? "true" : "false",
         door_sensor_enabled ? "true" : "false",
         siren_enabled ? "true" : "false",
@@ -317,7 +314,6 @@ inline bool p4_sd_restore_params(
     float& smart_delta_c,
     float& smart_dwell_min,
     bool&  probe2_enabled,
-    bool&  probe3_enabled,
     bool&  door_sensor_mode_is_nc,
     bool&  door_sensor_enabled,
     bool&  siren_enabled,
@@ -356,7 +352,6 @@ inline bool p4_sd_restore_params(
     float door_delay = NAN, no_cool = NAN, ice_delta = NAN;
     float fb_on = NAN, fb_off = NAN, smart_delta = NAN, smart_dwell = NAN;
     bool b_probe2 = probe2_enabled;
-    bool b_probe3 = probe3_enabled;
     bool b_mode_nc = door_sensor_mode_is_nc;
     bool b_door_en = door_sensor_enabled;
     bool b_siren_en = siren_enabled;
@@ -407,7 +402,6 @@ inline bool p4_sd_restore_params(
     parse_field("\"smart_dwell_min\"", smart_dwell);
 
     parse_bool("\"probe2_enabled\"", b_probe2);
-    parse_bool("\"probe3_enabled\"", b_probe3);
     parse_bool("\"door_sensor_mode_is_nc\"", b_mode_nc);
     parse_bool("\"door_sensor_enabled\"", b_door_en);
     parse_bool("\"siren_enabled\"", b_siren_en);
@@ -453,7 +447,6 @@ inline bool p4_sd_restore_params(
     smart_delta_c      = smart_delta;
     smart_dwell_min    = smart_dwell;
     probe2_enabled     = b_probe2;
-    probe3_enabled     = b_probe3;
     door_sensor_mode_is_nc = b_mode_nc;
     door_sensor_enabled = b_door_en;
     siren_enabled      = b_siren_en;

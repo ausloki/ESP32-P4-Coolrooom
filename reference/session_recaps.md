@@ -1305,3 +1305,55 @@ transient native-IDF `REQUIRES` failure on first attempt, auto-recovered by the 
 `esphome_compile.sh` retry path per its documented behavior — unrelated to this change).
 
 ---
+
+## 2026-07-25 — Removed Second RTD Board, Remapped Ambient to SHT20
+
+**Session scope**: Following the SHT31/SHT20 addition, the dedicated ambient RTD board (RS485
+slave 101, `probe3_temp`) is no longer needed — SHT20 (external, added last session) already
+covers the same ambient role and adds humidity RTD never could. Removed the board and remapped
+every consumer of the old ambient reading onto SHT20 instead.
+
+**What changed**:
+
+- `esp32-p4-coolroom.yaml`: removed `rtd_board_2` modbus_controller, `rtd2_ch1_raw` sensor,
+  `probe3_temp` template sensor, `rtd2_ch1_age_s` diagnostic, `rs485_rtd2_online` binary sensor,
+  `select_probe3_source` (a non-functional decorative dropdown that only logged and republished
+  its own state — never actually switched anything, doubly stale once RTD Channel 3 no longer
+  existed), and the `hw_rs485_rtd2_ok` / `rtd2_ch1_last_ms` / `input_probe3_enabled` globals.
+  Removed the now-unused `modbus_rtd2_address` / `rtd2_temp_reg_ch1` substitutions.
+- `home_ambient_arc`'s LVGL update moved from `probe3_temp`'s `on_value` into
+  `probe_external_temp`'s (SHT20) — same arc widget, same formula, new data source, 30s interval
+  instead of 10s (matches the SHT20 sensor's update rate).
+- `p4_sd_log_temps()`'s ambient column now receives `probe_external_temp` instead of
+  `probe3_temp` — CSV schema/column name unchanged, only the value source changed.
+- Backup/restore: removed `probe3_enabled` from `p4_sd_backup_params()`/`p4_sd_restore_params()`
+  signatures and all three call sites (boot restore, manual backup button, manual restore
+  button). `input_humidity_external_enabled` already gates the SHT20 reading that replaces it.
+- LVGL right panel: dropped the now-redundant standalone "Ambient" label (SHT20's temp+RH was
+  already shown by `lbl_ext_humidity_large`, added last session) — 4 items now, re-spaced at
+  116px steps instead of the tighter 88px used for 5.
+- LVGL info page and web dashboard "Probe Status" panel both used to check `hw_rs485_rtd2_ok`
+  under a "P2" label that actually meant "RTD board 2 online," not "probe 2 (evaporator)" —
+  mislabeled since it was written. Rather than carry that confusion forward, both now show
+  `sht31_online` / `sht20_online` (already-existing diagnostics) alongside the single remaining
+  RTD board's status, which is both accurate and more useful.
+- Header comment block (`esp32-p4-coolroom.yaml` top) rewritten: probe map now lists Ambient as
+  "I2C SHT20 @ 0x40 (probe_external_temp)" instead of "RTD board 2, CH1, addr 101"; phase-status
+  line corrected from "3x RTD probes" to "2x RTD probes" (also fixed in both
+  `copilot-instructions.md` files and `reference/program_control_logic_flowchart.md`).
+- Updated `reference/hardware_pins.md`, `README.md`, `reference/DISPLAY_ARCHITECTURE_VISUAL.md`,
+  `reference/program_control_logic_flowchart.md`, and `reference/control_logic_ns_diagram.md` to
+  remove RTD-board-2 references and describe the SHT20-sourced ambient path instead.
+- `assets/dashboard.html`: dropped the dead `sensor.probe3_temp` state-parse line, repointed the
+  inner gauge ring to `probe_external_temp`, and reworked the "Probe Status" health row from
+  P1/P2 RTD-board flags to SHT31/SHT20 online status (renamed the panel heading to "I2C
+  Sensors"). `dashboard_virtual_preview.html` needed no changes — it never had a probe-status
+  mock section.
+- Left untouched (out of scope): `select_probe1_source` / `select_probe2_source` are the same
+  kind of non-functional decorative dropdown as the removed `select_probe3_source`, but weren't
+  part of this request.
+
+**Build**: RAM 19.5% (112,320/576,464 B), Flash 20.4% (1,496,104/7,340,032 B) — both down
+slightly from last session (one fewer RS485 board driver + sensors). Compile clean.
+
+---

@@ -35,9 +35,12 @@ there is no second I2C connector on this board, and none is needed since I2C alr
 multiple devices sharing one bus. On-board pullups (noted above) are shared across all devices
 on the bus — do not add per-sensor pullup resistors, that would over-pull the bus.
 
-Phase 2 deliberately kept this bus free of temperature sensors (RS485 RTD handles all
-temperature sensing on this project) — that decision is unchanged. Humidity has no RS485
-alternative, so the SHT31/SHT20 additions are new capability, not a duplicate temperature path.
+Phase 2 deliberately kept this bus free of temperature sensors (RS485 RTD handled all
+temperature sensing at the time). That still holds for the primary coolroom probe and the
+evaporator probe (both RTD, RS485). The external/ambient reading has since moved off RS485
+entirely: the dedicated second RTD board (RS485 slave 101) that used to cover it has been
+decommissioned, and SHT20 (this bus) covers that same ambient role now — plus humidity, which
+RTD never could provide at all.
 
 Cable-length caution: the external (SHT20) sensor's cable run leaves the enclosure. Standard
 100kHz I2C over an unshielded multi-meter cable can become unreliable; keep the run as short as

@@ -145,11 +145,11 @@ Timeline (milliseconds):
 │  ├─ 2000 ms ──────────────────────────────────────────────┐       │
 │  │  └─ probe1_temp update fires again                     │       │
 │  │                                                         │       │
-│  │  🔥 probe3_temp on_value (every 10000 ms)             │       │
-│  │  │  ├─ p4_rtd_valid() check                           │       │
+│  │  🌡 probe_external_temp on_value (every 30000 ms, SHT20 I2C) │  │
+│  │  │  ├─ isnan() check (NaN when disabled/sensor missing)   │  │
 │  │  │  ├─ Calculate: value = (int)((x + 20) / 35 * 100)  │       │
 │  │  │  ├─ lvgl.arc.update(home_ambient_arc, value)      │       │
-│  │  │  └─ lvgl.label.update(lbl_ambient_temp_large, ...) │       │
+│  │  │  └─ lvgl.label.update(lbl_ext_humidity_large, ...) │       │
 │  │  │                                                      │       │
 │  │  ├─ 4000 ms ───────────────────────────────────┐      │       │
 │  │  │  └─ probe1_temp update fires again          │      │       │
@@ -160,9 +160,9 @@ Timeline (milliseconds):
 │  │  ├─ 8000 ms ───────────────────────────────────┐      │       │
 │  │  │  └─ probe1_temp update fires again          │      │       │
 │  │  │                                              │      │       │
-│  │  ├─ 10000 ms ──────────────────────────────────┼──────┼──┐    │
-│  │  │  ├─ probe1_temp update (5th time)           │      │  │    │
-│  │  │  └─ probe3_temp update (1st time) ─────────────────┘  │    │
+│  │  ├─ 30000 ms ──────────────────────────────────┼──────┼──┐    │
+│  │  │  ├─ probe1_temp update (15th time)          │      │  │    │
+│  │  │  └─ probe_external_temp update (1st time) ──────────┘  │    │
 │  │  │                                              │         │    │
 │  │  └─ User changes setpoint (EVENT-DRIVEN, not timed) ─────┤    │
 │  │     ├─ id(ctl_setpoint) = new_value                      │    │
@@ -177,7 +177,9 @@ Timeline (milliseconds):
 
 Key Points:
 • probe1_temp fires every 2s (fast, live reading)
-• probe3_temp fires every 10s (slower, ambient reading)
+• probe_external_temp (SHT20, I2C) fires every 30s — slower, ambient reading; drives
+  home_ambient_arc and lbl_ext_humidity_large. The dedicated ambient RTD board (probe3) that
+  used to fill this role has been decommissioned — see reference/hardware_pins.md.
 • setpoint fires on-demand when user adjusts (no periodic update)
 • All updates are asynchronous; LVGL renders new widget state immediately
 ```

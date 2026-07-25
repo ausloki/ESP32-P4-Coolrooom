@@ -10,6 +10,34 @@
 
 ---
 
+## 2026-07-25 Addendum — Removed Second RTD Board, Remapped Ambient to SHT20
+
+- The dedicated ambient RTD board (RS485 slave 101, `probe3_temp`) has been removed — SHT20
+  (added the prior session as the external humidity sensor) already covers the same ambient role
+  and adds humidity, which RTD never could. One less RS485 board to wire/maintain.
+- Every consumer of the old ambient reading was remapped onto `probe_external_temp` (SHT20):
+  `home_ambient_arc` (LVGL inner gauge ring), the web dashboard's inner ring, SD CSV logging
+  (`ambient_c` column, same schema, new source), and backup/restore.
+- Removed: `rtd_board_2` modbus_controller, `rtd2_ch1_raw`, `probe3_temp`, `rtd2_ch1_age_s`,
+  `rs485_rtd2_online`, `select_probe3_source` (a non-functional decorative dropdown — never
+  actually switched anything), and the `hw_rs485_rtd2_ok`/`rtd2_ch1_last_ms`/
+  `input_probe3_enabled` globals. `probe3_enabled` removed from the backup/restore parameter
+  list end-to-end (`p4_logging.h` signatures + all 3 yaml call sites).
+- Fixed a mislabeling found along the way: the LVGL info page and web dashboard's "Probe Status"
+  panel both showed a "P2" flag that actually meant "RTD board 2 online," not "probe 2
+  (evaporator)." Replaced with `sht31_online`/`sht20_online` (already existed) — more accurate
+  and more useful than what it replaced.
+- Updated: `esp32-p4-coolroom.yaml` header comment/probe map/phase-status ("3x RTD" → "2x RTD",
+  also fixed in both `copilot-instructions.md` files), `reference/hardware_pins.md`, `README.md`,
+  `reference/DISPLAY_ARCHITECTURE_VISUAL.md`, `reference/program_control_logic_flowchart.md`,
+  `reference/control_logic_ns_diagram.md`, `assets/dashboard.html`.
+- Left untouched (out of scope): `select_probe1_source`/`select_probe2_source` are the same kind
+  of non-functional dropdown as the removed one, but weren't part of this request.
+- Build: RAM 19.5% (112,320/576,464 B), Flash 20.4% (1,496,104/7,340,032 B) — both down slightly.
+  Compile clean.
+
+---
+
 ## 2026-07-25 Addendum — I2C Humidity/Temp Sensors: SHT31 (Internal) + SHT20 (External)
 
 - Added `sht3xd` (SHT31, 0x44) inside the coolroom and `htu21d` (SHT20, 0x40) as an external

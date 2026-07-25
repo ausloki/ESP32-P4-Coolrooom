@@ -223,3 +223,7 @@ The project uses `code-review-graph` for change-impact analysis (same workflow a
   - CH1 register 01 = coolroom temperature × 0.1 °C
   - CH2 register 02 = evaporator temperature × 0.1 °C
   - Universal commissioning address 249 (guarded, only probed on conflict)
+
+A second RTD board (slave 101) used to cover the external/ambient reading; it has been
+decommissioned. That role is now covered by the I2C SHT20 sensor instead, which also adds
+external humidity — see `reference/hardware_pins.md` for the I2C address table and wiring.
