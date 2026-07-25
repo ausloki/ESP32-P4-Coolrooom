@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
 **Status**: In Progress — I2C humidity/temp sensors added (SHT31 internal + SHT20 external); hardware validation + device reflash both blocked, hardware not currently connected  
-**Last Commit**: pending (this session's commit not yet made — see session_recaps.md 2026-07-25 entry)
+**Last Commit**: `41060c0` (feat(sensors): add SHT31 (internal) + SHT20 (external) humidity/temp)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
