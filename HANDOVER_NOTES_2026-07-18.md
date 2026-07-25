@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-25  
 **Status**: In Progress — Backup/Restore + Operational Settings buttons wired, live compressor/defrost countdown timers added, a related dead LVGL label fixed; hardware validation + device reflash both blocked  
-**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
+**Last Commit**: `e79f1a7` (feat(dashboard,control): wire Backup/Restore + Settings buttons, add live defrost/compressor timers)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
