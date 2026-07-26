@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
 **Status**: In Progress — ntfy timestamps added, full event-log sensor context for every control decision, SD-optional operation confirmed + runtime-failure detection and ntfy alert added; hardware validation + device reflash both blocked  
-**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
+**Last Commit**: `c00ebb3` (feat(logging): ntfy timestamps, full event-log sensor context, SD failure detection + alert)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
