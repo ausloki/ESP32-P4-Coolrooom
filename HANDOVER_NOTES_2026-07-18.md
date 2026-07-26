@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
 **Status**: In Progress — door-triggered light is now its own independent feature (decoupled from the door NC/NO mode switch, which had been toggling it as a side effect); a related bug where the door-alarm master switch didn't actually gate anything at runtime is fixed; all alarm types (door/no-cool/ice included) now push to ntfy; one entity renamed to remove a reserved URL character; two outstanding items closed by user decision (Carel divergences, RBAC model) rather than code changes; hardware validation + device reflash both blocked  
-**Last Commit**: (pending — this session's changes not yet committed)
+**Last Commit**: `fb8250d` (feat(door): independent light-enable option, fix alarm-gating bug; ntfy for all alarms)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
