@@ -1,5 +1,35 @@
 # Progress Tracking
 
+## 2026-07-26 SD Auto-Remount + LVGL Settings Redesign (Single-Entry Paginated Model)
+
+- Two asks: (1) SD card auto-recovers after a runtime failure without a reboot, (2) replace the
+  touchscreen's fixed 3-tab settings layout with the old S3 project's single-entry, PIN-gated,
+  paginated model, keeping WiFi config/superadmin password/SD-delete web-GUI-only.
+- Found and fixed a real bug before writing the remount logic: `p4_sd_unmount()` no-op'd whenever
+  `p4_sd_ready` was already false (exactly the post-failure state), leaving the VFS mount point
+  registered and blocking a clean remount. Added `p4_sd_vfs_registered`, tracked independently, to
+  fix it. New 60s interval retries `p4_sd_mount()`, logs `SD_REMOUNTED`, pushes a new
+  `ntfy_sd_recovered_request`. Does not replay `backup.json` on recovery (avoids clobbering live
+  settings changed since the last backup).
+- Old 3 settings pages covered only 6 of 34 settings entities (rest were web-only); one page was
+  mislabeled "Fallback" but was actually dead System Status diagnostics. Replaced with 7 new pages
+  covering all 34 entities, reached via one PIN-gated "Settings" button (was: 3 independently-gated
+  tabs + a `ctl_pin_target` global remembering which page to return to).
+- Centralized all label refresh into one `refresh_all_settings_labels` script (called on `on_load`
+  and after every button press) — the 5 pre-existing per-entity label updates now call it too, so
+  web/HA changes stay reflected on the touchscreen, not just on-device presses.
+- Retired `ctl_pin_target` and 3 per-page active-flag globals/diagnostic sensors, replaced with one
+  `page_settings_active`/`page_settings_state`. Preserved the one live widget from the old page 3
+  (lockout countdown) by moving it to the Info page instead of dropping it.
+- Caught during compile (no hardware needed): 89 invalid flow-style YAML lines under block-mapping
+  keys; 6 dangling label refs from the page swap; 12 ON/OFF+1 NC/NO toggle-label lambdas that
+  failed to compile (ternary between different-length string literals decays to `const char*`, not
+  `std::string`); an undersized ntfy buffer flagged by `-Wformat-truncation` (drive-by fix).
+- Verified via grep across the entire `lvgl:` block: no WiFi config, superadmin/web password field,
+  or SD-delete control anywhere in it.
+- Build: RAM 21.3% (122,604 B), Flash 21.5% (1,579,656 B). Compile clean. Untested on hardware —
+  neither the new pagination/PIN flow nor the auto-remount interval has touched a real device yet.
+
 ## 2026-07-26 Ntfy Timestamps, Full Event Logging, SD-Optional Operation + Failure Alert
 
 - Four asks: ntfy timestamps, full event-log sensor context for control decisions, SD-optional

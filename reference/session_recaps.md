@@ -2046,3 +2046,96 @@ compressor cycle or an actual SD card failure (e.g. physically removing the card
 add to the growing hardware-validation queue.
 
 ---
+
+## 2026-07-26 — SD Auto-Remount + LVGL Settings Redesign (Single-Entry Paginated Model)
+
+**Session scope**: Two asks — (1) auto-recover the SD card after a runtime failure without
+requiring a reboot, (2) replace the touchscreen's fixed 3-tab settings layout (Set1/Set2/Set3,
+each independently PIN-gated) with the older S3 reference project's single-entry, paginated model,
+while keeping WiFi config, the superadmin/web password, and SD log-delete web-only.
+
+### 1. SD Auto-Remount
+
+- **Real bug found before writing any yaml**: `p4_sd_unmount()` guarded its whole body on
+  `if (!p4_sd_ready) return;`. Since `p4_sd_mark_failed()` (added last session) already clears
+  `p4_sd_ready` on a runtime write failure, a later remount attempt would call this no-op unmount
+  and then try to mount over a VFS path ESP-IDF still considered registered — very likely failing
+  with an "already mounted" style error, silently defeating auto-remount before it ever ran.
+- Fixed with a new `p4_sd_vfs_registered` bool in `p4_logging.h`, tracked independently of
+  `p4_sd_ready`. `p4_sd_mount()` now unmounts any stale registered-but-failed mount point first,
+  then attempts a genuine fresh mount; `p4_sd_unmount()` gates on the new flag instead of
+  `p4_sd_ready` so it still works correctly after a failure has already cleared the latter.
+- New `- interval: 60s` block in `esp32-p4-coolroom.yaml`: if `!sd_card_ok` and `p4_sd_mount()`
+  now succeeds, flips `sd_card_ok` back true, logs `SD_REMOUNTED`, sends a new low-priority
+  `ntfy_sd_recovered_request` push (only if online), and clears `ntfy_sd_failure_sent` so a later
+  re-failure alerts again. Deliberately does **not** replay `backup.json` on recovery — would risk
+  overwriting live settings changed since the last backup; recovery only resumes logging/backup
+  going forward. A still-dead/missing card just fails silently again every 60s.
+
+### 2. LVGL Settings Redesign
+
+- Researched the old S3 project's model: one "Settings" button on `page_home`, always forces the
+  unlock flag false and clears the PIN buffer before showing the keypad; on correct PIN, always
+  lands on settings page 1 of a linear sequence; each page has 3 stepper rows and a fixed
+  Prev/Home/Next bottom bar; every page's `on_load` calls a single `refresh_settings_labels` script.
+  This project's *old* model was meaningfully different: 3 permanent tabs (Set1/Set2/Set3), each
+  independently PIN-gated via a `ctl_pin_target` global remembering which page to land on.
+- Replaced the old 3 tab pages (which only covered 6 real settings — `comp_lockout_min`,
+  `defrost_interval_num`, `defrost_duration_num`, `alarm_high_delta`, `alarm_low_delta` — plus dead
+  labels and two entirely unlabeled/unreachable LED widgets on the mislabeled "Settings 3:
+  Fallback" page, which was actually dead System Status diagnostics) with **7 new pages** covering
+  all 34 settings entities added across this and earlier sessions: Compressor & Fallback, Defrost
+  Schedule, Defrost Smart & Drip, Alarm Thresholds, Alarms Advanced, Door, Probes.
+- Centralized every label refresh into one `refresh_all_settings_labels` script (34
+  `lvgl.label.update` calls), called from each page's `on_load` and after every stepper/toggle
+  press — replacing the old pattern of updating one label directly inside each entity's own
+  `set_action`/toggle action. The 5 pre-existing per-entity `lvgl.label.update` calls (on
+  `alarm_high_delta`, `comp_lockout_min`, `defrost_interval_num`, `defrost_duration_num`,
+  `alarm_low_delta`) now call the centralized script instead, so a change made from the web
+  dashboard or Home Assistant still keeps the LVGL screen in sync, not only on-device presses.
+- `page_home` and `page_info`'s 5-button tab bars (Home/Set1/Set2/Set3/Info) collapsed to 3
+  buttons (Home/Settings/Info); Settings always routes through the PIN gate via a new single
+  `switch_to_page_settings` script (replacing the three `switch_to_page_settings_{1,2,3}` scripts).
+  Settings sub-pages 1-7 use a Prev/Home/Next bar that wraps (1→7→1), matching the old project's
+  nav feel but sized for 7 pages instead of a fixed 3.
+- Retired: `ctl_pin_target` global (PIN entry always lands on page 1 now — no target to remember);
+  `page_settings_1_active`/`_2_active`/`_3_active` globals and their 3 diagnostic binary_sensors,
+  replaced with one `page_settings_active` global/`page_settings_state` sensor.
+- The one genuinely useful widget on the old "Settings 3" page — a live 1s compressor-lockout
+  countdown (`lbl_lockout_timer_display`, fixed in an earlier session) — was moved to `page_info`
+  under a new "Compressor Lockout" row rather than dropped, since it's a status readout, not a
+  setting.
+- **Bugs caught and fixed during compile-check** (none were hardware-only — all caught by
+  `esphome config`/compiler):
+  - 89 lines written in compact flow-style (`x: 150, y: 0, width: 32, height: 19`) under a block
+    mapping key are invalid YAML (flow style needs `{}`/`[]` delimiters) — mechanically split back
+    to one key per line with a Python pass over the file.
+  - Removing the old 3 settings pages left 6 dangling `lvgl.label.update` references (5 in
+    now-obsolete per-entity `set_action` blocks, 1 in the 1s display-update interval for the
+    lockout countdown) pointing at deleted label IDs — fixed as described above.
+  - The 12 new ON/OFF (+1 NC/NO) toggle-label lambdas
+    (`return id(x) ? "ON" : "OFF";`) failed to compile: a ternary between two string literals of
+    different lengths decays to `const char*`, not `std::string`, so `lvgl.label.update`'s
+    implicit `.c_str()` call had nothing to call it on. Fixed by wrapping every occurrence in
+    `std::string(...)`.
+  - Bumped `ntfy_sd_failure_request`'s message buffer from 140→200 bytes — GCC's
+    `-Wformat-truncation` flagged the static text alone (before the timestamp) as already close to
+    the limit; pre-existing from last session, caught as a side-effect of this session's compile
+    passes, fixed as a small drive-by since it was flagged.
+- Verified no WiFi configuration, superadmin/web password field, or SD log-delete control exists
+  anywhere in the `lvgl:` block — `page_info`'s WiFi/SSID row is read-only display text sourced
+  from `wifi_ssid_text`/`wifi_rssi`, not an editable field. All three remain web-GUI-only as
+  required.
+
+**Build**: RAM 21.3% (122,604/576,464 B), Flash 21.5% (1,579,656 B). Compile clean —  only the
+known pre-existing `opendir`/`readdir`/`closedir` linker warnings (SD log manager, unconfirmed
+without hardware) and one unrelated pre-existing `name:` deprecation warning (`Defrost Drip/Drain
+Phase` contains `/`, will become an error in ESPHome 2026.7.0 — flagged, not fixed, out of scope
+for this session).
+
+**Not done / hardware-gated**: none of the new pagination, PIN gate, stepper/toggle wiring, or
+label-refresh logic has been touched on a real touchscreen — add to the hardware-validation queue.
+The SD auto-remount interval has likewise never been observed against a real card
+removal/reinsertion cycle.
+
+---

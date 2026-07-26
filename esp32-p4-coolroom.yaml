@@ -1616,22 +1616,10 @@ binary_sensor:
     lambda: 'return id(page_home_active);'
 
   - platform: template
-    id: page_settings_1_state
-    name: "Page Settings 1 Active"
+    id: page_settings_state
+    name: "Page Settings Active"
     entity_category: diagnostic
-    lambda: 'return id(page_settings_1_active);'
-
-  - platform: template
-    id: page_settings_2_state
-    name: "Page Settings 2 Active"
-    entity_category: diagnostic
-    lambda: 'return id(page_settings_2_active);'
-
-  - platform: template
-    id: page_settings_3_state
-    name: "Page Settings 3 Active"
-    entity_category: diagnostic
-    lambda: 'return id(page_settings_3_active);'
+    lambda: 'return id(page_settings_active);'
 
   - platform: template
     id: page_info_state
@@ -1706,12 +1694,7 @@ number:
           id(ctl_alarm_high_delta) = x;
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
-      - lvgl.label.update:
-          id: lbl_alarm_high_val
-          text: !lambda |-
-            char buf[12];
-            snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
-            return std::string(buf);
+      - script.execute: refresh_all_settings_labels
 
   # ── Phase 6: Extended control parameters ─────────────────────────────────
   - platform: template
@@ -1731,12 +1714,7 @@ number:
       - lambda: |-
           id(ctl_comp_lockout_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
-      - lvgl.label.update:
-          id: lbl_lockout_val
-          text: !lambda |-
-            char buf[12];
-            snprintf(buf, sizeof(buf), "%d min", (int)x);
-            return std::string(buf);
+      - script.execute: refresh_all_settings_labels
 
   - platform: template
     id: defrost_interval_num
@@ -1755,12 +1733,7 @@ number:
       - lambda: |-
           id(ctl_defrost_interval_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
-      - lvgl.label.update:
-          id: lbl_defrost_int_val
-          text: !lambda |-
-            char buf[12];
-            snprintf(buf, sizeof(buf), "%d min", (int)x);
-            return std::string(buf);
+      - script.execute: refresh_all_settings_labels
 
   - platform: template
     id: defrost_duration_num
@@ -1779,12 +1752,7 @@ number:
       - lambda: |-
           id(ctl_defrost_duration_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
-      - lvgl.label.update:
-          id: lbl_defrost_dur_val
-          text: !lambda |-
-            char buf[12];
-            snprintf(buf, sizeof(buf), "%d min", (int)x);
-            return std::string(buf);
+      - script.execute: refresh_all_settings_labels
 
   - platform: template
     id: defrost_drip_num
@@ -1911,12 +1879,7 @@ number:
           id(ctl_alarm_low_delta) = x;
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
-      - lvgl.label.update:
-          id: lbl_alarm_low_val
-          text: !lambda |-
-            char buf[12];
-            snprintf(buf, sizeof(buf), "%.1f\u00b0C", x);
-            return std::string(buf);
+      - script.execute: refresh_all_settings_labels
 
   # ── Manual per-probe calibration offset — fine-tuning against a reference
   # thermometer, not an automated calibration routine (no "start calibration"
@@ -2971,6 +2934,30 @@ interval:
           id: led_rtc
           brightness: !lambda 'return id(hw_rtc_ok) ? 100.0f : 0.0f;'
 
+  # ── Phase 5: SD card auto-remount ────────────────────────────────────────
+  # Retries the mount every 60s while the card is marked unavailable —
+  # whether that's "never detected at boot" or "failed mid-session" (see
+  # p4_sd_mark_failed()/p4_sd_mount() in p4_logging.h for the stale-VFS
+  # cleanup that makes a retry actually work rather than failing again with
+  # "already mounted"). Deliberately does not replay backup.json on
+  # recovery — that would risk overwriting live settings changed since the
+  # last backup with stale data; recovery only resumes logging/backup going
+  # forward. A card that's still missing/dead just fails silently again
+  # every 60s (already covered by the one-time ntfy_sd_failure_request from
+  # the main tick) until it's actually reinserted.
+  - interval: 60s
+    then:
+      - lambda: |-
+          if (!id(sd_card_ok) && p4_sd_mount()) {
+              id(sd_card_ok) = true;
+              ESP_LOGI("ctl", "SD card auto-remounted successfully");
+              p4_sd_log_event("SD_REMOUNTED", "auto");
+              if (id(ctl_wifi_connected)) {
+                  id(ntfy_sd_recovered_request).trigger();
+              }
+              id(ntfy_sd_failure_sent) = false;
+          }
+
 ##############################################################################
 # Globals
 ##############################################################################
@@ -3102,13 +3089,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
-
-  # Which settings page (1/2/3) to land on after a successful PIN entry —
-  # set by whichever switch_to_page_settings_N script triggered the prompt.
-  - id: ctl_pin_target
-    type: int
-    restore_value: no
-    initial_value: "1"
 
   # Explicit result flag for the Save button on page_set_pin — avoids
   # inferring success/failure from ctl_pin_buf being empty, which is
@@ -3443,17 +3423,7 @@ globals:
     restore_value: no
     initial_value: "true"
 
-  - id: page_settings_1_active
-    type: bool
-    restore_value: no
-    initial_value: "false"
-
-  - id: page_settings_2_active
-    type: bool
-    restore_value: no
-    initial_value: "false"
-
-  - id: page_settings_3_active
+  - id: page_settings_active
     type: bool
     restore_value: no
     initial_value: "false"
@@ -4129,11 +4099,15 @@ lvgl:
             long_mode: SCROLL_CIRCULAR
             hidden: true
 
-        # Tab bar buttons at bottom
+        # Tab bar buttons at bottom — 3-way Home/Settings/Info. Settings
+        # always resets the PIN buffer and forces the lock flag false before
+        # showing the keypad — same rule as the old S3 project's single
+        # entry point (no per-category tab shortcuts on this project either
+        # any more; PIN gate is the only path into the 7 settings pages).
         - button:
             x: 0
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_blue
             border_width: 0
@@ -4147,9 +4121,9 @@ lvgl:
               - script.execute: switch_to_page_home
 
         - button:
-            x: 205
+            x: 342
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
@@ -4157,47 +4131,15 @@ lvgl:
             widgets:
               - label:
                   align: CENTER
-                  text: "⚙️ Set1"
+                  text: "⚙️ Settings"
                   text_font: font_small
             on_click:
-              - script.execute: switch_to_page_settings_1
+              - script.execute: switch_to_page_settings
 
         - button:
-            x: 410
+            x: 684
             y: 552
-            width: 205
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "⚠️ Set2"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_2
-
-        - button:
-            x: 615
-            y: 552
-            width: 205
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "💾 Set3"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_3
-
-        - button:
-            x: 820
-            y: 552
-            width: 204
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
@@ -4212,8 +4154,18 @@ lvgl:
 
 
     # Settings 1 page
+    # ── Touchscreen settings — 7 paginated category pages, single PIN gate
+    # (page_home's "Settings" button), Prev/Home/Next nav on every page,
+    # wrapping 1→7→1. Replaces the old fixed Set1/Set2/Set3 tab-bar model:
+    # same idea the old S3 project used (one PIN entry, then a linear
+    # sequence of category pages), adapted to this project's actual setting
+    # count. Every stepper/toggle value is kept in sync by
+    # refresh_all_settings_labels (called on_load and after every button
+    # press) rather than each entity updating its own label independently.
     - id: page_settings_1
       bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
       widgets:
         - obj:
             x: 0
@@ -4227,7 +4179,7 @@ lvgl:
               - label:
                   x: 16
                   y: 14
-                  text: "Settings 1: Lockout & Defrost"
+                  text: "Settings 1/7: Compressor & Fallback"
                   text_font: font_medium
                   text_color: col_text
               - button:
@@ -4259,275 +4211,236 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             widgets:
-              # ─────────── Lockout Timer ──────────────
-              - label:
-                  y: 0
-                  text: "Compressor Lockout (min)"
-                  text_font: font_small
-                  text_color: col_text
+              - label: {y: 0, text: "Setpoint (°C)", text_font: font_small, text_color: col_text}
               - obj:
-                  y: 24
+                  y: 22
                   width: 200
-                  height: 50
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - label:
-                        id: lbl_lockout_val
-                        x: 0
-                        y: 6
-                        width: 120
-                        height: 40
-                        text: "---"
-                        text_font: font_large
-                        text_color: col_text
+                    - label: {id: lbl_st_setpoint, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
                     - button:
-                        x: 130
-                        y: 6
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▲"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
                         on_click:
-                          - number.increment:
-                              id: comp_lockout_min
-                              cycle: false
+                          - number.increment: {id: setpoint, cycle: false}
+                          - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 130
-                        y: 28
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▼"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
                         on_click:
-                          - number.decrement:
-                              id: comp_lockout_min
-                              cycle: false
+                          - number.decrement: {id: setpoint, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-              # ─────────── Defrost Interval ──────────────
-              - label:
+              - label: {y: 68, text: "Compressor Hysteresis (°C)", text_font: font_small, text_color: col_text}
+              - obj:
                   y: 90
-                  text: "Defrost Interval (min)"
-                  text_font: font_small
-                  text_color: col_text
-              - obj:
-                  y: 114
                   width: 200
-                  height: 50
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - label:
-                        id: lbl_defrost_int_val
-                        x: 0
-                        y: 6
-                        width: 120
-                        height: 40
-                        text: "---"
-                        text_font: font_large
-                        text_color: col_text
+                    - label: {id: lbl_st_compdiff, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
                     - button:
-                        x: 130
-                        y: 6
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▲"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
                         on_click:
-                          - number.increment:
-                              id: defrost_interval_num
-                              cycle: false
+                          - number.increment: {id: compressor_differential, cycle: false}
+                          - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 130
-                        y: 28
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▼"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
                         on_click:
-                          - number.decrement:
-                              id: defrost_interval_num
-                              cycle: false
+                          - number.decrement: {id: compressor_differential, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-              # ─────────── Defrost Duration ──────────────
-              - label:
-                  y: 180
-                  text: "Defrost Duration (min)"
-                  text_font: font_small
-                  text_color: col_text
+              - label: {y: 136, text: "Compressor Lockout (min)", text_font: font_small, text_color: col_text}
               - obj:
-                  y: 204
+                  y: 158
                   width: 200
-                  height: 50
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - label:
-                        id: lbl_defrost_dur_val
-                        x: 0
-                        y: 6
-                        width: 120
-                        height: 40
-                        text: "---"
-                        text_font: font_large
-                        text_color: col_text
+                    - label: {id: lbl_st_lockout, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
                     - button:
-                        x: 130
-                        y: 6
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▲"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
                         on_click:
-                          - number.increment:
-                              id: defrost_duration_num
-                              cycle: false
+                          - number.increment: {id: comp_lockout_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 130
-                        y: 28
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▼"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
                         on_click:
-                          - number.decrement:
-                              id: defrost_duration_num
-                              cycle: false
+                          - number.decrement: {id: comp_lockout_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-              # ─────────── Defrost Smart Delta ──────────────
-              - label:
-                  y: 270
-                  text: "Defrost End Temp (°C)"
-                  text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_defrost_end_val
-                  y: 298
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+              - label: {y: 204, text: "Sensor Fallback Duty-Cycle Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 226
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_fallbacken, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_fallback_enabled
+                          - script.execute: refresh_all_settings_labels
 
-        # Tab bar buttons
+              - label: {y: 272, text: "Fallback Compressor ON Time (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 294
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_fbon, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: fallback_on_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: fallback_on_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 340, text: "Fallback Compressor OFF Time (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 362
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_fboff, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: fallback_off_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: fallback_off_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
         - button:
             x: 0
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "🏠 Home"
-                  text_font: font_small
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_7
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
             on_click:
               - script.execute: switch_to_page_home
-
         - button:
-            x: 205
+            x: 684
             y: 552
-            width: 205
-            height: 48
-            bg_color: col_blue
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "⚙️ Set1"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_1
-
-        - button:
-            x: 410
-            y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "⚠️ Set2"
-                  text_font: font_small
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
             on_click:
-              - script.execute: switch_to_page_settings_2
+              - lvgl.page.show: page_settings_2
 
-        - button:
-            x: 615
-            y: 552
-            width: 205
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "💾 Set3"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_3
-
-        - button:
-            x: 820
-            y: 552
-            width: 204
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "ℹ️ Info"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_info
-
-
-    # Settings 2 page
     - id: page_settings_2
       bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
       widgets:
         - obj:
             x: 0
@@ -4538,12 +4451,7 @@ lvgl:
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  x: 16
-                  y: 14
-                  text: "Settings 2: Alarms"
-                  text_font: font_medium
-                  text_color: col_text
+              - label: {x: 16, y: 14, text: "Settings 2/7: Defrost Schedule", text_font: font_medium, text_color: col_text}
 
         - obj:
             x: 16
@@ -4553,225 +4461,212 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             widgets:
-              # ─────────── High Alarm Delta ──────────────
-              - label:
-                  y: 0
-                  text: "High Temp Alarm (°C above SP)"
-                  text_font: font_small
-                  text_color: col_text
+              - label: {y: 0, text: "Defrost System Enabled", text_font: font_small, text_color: col_text}
               - obj:
-                  y: 24
+                  y: 22
                   width: 200
-                  height: 50
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - label:
-                        id: lbl_alarm_high_val
-                        x: 0
-                        y: 6
-                        width: 120
-                        height: 40
-                        text: "---"
-                        text_font: font_large
-                        text_color: col_text
+                    - label: {id: lbl_sw_defrosten, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
                     - button:
-                        x: 130
-                        y: 6
-                        width: 30
-                        height: 20
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
                         bg_color: col_blue
-                        radius: 4
+                        radius: 6
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▲"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
                         on_click:
-                          - number.increment:
-                              id: alarm_high_delta
-                              cycle: false
-                    - button:
-                        x: 130
-                        y: 28
-                        width: 30
-                        height: 20
-                        bg_color: col_blue
-                        radius: 4
-                        border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▼"
-                              text_font: font_small
-                        on_click:
-                          - number.decrement:
-                              id: alarm_high_delta
-                              cycle: false
+                          - switch.toggle: sw_defrost_enabled
+                          - script.execute: refresh_all_settings_labels
 
-              # ─────────── Low Alarm Delta ──────────────
-              - label:
-                  y: 100
-                  text: "Low Temp Alarm (°C below SP)"
-                  text_font: font_small
-                  text_color: col_text
+              - label: {y: 68, text: "Defrost Interval (min)", text_font: font_small, text_color: col_text}
               - obj:
-                  y: 124
+                  y: 90
                   width: 200
-                  height: 50
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - label:
-                        id: lbl_alarm_low_val
-                        x: 0
-                        y: 6
-                        width: 120
-                        height: 40
-                        text: "---"
-                        text_font: font_large
-                        text_color: col_text
+                    - label: {id: lbl_st_definterval, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
                     - button:
-                        x: 130
-                        y: 6
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▲"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
                         on_click:
-                          - number.increment:
-                              id: alarm_low_delta
-                              cycle: false
+                          - number.increment: {id: defrost_interval_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 130
-                        y: 28
-                        width: 30
-                        height: 20
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
                         bg_color: col_blue
                         radius: 4
                         border_width: 0
-                        widgets:
-                          - label:
-                              align: CENTER
-                              text: "▼"
-                              text_font: font_small
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
                         on_click:
-                          - number.decrement:
-                              id: alarm_low_delta
-                              cycle: false
+                          - number.decrement: {id: defrost_interval_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-              # ─────────── Alarm Persist Time ──────────────
-              - label:
-                  y: 200
-                  text: "Alarm Persist (min)"
-                  text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_alarm_persist_val
-                  y: 228
-                  text: "---"
-                  text_font: font_large
-                  text_color: col_text
+              - label: {y: 136, text: "Defrost Max Duration (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 158
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_defduration, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: defrost_duration_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: defrost_duration_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-              # ─────────── Status Info ──────────────
-              - label:
-                  y: 300
-                  text: "Alarms Active: ---"
-                  text_font: font_small
-                  text_color: col_subtext
+              - label: {y: 204, text: "Defrost Early Termination by Temperature", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 226
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_termtemp, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_defrost_term_temp
+                          - script.execute: refresh_all_settings_labels
 
-        # Tab bar buttons
+              - label: {y: 272, text: "Defrost Termination Temp (°C)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 294
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_defend, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: defrost_end_temp, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: defrost_end_temp, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 340, text: "Defrost Drip/Drain Phase Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 362
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_defdripen, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_defrost_drip
+                          - script.execute: refresh_all_settings_labels
+
         - button:
             x: 0
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "🏠 Home"
-                  text_font: font_small
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_1
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
             on_click:
               - script.execute: switch_to_page_home
-
         - button:
-            x: 205
+            x: 684
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "⚙️ Set1"
-                  text_font: font_small
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
             on_click:
-              - script.execute: switch_to_page_settings_1
+              - lvgl.page.show: page_settings_3
 
-        - button:
-            x: 410
-            y: 552
-            width: 205
-            height: 48
-            bg_color: col_blue
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "⚠️ Set2"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_2
-
-        - button:
-            x: 615
-            y: 552
-            width: 205
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "💾 Set3"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_3
-
-        - button:
-            x: 820
-            y: 552
-            width: 204
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "ℹ️ Info"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_info
-
-
-    # Settings 3 page
     - id: page_settings_3
       bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
       widgets:
         - obj:
             x: 0
@@ -4782,12 +4677,7 @@ lvgl:
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  x: 16
-                  y: 14
-                  text: "Settings 3: Fallback"
-                  text_font: font_medium
-                  text_color: col_text
+              - label: {x: 16, y: 14, text: "Settings 3/7: Defrost Smart & Drip", text_font: font_medium, text_color: col_text}
 
         - obj:
             x: 16
@@ -4797,168 +4687,923 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             widgets:
-              - label:
-                  y: 0
-                  text: "System Status"
-                  text_font: font_small
-                  text_color: col_text
-
-              - label:
-                  y: 28
-                  text: "Probe 1 (Main):"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_probe1_status
-                  y: 48
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              - label:
-                  y: 80
-                  text: "Compressor:"
-                  text_font: font_small
-                  text_color: col_subtext
+              - label: {y: 0, text: "Defrost Drip Time (min)", text_font: font_small, text_color: col_text}
               - obj:
-                  y: 100
-                  width: 400
-                  height: 30
+                  y: 22
+                  width: 200
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - led:
-                        x: 0
-                        y: 8
-                        width: 14
-                        height: 14
-                        color: col_green
-                        brightness: 0%
-                    - label:
-                        x: 20
-                        y: 4
-                        text: "---"
-                        text_font: font_small
-                        text_color: col_text
+                    - label: {id: lbl_st_defdrip, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: defrost_drip_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: defrost_drip_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-              - label:
-                  y: 150
-                  text: "Defrost:"
-                  text_font: font_small
-                  text_color: col_subtext
+              - label: {y: 68, text: "Smart Defrost (Delta-Triggered) Enabled", text_font: font_small, text_color: col_text}
               - obj:
-                  y: 170
-                  width: 400
-                  height: 30
+                  y: 90
+                  width: 200
+                  height: 42
                   bg_color: col_bg
                   border_width: 0
                   widgets:
-                    - led:
-                        x: 0
-                        y: 8
-                        width: 14
-                        height: 14
-                        color: col_blue
-                        brightness: 0%
-                    - label:
-                        x: 20
-                        y: 4
-                        text: "---"
-                        text_font: font_small
-                        text_color: col_text
+                    - label: {id: lbl_sw_smartdef, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_smart_defrost
+                          - script.execute: refresh_all_settings_labels
 
-              - label:
-                  y: 220
-                  text: "Lockout Timer:"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_lockout_timer_display
-                  y: 240
-                  text: "0 min"
-                  text_font: font_small
-                  text_color: col_text
+              - label: {y: 136, text: "Smart Defrost Delta Threshold (°C)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 158
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_smartdelta, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: smart_delta_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: smart_delta_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
-        # Tab bar buttons
+              - label: {y: 204, text: "Smart Defrost Dwell Time (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 226
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_smartdwell, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: smart_dwell_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: smart_dwell_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 272, text: "Dew Point Early Defrost Trigger Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 294
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_dewpoint, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_dew_point_trigger
+                          - script.execute: refresh_all_settings_labels
+
         - button:
             x: 0
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "🏠 Home"
-                  text_font: font_small
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_2
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
             on_click:
               - script.execute: switch_to_page_home
-
         - button:
-            x: 205
+            x: 684
             y: 552
-            width: 205
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_4
+
+    - id: page_settings_4
+      bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  align: CENTER
-                  text: "⚙️ Set1"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_1
+              - label: {x: 16, y: 14, text: "Settings 4/7: Alarm Thresholds", text_font: font_medium, text_color: col_text}
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label: {y: 0, text: "High Temp Alarm (°C above SP)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 22
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_alarmhi, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: alarm_high_delta, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: alarm_high_delta, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 68, text: "Low Temp Alarm (°C below SP)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 90
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_alarmlo, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: alarm_low_delta, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: alarm_low_delta, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 136, text: "Alarm Persist Time (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 158
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_alarmpersist, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: alarm_persist_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: alarm_persist_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 204, text: "Alarm Recovery Hysteresis (°C)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 226
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_alarmhyst, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: alarm_hysteresis_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: alarm_hysteresis_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 272, text: "Alarm Siren Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 294
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_siren, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_siren_enabled
+                          - script.execute: refresh_all_settings_labels
 
         - button:
-            x: 410
+            x: 0
             y: 552
-            width: 205
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_3
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            on_click:
+              - script.execute: switch_to_page_home
+        - button:
+            x: 684
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_5
+
+    - id: page_settings_5
+      bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  align: CENTER
-                  text: "⚠️ Set2"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_2
+              - label: {x: 16, y: 14, text: "Settings 5/7: Alarms Advanced", text_font: font_medium, text_color: col_text}
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label: {y: 0, text: "Ice Alarm Delta (°C)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 22
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_icedelta, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: ice_delta_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: ice_delta_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 68, text: "No-Cool Alarm Timeout (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 90
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_nocool, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: no_cool_alarm_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: no_cool_alarm_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 136, text: "Startup Alarm Grace Floor (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 158
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_startupgrace, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: startup_grace_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: startup_grace_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 204, text: "Post-Defrost Alarm Grace (min)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 226
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_defrostgrace, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: defrost_grace_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: defrost_grace_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
 
         - button:
-            x: 615
+            x: 0
             y: 552
-            width: 205
+            width: 340
             height: 48
-            bg_color: col_blue
+            bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "💾 Set3"
-                  text_font: font_small
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
             on_click:
-              - script.execute: switch_to_page_settings_3
-
+              - lvgl.page.show: page_settings_4
         - button:
-            x: 820
+            x: 342
             y: 552
-            width: 204
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            on_click:
+              - script.execute: switch_to_page_home
+        - button:
+            x: 684
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_6
+
+    - id: page_settings_6
+      bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
             height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  align: CENTER
-                  text: "ℹ️ Info"
-                  text_font: font_small
+              - label: {x: 16, y: 14, text: "Settings 6/7: Door", text_font: font_medium, text_color: col_text}
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label: {y: 0, text: "Door Sensor Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 22
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_doorsensor, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_door_sensor_enabled
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 68, text: "Door Sensor Mode (NC / NO)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 90
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_doormode, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: door_sensor_mode_light_control
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 136, text: "Door Alarm Delay (s)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 158
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_doordelay, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: door_alarm_delay_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: door_alarm_delay_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+        - button:
+            x: 0
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
             on_click:
-              - script.execute: switch_to_page_info
+              - lvgl.page.show: page_settings_5
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            on_click:
+              - script.execute: switch_to_page_home
+        - button:
+            x: 684
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_7
+
+    - id: page_settings_7
+      bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label: {x: 16, y: 14, text: "Settings 7/7: Probes", text_font: font_medium, text_color: col_text}
+
+        - obj:
+            x: 16
+            y: 60
+            width: 992
+            height: 440
+            bg_color: col_bg
+            border_width: 0
+            widgets:
+              - label: {y: 0, text: "Probe 1 (Coolroom) Calibration Offset (°C)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 22
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_p1off, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: probe1_offset_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: probe1_offset_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 68, text: "Probe 2 (Evaporator) Calibration Offset (°C)", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 90
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_st_p2off, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 150
+                        y: 0
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        on_click:
+                          - number.increment: {id: probe2_offset_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 150
+                        y: 21
+                        width: 32
+                        height: 19
+                        bg_color: col_blue
+                        radius: 4
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        on_click:
+                          - number.decrement: {id: probe2_offset_c, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 136, text: "Evaporator Probe (Probe 2) Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 158
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_probe2, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_probe2_enabled
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 204, text: "Internal SHT31 Sensor Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 226
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_shtint, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_humidity_internal_enabled
+                          - script.execute: refresh_all_settings_labels
+
+              - label: {y: 272, text: "External SHT20 Sensor Enabled", text_font: font_small, text_color: col_text}
+              - obj:
+                  y: 294
+                  width: 200
+                  height: 42
+                  bg_color: col_bg
+                  border_width: 0
+                  widgets:
+                    - label: {id: lbl_sw_shtext, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
+                    - button:
+                        x: 100
+                        y: 2
+                        width: 90
+                        height: 38
+                        bg_color: col_blue
+                        radius: 6
+                        border_width: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        on_click:
+                          - switch.toggle: sw_humidity_external_enabled
+                          - script.execute: refresh_all_settings_labels
+
+        - button:
+            x: 0
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_6
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            on_click:
+              - script.execute: switch_to_page_home
+        - button:
+            x: 684
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            on_click:
+              - lvgl.page.show: page_settings_1
 
 
     # Info page
@@ -5085,11 +5730,26 @@ lvgl:
                   text_font: font_small
                   text_color: col_text
 
+              # Compressor Lockout section — live 1s countdown, moved here
+              # from the retired Settings 3/Fallback page (which was actually
+              # mislabeled System Status diagnostics, not fallback settings).
+              - label:
+                  y: 331
+                  text: "Compressor Lockout"
+                  text_font: font_small
+                  text_color: col_subtext
+              - label:
+                  id: lbl_lockout_timer_display
+                  y: 355
+                  text: "Ready"
+                  text_font: font_small
+                  text_color: col_text
+
         # Tab bar buttons
         - button:
             x: 0
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
@@ -5103,9 +5763,9 @@ lvgl:
               - script.execute: switch_to_page_home
 
         - button:
-            x: 205
+            x: 342
             y: 552
-            width: 205
+            width: 340
             height: 48
             bg_color: col_panel
             border_width: 0
@@ -5113,47 +5773,15 @@ lvgl:
             widgets:
               - label:
                   align: CENTER
-                  text: "⚙️ Set1"
+                  text: "⚙️ Settings"
                   text_font: font_small
             on_click:
-              - script.execute: switch_to_page_settings_1
+              - script.execute: switch_to_page_settings
 
         - button:
-            x: 410
+            x: 684
             y: 552
-            width: 205
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "⚠️ Set2"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_2
-
-        - button:
-            x: 615
-            y: 552
-            width: 205
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "💾 Set3"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_settings_3
-
-        - button:
-            x: 820
-            y: 552
-            width: 204
+            width: 340
             height: 48
             bg_color: col_blue
             border_width: 0
@@ -5166,7 +5794,7 @@ lvgl:
             on_click:
               - script.execute: switch_to_page_info
 
-    # ── PIN unlock keypad — shown by switch_to_page_settings_{1,2,3} whenever
+    # ── PIN unlock keypad — shown by switch_to_page_settings whenever
     # ctl_settings_unlocked is false. Same djb2-hash design as the earlier S3
     # project's settings lock; see p4_pin_* helpers in p4_helpers.h.
     - id: page_pin_entry
@@ -5372,30 +6000,10 @@ lvgl:
                   condition:
                     lambda: 'return id(ctl_settings_unlocked);'
                   then:
-                    - if:
-                        condition:
-                          lambda: 'return id(ctl_pin_target) == 1;'
-                        then:
-                          - lambda: |-
-                              id(page_settings_1_active) = true;
-                              id(page_home_active) = false;
-                          - lvgl.page.show: page_settings_1
-                    - if:
-                        condition:
-                          lambda: 'return id(ctl_pin_target) == 2;'
-                        then:
-                          - lambda: |-
-                              id(page_settings_2_active) = true;
-                              id(page_home_active) = false;
-                          - lvgl.page.show: page_settings_2
-                    - if:
-                        condition:
-                          lambda: 'return id(ctl_pin_target) == 3;'
-                        then:
-                          - lambda: |-
-                              id(page_settings_3_active) = true;
-                              id(page_home_active) = false;
-                          - lvgl.page.show: page_settings_3
+                    - lambda: |-
+                        id(page_settings_active) = true;
+                        id(page_home_active) = false;
+                    - lvgl.page.show: page_settings_1
                   else:
                     - lvgl.label.update:
                         id: ui_pin_entry_msg
@@ -5668,6 +6276,158 @@ lvgl:
 ##############################################################################
 
 script:
+  # ── Touchscreen settings pages: single refresh point ─────────────────────
+  # Every stepper/toggle row's displayed value is kept in sync by this one
+  # script rather than duplicating an lvgl.label.update inside each of the
+  # 22 number entities' set_action and each of the 12 switches' turn_on/off
+  # actions — called from each settings page's on_load (so values are
+  # correct the moment you arrive, unlike the old per-page labels this
+  # replaces, which only ever updated after a button press on that exact
+  # page) and again after every stepper/toggle press on these pages.
+  - id: refresh_all_settings_labels
+    then:
+      - lvgl.label.update:
+          id: lbl_st_setpoint
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_setpoint)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_compdiff
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_comp_diff)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_lockout
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_comp_lockout_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_fbon
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_fallback_on_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_fboff
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_fallback_off_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_fallbacken
+          text: !lambda 'return std::string(id(input_fallback_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_fallback_enabled) ? id(col_green) : id(col_grey);'
+
+      - lvgl.label.update:
+          id: lbl_sw_defrosten
+          text: !lambda 'return std::string(id(input_defrost_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_defrost_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_definterval
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_defrost_interval_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_defduration
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_defrost_duration_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_termtemp
+          text: !lambda 'return std::string(id(input_defrost_term_temp_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_defrost_term_temp_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_defend
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_defrost_end_c)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_defdripen
+          text: !lambda 'return std::string(id(input_defrost_drip_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_defrost_drip_enabled) ? id(col_green) : id(col_grey);'
+
+      - lvgl.label.update:
+          id: lbl_st_defdrip
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_defrost_drip_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_smartdef
+          text: !lambda 'return std::string(id(input_smart_defrost_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_smart_defrost_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_smartdelta
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_smart_delta_c)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_smartdwell
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_smart_dwell_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_dewpoint
+          text: !lambda 'return std::string(id(input_dew_point_trigger_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_dew_point_trigger_enabled) ? id(col_green) : id(col_grey);'
+
+      - lvgl.label.update:
+          id: lbl_st_alarmhi
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_alarm_high_delta)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_alarmlo
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_alarm_low_delta)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_alarmpersist
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_alarm_persist_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_alarmhyst
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_alarm_hysteresis_c)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_siren
+          text: !lambda 'return std::string(id(input_siren_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_siren_enabled) ? id(col_green) : id(col_grey);'
+
+      - lvgl.label.update:
+          id: lbl_st_icedelta
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_ice_delta_c)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_nocool
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_no_cool_alarm_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_startupgrace
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_startup_grace_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_defrostgrace
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_defrost_grace_min)); return std::string(b);
+
+      - lvgl.label.update:
+          id: lbl_sw_doorsensor
+          text: !lambda 'return std::string(id(input_door_sensor_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_door_sensor_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_doormode
+          text: !lambda 'return std::string(id(ctl_door_sensor_mode_is_nc) ? "NC" : "NO");'
+      - lvgl.label.update:
+          id: lbl_st_doordelay
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d s", (int) id(ctl_door_alarm_delay_s)); return std::string(b);
+
+      - lvgl.label.update:
+          id: lbl_st_p1off
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_probe1_offset_c)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_p2off
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_probe2_offset_c)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_probe2
+          text: !lambda 'return std::string(id(input_probe2_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_probe2_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_shtint
+          text: !lambda 'return std::string(id(input_humidity_internal_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_humidity_internal_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_shtext
+          text: !lambda 'return std::string(id(input_humidity_external_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_humidity_external_enabled) ? id(col_green) : id(col_grey);'
+
   - id: ntfy_high_alarm_request
     then:
       - http_request.post:
@@ -5752,31 +6512,47 @@ script:
           body: !lambda |-
             char ts[24];
             p4_fmt_time(ts, sizeof(ts));
-            char buf[140];
+            char buf[200];
             snprintf(buf, sizeof(buf),
                      "[%s] SD card not detected or failed — event/temperature logging and "
                      "backup/restore are unavailable. Control continues normally without it.", ts);
             return std::string(buf);
 
+  # New — fires once when the 60s auto-remount check successfully brings a
+  # previously-failed/missing card back online.
+  - id: ntfy_sd_recovered_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return std::string("${ntfy_server}/${ntfy_topic}");
+          request_headers:
+            Title: "Coolroom SD Card Recovered"
+            Priority: "low"
+            Tags: "white_check_mark,sd_card"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[104];
+            snprintf(buf, sizeof(buf),
+                     "[%s] SD card auto-remounted — logging and backup/restore resumed.", ts);
+            return std::string(buf);
+
   # ── Phase 9: LVGL page navigation scripts ──────────────────────────────────
-  # NOTE: these previously only flipped the page_*_active diagnostic globals
-  # and never called lvgl.page.show — the tab-bar buttons did not actually
-  # change the displayed page. Fixed here while adding the PIN gate below,
-  # since the gate has to redirect to a real page too.
+  # Single PIN-gated entry point into the 7-page settings sequence — replaces
+  # the old per-tab switch_to_page_settings_{1,2,3} scripts (each independently
+  # PIN-gated with its own target). Same model as the old S3 project: one
+  # "Settings" button, one PIN prompt, always land on page 1; Prev/Next then
+  # move freely between pages 1-7 with no re-gating.
   - id: switch_to_page_home
     then:
       - lambda: |-
           id(ctl_settings_unlocked) = false;
           id(page_home_active) = true;
-          id(page_settings_1_active) = false;
-          id(page_settings_2_active) = false;
-          id(page_settings_3_active) = false;
+          id(page_settings_active) = false;
           id(page_info_active) = false;
       - lvgl.page.show: page_home
 
-  # Settings pages require the PIN when locked. Unlocking always re-enters at
-  # the specific page that was requested (ctl_pin_target), not always page 1.
-  - id: switch_to_page_settings_1
+  - id: switch_to_page_settings
     then:
       - if:
           condition:
@@ -5784,65 +6560,11 @@ script:
           then:
             - lambda: |-
                 id(page_home_active) = false;
-                id(page_settings_1_active) = true;
-                id(page_settings_2_active) = false;
-                id(page_settings_3_active) = false;
+                id(page_settings_active) = true;
                 id(page_info_active) = false;
             - lvgl.page.show: page_settings_1
           else:
-            - lambda: |-
-                id(ctl_pin_target) = 1;
-                id(ctl_pin_buf) = "";
-            - lvgl.label.update:
-                id: ui_pin_entry_display
-                text: ""
-            - lvgl.label.update:
-                id: ui_pin_entry_msg
-                text: "Enter PIN to unlock settings"
-            - lvgl.page.show: page_pin_entry
-
-  - id: switch_to_page_settings_2
-    then:
-      - if:
-          condition:
-            lambda: 'return id(ctl_settings_unlocked);'
-          then:
-            - lambda: |-
-                id(page_home_active) = false;
-                id(page_settings_1_active) = false;
-                id(page_settings_2_active) = true;
-                id(page_settings_3_active) = false;
-                id(page_info_active) = false;
-            - lvgl.page.show: page_settings_2
-          else:
-            - lambda: |-
-                id(ctl_pin_target) = 2;
-                id(ctl_pin_buf) = "";
-            - lvgl.label.update:
-                id: ui_pin_entry_display
-                text: ""
-            - lvgl.label.update:
-                id: ui_pin_entry_msg
-                text: "Enter PIN to unlock settings"
-            - lvgl.page.show: page_pin_entry
-
-  - id: switch_to_page_settings_3
-    then:
-      - if:
-          condition:
-            lambda: 'return id(ctl_settings_unlocked);'
-          then:
-            - lambda: |-
-                id(page_home_active) = false;
-                id(page_settings_1_active) = false;
-                id(page_settings_2_active) = false;
-                id(page_settings_3_active) = true;
-                id(page_info_active) = false;
-            - lvgl.page.show: page_settings_3
-          else:
-            - lambda: |-
-                id(ctl_pin_target) = 3;
-                id(ctl_pin_buf) = "";
+            - lambda: 'id(ctl_pin_buf) = "";'
             - lvgl.label.update:
                 id: ui_pin_entry_display
                 text: ""
@@ -5857,8 +6579,6 @@ script:
     then:
       - lambda: |-
           id(page_home_active) = false;
-          id(page_settings_1_active) = false;
-          id(page_settings_2_active) = false;
-          id(page_settings_3_active) = false;
+          id(page_settings_active) = false;
           id(page_info_active) = true;
       - lvgl.page.show: page_info

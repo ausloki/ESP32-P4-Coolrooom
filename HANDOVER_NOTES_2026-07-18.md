@@ -2,11 +2,63 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
-**Status**: In Progress — ntfy timestamps added, full event-log sensor context for every control decision, SD-optional operation confirmed + runtime-failure detection and ntfy alert added; hardware validation + device reflash both blocked  
-**Last Commit**: `c00ebb3` (feat(logging): ntfy timestamps, full event-log sensor context, SD failure detection + alert)
+**Status**: In Progress — SD card now auto-remounts after a runtime failure (no reboot needed); LVGL touchscreen settings redesigned as a single-PIN-entry, 7-page paginated flow (was: 3 fixed, independently-gated tabs covering only 6 of 34 settings); hardware validation + device reflash both blocked  
+**Last Commit**: (pending — this session's work not yet committed)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-26 Addendum — SD Auto-Remount + LVGL Settings Redesign (Single-Entry Paginated)
+
+**Two asks**: (1) SD card should auto-recover after a runtime failure, no reboot required; (2)
+replace the touchscreen's fixed Set1/Set2/Set3 tab layout with the older S3 reference project's
+single-entry, PIN-gated, paginated model — while keeping WiFi config, the superadmin/web password,
+and SD log-delete web-GUI-only, as explicitly required.
+
+**SD auto-remount**: found and fixed a real bug in `p4_sd_unmount()` (`p4_logging.h`) before
+writing any auto-remount logic — it no-op'd whenever `p4_sd_ready` was already false, which is
+exactly the state after a runtime failure, leaving the ESP-IDF VFS mount point still registered
+and any later remount attempt likely to fail. Fixed with a new `p4_sd_vfs_registered` bool tracked
+independently of `p4_sd_ready`; `p4_sd_mount()` now cleans up a stale registration before
+remounting. New `- interval: 60s` block retries `p4_sd_mount()` while `!sd_card_ok`, logs
+`SD_REMOUNTED`, sends a new `ntfy_sd_recovered_request` push, and resets the failure-alert flag so
+a later re-failure alerts again. Does not replay `backup.json` on recovery (risk of overwriting
+live settings) — only resumes logging/backup going forward.
+
+**LVGL settings redesign**: the old 3 settings pages only covered 6 of the 34 settings entities
+added across this and earlier sessions (the rest were web-dashboard-only), plus one page was
+mislabeled "Fallback" but actually held dead System Status diagnostics. Replaced with 7 new pages
+(Compressor & Fallback, Defrost Schedule, Defrost Smart & Drip, Alarm Thresholds, Alarms Advanced,
+Door, Probes) covering all 34 entities, reached via a single PIN-gated "Settings" button on
+`page_home` (same model as the old S3 project) instead of 3 independently-gated tabs. Every
+stepper/toggle label is kept in sync by one centralized `refresh_all_settings_labels` script
+(on `on_load` + after every button press) rather than scattered per-entity label updates — the 5
+pre-existing per-entity updates now call this script too, so web-dashboard/HA changes stay
+reflected on the touchscreen. Retired `ctl_pin_target` and the 3 per-page active-flag
+globals/diagnostic sensors (replaced with one `page_settings_active`/`page_settings_state`). The
+one genuinely live widget on the old page 3 (compressor-lockout countdown) was preserved by moving
+it to the Info page rather than dropped.
+
+**Bugs caught during compile** (all non-hardware, caught by `esphome config`/GCC): 89 lines
+written in invalid flow-style YAML under block-mapping keys (fixed with a scripted pass); 6
+dangling `lvgl.label.update` refs to label IDs deleted along with the old pages (fixed); 12
+ON/OFF + 1 NC/NO toggle-label lambdas that failed to compile because a ternary between
+different-length string literals decays to `const char*`, not `std::string` (fixed by wrapping in
+`std::string(...)`); bumped an undersized ntfy message buffer (140→200 B) flagged by
+`-Wformat-truncation` as a small drive-by fix.
+
+**Verified**: no WiFi config, superadmin/web password field, or SD-delete control exists anywhere
+in the `lvgl:` block — confirmed by grep across the entire component, not just the new pages.
+
+**Build**: RAM 21.3% (122,604/576,464 B), Flash 21.5% (1,579,656/7,340,032 B). Compile clean — only
+the known pre-existing `opendir`/`readdir`/`closedir` linker warnings (unconfirmed without
+hardware) and one unrelated pre-existing `name:` deprecation warning.
+
+**Untested on hardware** — none of the new pagination, PIN gate, stepper/toggle wiring, or
+label-refresh logic has touched a real touchscreen; the SD auto-remount interval has never been
+exercised against a real card removal/reinsertion. Add both to the hardware-validation queue.
 
 ---
 

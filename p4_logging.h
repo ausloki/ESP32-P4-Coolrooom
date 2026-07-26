@@ -36,13 +36,29 @@ static const char* TAG_SD = "p4_sd";
 
 static sdmmc_card_t* p4_sd_card = nullptr;
 static bool          p4_sd_ready = false;
+// True once esp_vfs_fat_sdmmc_mount() has succeeded, false only after an
+// explicit unmount — deliberately tracked separately from p4_sd_ready.
+// p4_sd_ready can go false at runtime (p4_sd_mark_failed(), a write
+// failure) while the VFS mount point is still technically registered with
+// ESP-IDF; a remount attempt must clean that up first or
+// esp_vfs_fat_sdmmc_mount() will simply fail again for "already mounted".
+static bool          p4_sd_vfs_registered = false;
 
 // ─── Mount / unmount ───────────────────────────────────────────────────────
 
 /// Mount the TF card on SDMMC slot 1 (GPIO 39-44).
-/// Returns true on success. Safe to call multiple times (no-op if already mounted).
+/// Returns true on success. Safe to call repeatedly — a no-op if already
+/// mounted and healthy, and cleans up a stale (failed-but-still-registered)
+/// mount before retrying, so this also serves as the auto-remount entry
+/// point after p4_sd_mark_failed() or a boot-time mount failure.
 inline bool p4_sd_mount() {
     if (p4_sd_ready) return true;
+
+    if (p4_sd_vfs_registered) {
+        esp_vfs_fat_sdcard_unmount("/sdcard", p4_sd_card);
+        p4_sd_card = nullptr;
+        p4_sd_vfs_registered = false;
+    }
 
     esp_vfs_fat_sdmmc_mount_config_t mnt = {
         .format_if_mount_failed = false,
@@ -76,15 +92,20 @@ inline bool p4_sd_mount() {
              p4_sd_card->cid.name,
              p4_sd_card->max_freq_khz,
              ((uint64_t)p4_sd_card->csd.capacity) * p4_sd_card->csd.sector_size / (1024 * 1024));
+    p4_sd_vfs_registered = true;
     p4_sd_ready = true;
     return true;
 }
 
-/// Unmount the SD card cleanly (call before physical removal).
+/// Unmount the SD card cleanly (call before physical removal). Unlike
+/// p4_sd_mount()'s internal cleanup, this is for a deliberate, intentional
+/// unmount — gated on p4_sd_vfs_registered (not p4_sd_ready) so it still
+/// works after a runtime failure has already cleared p4_sd_ready.
 inline void p4_sd_unmount() {
-    if (!p4_sd_ready) return;
+    if (!p4_sd_vfs_registered) return;
     esp_vfs_fat_sdcard_unmount("/sdcard", p4_sd_card);
     p4_sd_card  = nullptr;
+    p4_sd_vfs_registered = false;
     p4_sd_ready = false;
     ESP_LOGI(TAG_SD, "SD card unmounted");
 }
@@ -101,6 +122,9 @@ inline bool p4_sd_is_ready() { return p4_sd_ready; }
 /// control loop watches p4_sd_is_ready() for the true→false edge to fire an
 /// ntfy alert and flip the sd_card_online diagnostic in real time, instead
 /// of that entity silently staying "true" forever after a runtime failure.
+/// p4_sd_vfs_registered deliberately stays true here — the mount point is
+/// still registered with ESP-IDF even though I/O is failing; the next
+/// p4_sd_mount() call (auto-remount) cleans that up before retrying.
 inline void p4_sd_mark_failed(const char* where) {
     if (!p4_sd_ready) return;
     p4_sd_ready = false;
