@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
 **Status**: In Progress — SD card now auto-remounts after a runtime failure (no reboot needed); LVGL touchscreen settings redesigned as a single-PIN-entry, 7-page paginated flow (was: 3 fixed, independently-gated tabs covering only 6 of 34 settings); new end-user documentation (User Manual + Quick Start Guide) added, no firmware changes in that pass; hardware validation + device reflash both blocked  
-**Last Commit**: (pending — this session's documentation not yet committed)
+**Last Commit**: `0b1a204` (docs: add user manual and quick start guide with NS-style control diagrams)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
