@@ -1914,4 +1914,66 @@ confirm the underlying logic (smart delta, drip hold, temp-based early terminati
 responds to the flag correctly — first check once hardware is connected, alongside everything else
 already queued from prior sessions.
 
+## 2026-07-26 — Full Settings Audit: Every Parameter Now Web-Settable, NVS-Persistent, Backed Up
+
+User asked to ensure *every* setting can be set/enabled from the web GUI, has a help balloon, is
+included in backup/restore, and is saved to NVS for power-fail recovery. Ran a full audit rather
+than assuming the fix from the last two sessions covered everything — it didn't.
+
+**Audit method**: listed every `input_*`/`ctl_*` global, cross-checked each against a
+`number:`/`switch:` entity actually reading/writing it (`grep "return id($g)"` per global), and
+separately checked `restore_value:` and presence in `p4_sd_backup_params()`/`p4_sd_restore_params()`.
+
+**Found: 14 settings had no entity at all** — not just the three fixed last session, a much wider
+gap:
+
+- 7 missing `switch:` entities: `input_probe2_enabled`, `input_humidity_internal_enabled`,
+  `input_humidity_external_enabled`, `input_door_sensor_enabled`, `input_siren_enabled`,
+  `input_defrost_enabled` (the defrost **master** enable — completely unreachable before this),
+  `input_fallback_enabled`.
+- 7 missing `number:` entities: `ctl_startup_grace_min`, `ctl_defrost_grace_min`,
+  `ctl_alarm_hysteresis_c`, `ctl_fallback_on_min`, `ctl_fallback_off_min`, `ctl_smart_delta_c`,
+  `ctl_smart_dwell_min`. All added as new `platform: template` entities in
+  `esp32-p4-coolroom.yaml`, matching the existing naming/icon/`entity_category: config` conventions.
+
+**Found a real NVS bug**: `ctl_startup_grace_min` had `restore_value: no` — the only setting global
+in the entire project marked that way. Fixed to `restore_value: yes`; this setting would have
+silently reset to its compiled-in default (15 min) on every reboot, unlike every sibling parameter.
+
+**Found a real backup/restore bug**: `ctl_startup_grace_min` was also completely absent from
+`p4_sd_backup_params()`/`p4_sd_restore_params()` (`p4_logging.h`) and all three call sites — the
+only setting never round-tripped through SD backup at all. Added a new parameter to both
+functions and updated `on_boot` restore, `btn_sd_backup`, and `btn_sd_restore`. Treated it the same
+as the three genuinely-new fields from two sessions ago: seeded from the caller's current value
+(not `NAN`) and excluded from the all-or-nothing `isfinite` gate, so existing backup.json files
+(which never had this key) still restore successfully.
+
+**Web dashboard — new "🛠️ Advanced Settings" section** (`assets/dashboard.html`): rather than
+hand-authoring ~30 near-identical field blocks, built a data-driven `ADVANCED_SETTINGS_GROUPS`
+config array (5 groups: Compressor & Fallback, Defrost, Alarms, Door, Probe Calibration & Enable)
+and a `renderAdvancedSettings()` function that generates the markup, help balloons, and wiring from
+it. Every help text is grounded in the actual control logic (e.g. correctly notes Compressor
+Hysteresis — not the alarm deltas — feeds the No-Cooling alarm threshold; correctly notes the dew
+point trigger needs the internal SHT31 enabled). Numbers reuse the existing `submitNumberSetting()`
+helper; switches get a new `toggleAdvancedSwitch()` (`POST /switch/<id>/toggle`). `parseStates()`
+gained a generic entity-ID-driven loop (matching against the same config array) instead of 30 more
+manual `if` lines. Gated behind the same guest/operator role logic as the rest of the page —
+help balloons hidden for guests, inputs/buttons disabled, consistent with prior sessions' decisions.
+
+`assets/dashboard_virtual_preview.html` mirrors the same config array (with an added `def` demo
+value per field, since there's no live device to poll) rendered as static disabled inputs / status
+badges — same visual structure, no live wiring, consistent with that file's existing convention.
+
+**Build**: RAM 20.5% (118,428/576,464 B, +1.9 KB for 14 new entities), Flash 21.0%
+(1,538,056/7,340,032 B, +9.4 KB). Compile clean.
+
+**Not done**: no LVGL touchscreen controls added for any of the 14 newly-exposed settings — web
+GUI reachability was the explicit ask; touchscreen parity for all of these would be a much larger,
+separate LVGL layout task if ever wanted.
+
+**Hardware-gated follow-up**: none of the 14 new entities, the `ctl_startup_grace_min` NVS fix, or
+the new dashboard section have been exercised on real hardware — add to the growing priority list,
+though these are all low-risk (entity exposure + persistence fixes on already-working control
+logic, not new control behavior).
+
 ---

@@ -2,11 +2,46 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
-**Status**: In Progress — three defrost enable-flags now have real switch entities (were previously unreachable at runtime); hardware validation + device reflash both blocked  
-**Last Commit**: `ae9adab` (feat(control): expose smart-defrost/drip/term-temp enable flags as real switches)
+**Status**: In Progress — full settings audit: 14 previously-unreachable settings now have web entities, a real NVS-persistence bug and a real backup/restore gap fixed, new "Advanced Settings" dashboard section; hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-26 Addendum — Full Settings Audit: Web-Settable, NVS-Persistent, Backed Up
+
+User asked to ensure *every* setting is settable from the web GUI, has a help balloon, is in
+backup/restore, and is saved to NVS. Ran a full audit instead of assuming last session's fix
+covered it — found 14 settings with no entity at all (not 3), one real NVS-persistence bug, and
+one real backup/restore omission.
+
+- **14 new entities** in `esp32-p4-coolroom.yaml`: 7 switches (`input_probe2_enabled`,
+  `input_humidity_internal_enabled`, `input_humidity_external_enabled`,
+  `input_door_sensor_enabled`, `input_siren_enabled`, `input_defrost_enabled` — the defrost
+  **master** enable, previously completely unreachable — `input_fallback_enabled`) and 7 numbers
+  (`ctl_startup_grace_min`, `ctl_defrost_grace_min`, `ctl_alarm_hysteresis_c`,
+  `ctl_fallback_on_min`, `ctl_fallback_off_min`, `ctl_smart_delta_c`, `ctl_smart_dwell_min`).
+- **Real bug fixed**: `ctl_startup_grace_min` had `restore_value: no` — the only setting global in
+  the project marked that way. Would have silently reset to its compiled default every reboot.
+- **Real bug fixed**: `ctl_startup_grace_min` was also entirely missing from
+  `p4_sd_backup_params()`/`p4_sd_restore_params()` (`p4_logging.h`) and all three call sites — the
+  only setting that never round-tripped through SD backup. Fixed with the same backward-compatible
+  pattern as prior additions (seeded from current value, excluded from the all-or-nothing parse
+  gate, so old backup.json files still restore).
+- **New "🛠️ Advanced Settings" section** on the web dashboard: rather than hand-authoring ~30
+  field blocks, built a data-driven config array (`ADVANCED_SETTINGS_GROUPS`) + render function
+  covering all of them across 5 logical groups, each with a grounded help balloon. Mirrored in the
+  static virtual preview with demo values.
+
+**Build**: RAM 20.5% (+1.9 KB), Flash 21.0% (+9.4 KB). Compile clean.
+
+**Not done**: no LVGL touchscreen controls for these 14 settings — web GUI was the explicit ask;
+touchscreen parity would be a separate, larger LVGL layout task.
+
+**Untested on hardware** — same standing blocker, adds to the queue but all low-risk (entity
+exposure/persistence fixes on already-working logic, not new control behavior).
 
 ---
 

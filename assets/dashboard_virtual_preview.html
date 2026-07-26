@@ -238,6 +238,17 @@
     .hw-grid strong { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
     .hw-grid span { font-size: 13px; font-variant-numeric: tabular-nums; }
 
+    /* Advanced Settings — rendered groups of number/switch fields (static
+       mock values here; the live dashboard's version is interactive). */
+    .adv-group { margin-bottom: 22px; }
+    .adv-group:last-child { margin-bottom: 0; }
+    .adv-group h3 {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid rgba(15,23,42,0.07);
+    }
+    .adv-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .adv-field input[type="number"] { width: 100%; padding: 8px; margin-top: 5px; }
+
     .modal {
       position: fixed;
       inset: 0;
@@ -407,6 +418,14 @@
       </div>
     </section>
 
+    <section id="advancedSettingsSection" class="section">
+      <div class="card-header-row">
+        <h2>🛠️ Advanced Settings</h2>
+        <span class="lock-chip" id="advancedSettingsLockChip">🔒 Login to edit</span>
+      </div>
+      <div id="advancedSettingsContent"></div>
+    </section>
+
     <section class="section">
       <h2>⏱️ Timers</h2>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
@@ -568,6 +587,106 @@
       }
     }
 
+    // Same field set/help text as the live dashboard's ADVANCED_SETTINGS_GROUPS,
+    // with a `def` (demo) value added per field since this static page has no
+    // device to poll — rendered once as disabled/non-interactive mock content.
+    const ADVANCED_SETTINGS_GROUPS = [
+      { title: 'Compressor & Fallback', fields: [
+        { type: 'number', entity: 'comp_lockout_min', label: 'Compressor Off-Delay (min)', def: 3,
+          help: 'Minimum time the compressor must stay off after switching off before it’s allowed to run again — protects the compressor motor from rapid on/off cycling ("short cycling").' },
+        { type: 'switch', entity: 'sw_fallback_enabled', label: 'Sensor Fallback Enabled', def: true,
+          help: 'When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle so cooling continues, degraded, until the probe recovers.' },
+        { type: 'number', entity: 'fallback_on_min', label: 'Fallback Compressor ON Time (min)', def: 3,
+          help: 'While the sensor fallback duty cycle is active, how long the compressor runs during each ON phase.' },
+        { type: 'number', entity: 'fallback_off_min', label: 'Fallback Compressor OFF Time (min)', def: 27,
+          help: 'While the sensor fallback duty cycle is active, how long the compressor rests during each OFF phase.' },
+      ]},
+      { title: 'Defrost', fields: [
+        { type: 'switch', entity: 'sw_defrost_enabled', label: 'Defrost System Enabled', def: true,
+          help: 'Master switch for the whole defrost system. Turning this off disables scheduled, smart-delta, and dew-point defrost cycles entirely.' },
+        { type: 'number', entity: 'defrost_interval_num', label: 'Defrost Interval (min)', def: 480,
+          help: 'How often a scheduled defrost cycle runs, measured from the end of the last defrost.' },
+        { type: 'number', entity: 'defrost_duration_num', label: 'Defrost Max Duration (min)', def: 30,
+          help: 'The hard time limit on a defrost cycle — it always ends by this point regardless.' },
+        { type: 'switch', entity: 'sw_defrost_term_temp', label: 'Defrost Early Termination by Temperature', def: true,
+          help: 'When enabled, a defrost cycle can end early once the evaporator reaches the termination temperature below.' },
+        { type: 'number', entity: 'defrost_end_temp', label: 'Defrost Termination Temp (°C)', def: 5.0,
+          help: 'The evaporator temperature that ends a defrost cycle early.' },
+        { type: 'switch', entity: 'sw_defrost_drip', label: 'Defrost Drip/Drain Phase', def: true,
+          help: 'When enabled, the compressor stays off for a hold period after defrost ends to let meltwater drain.' },
+        { type: 'number', entity: 'defrost_drip_num', label: 'Defrost Drip Time (min)', def: 5,
+          help: 'How long the compressor is held off after a defrost cycle ends.' },
+        { type: 'switch', entity: 'sw_smart_defrost', label: 'Smart Defrost (Delta-Triggered)', def: false,
+          help: 'When enabled, a growing temperature gap between the coolroom and evaporator probes can trigger an early defrost.' },
+        { type: 'number', entity: 'smart_delta_c', label: 'Smart Defrost Delta Threshold (°C)', def: 8.0,
+          help: 'How large the coolroom-to-evaporator gap must get before it counts toward triggering smart defrost.' },
+        { type: 'number', entity: 'smart_dwell_min', label: 'Smart Defrost Dwell Time (min)', def: 30,
+          help: 'How long that gap must hold above the threshold before smart defrost actually triggers.' },
+        { type: 'switch', entity: 'sw_dew_point_trigger', label: 'Dew Point Early Defrost Trigger', def: false,
+          help: 'When enabled, defrost can also start early if the evaporator drops below both freezing and the surrounding air’s dew point.' },
+      ]},
+      { title: 'Alarms', fields: [
+        { type: 'number', entity: 'alarm_persist_num', label: 'Alarm Persist Time (min)', def: 5,
+          help: 'How long a high or low temperature condition must hold before the alarm actually fires.' },
+        { type: 'number', entity: 'alarm_hysteresis_c', label: 'Alarm Recovery Hysteresis (°C)', def: 0.5,
+          help: 'How far the room must recover past Setpoint before an active alarm clears.' },
+        { type: 'number', entity: 'ice_delta_num', label: 'Ice Alarm Delta (°C)', def: 2.0,
+          help: 'If the coolroom-evaporator gap shrinks below this, it likely means ice is blocking the coil.' },
+        { type: 'number', entity: 'no_cool_alarm_num', label: 'No-Cool Alarm Timeout (min)', def: 60,
+          help: 'If the compressor runs this long without the room cooling below Setpoint, it likely means a refrigeration failure.' },
+        { type: 'switch', entity: 'sw_siren_enabled', label: 'Alarm Siren Enabled', def: true,
+          help: 'Whether the physical siren relay sounds when any alarm is active.' },
+        { type: 'number', entity: 'startup_grace_min', label: 'Startup Alarm Grace Floor (min)', def: 15,
+          help: 'Alarms are suppressed for at least this long after boot, extending further if the room hasn’t reached Setpoint yet.' },
+        { type: 'number', entity: 'defrost_grace_min', label: 'Post-Defrost Alarm Grace (min)', def: 20,
+          help: 'Alarms are suppressed for this long after each defrost cycle ends.' },
+      ]},
+      { title: 'Door', fields: [
+        { type: 'switch', entity: 'sw_door_sensor_enabled', label: 'Door Sensor Enabled', def: false,
+          help: 'Whether the door reed switch is monitored at all.' },
+        { type: 'switch', entity: 'door_sensor_mode_light_control', label: 'Door Sensor Mode: NC (on) / NO (off)', def: true,
+          help: 'Matches the reed switch’s wiring — Normally Closed or Normally Open.' },
+        { type: 'number', entity: 'door_alarm_delay_num', label: 'Door Alarm Delay (s)', def: 300,
+          help: 'How long the door can stay open before the Door Open alarm fires.' },
+      ]},
+      { title: 'Probe Calibration & Enable', fields: [
+        { type: 'number', entity: 'probe1_offset_c', label: 'Probe 1 (Coolroom) Calibration Offset (°C)', def: 0.0,
+          help: 'Manual fine-tuning offset added to the Coolroom Temperature reading, for correcting against a reference thermometer.' },
+        { type: 'number', entity: 'probe2_offset_c', label: 'Probe 2 (Evaporator) Calibration Offset (°C)', def: 0.0,
+          help: 'Same idea as the Probe 1 offset, but for the Evaporator Temperature reading.' },
+        { type: 'switch', entity: 'sw_probe2_enabled', label: 'Evaporator Probe (Probe 2) Enabled', def: true,
+          help: 'Whether the evaporator RTD probe is read at all.' },
+        { type: 'switch', entity: 'sw_humidity_internal_enabled', label: 'Internal SHT31 Sensor Enabled', def: true,
+          help: 'Whether the internal (in-coolroom) SHT31 sensor is read.' },
+        { type: 'switch', entity: 'sw_humidity_external_enabled', label: 'External SHT20 Sensor Enabled', def: true,
+          help: 'Whether the external (ambient) SHT20 sensor is read.' },
+      ]},
+    ];
+
+    function renderAdvancedSettings() {
+      const container = document.getElementById('advancedSettingsContent');
+      container.innerHTML = ADVANCED_SETTINGS_GROUPS.map((group) => {
+        const fieldsHtml = group.fields.map((f) => {
+          const helpId = `help-adv-${f.entity}`;
+          const helpIcon = `<button type="button" class="help-icon" onclick="toggleHelp(event, '${helpId}')" aria-label="What does ${f.label} do?">i</button>`;
+          const helpPopover = `<div id="${helpId}" class="help-popover hidden">${f.help}</div>`;
+          if (f.type === 'number') {
+            return `<div class="adv-field">
+              <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
+              <input type="number" value="${f.def}" disabled>
+              ${helpPopover}
+            </div>`;
+          }
+          return `<div class="adv-field">
+            <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
+            <span class="status-badge ${f.def ? 'status-ok' : 'status-error'}">${f.def ? 'ON' : 'OFF'}</span>
+            ${helpPopover}
+          </div>`;
+        }).join('');
+        return `<div class="adv-group"><h3>${group.title}</h3><div class="adv-field-grid">${fieldsHtml}</div></div>`;
+      }).join('');
+    }
+
     function applyRole() {
       const roleBadge = document.getElementById('roleBadge');
       const loginBtn = document.getElementById('loginBtn');
@@ -580,6 +699,7 @@
 
       const enabled = role !== 'guest';
       setSectionInteractive('settingsSection', 'settingsLockChip', enabled);
+      setSectionInteractive('advancedSettingsSection', 'advancedSettingsLockChip', enabled);
       setSectionInteractive('adminSection', 'adminLockChip', enabled);
       document.getElementById('iconLight').disabled = !enabled;
     }
@@ -708,6 +828,7 @@
       setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(22.4));
     }
 
+    renderAdvancedSettings();
     applyRole();
     drawMockGauge();
   </script>

@@ -202,6 +202,7 @@ esphome:
               float p1_off = id(ctl_probe1_offset_c);
               float p2_off = id(ctl_probe2_offset_c);
               bool dew_trigger_en = id(input_dew_point_trigger_enabled);
+              float startup_grace = id(ctl_startup_grace_min);
               if (p4_sd_restore_params(
                   sp, cd, ah, al,
                   lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -210,7 +211,7 @@ esphome:
                   probe2_en, door_mode_nc, door_en, siren_en,
                   defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
                   hum_int_en, hum_ext_en,
-                  p1_off, p2_off, dew_trigger_en)) {
+                  p1_off, p2_off, dew_trigger_en, startup_grace)) {
                     id(ctl_setpoint)         = sp;
                     id(ctl_comp_diff)        = cd;
                     id(ctl_alarm_high_delta) = ah;
@@ -244,6 +245,7 @@ esphome:
                 id(ctl_probe1_offset_c) = p1_off;
                 id(ctl_probe2_offset_c) = p2_off;
                 id(input_dew_point_trigger_enabled) = dew_trigger_en;
+                id(ctl_startup_grace_min) = startup_grace;
                 if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
                 ESP_LOGI("sd", "All control settings restored from SD backup");
@@ -726,6 +728,149 @@ switch:
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
           ESP_LOGI("config", "Defrost early-termination-by-temperature DISABLED");
     lambda: 'return id(input_defrost_term_temp_enabled);'
+
+  # ── The seven switches below cover the remaining enable/disable flags that
+  # had no entity at all — same gap as the three above, found in a full
+  # audit of every "input_*_enabled" global against its web GUI exposure.
+  - platform: template
+    id: sw_defrost_enabled
+    name: "Defrost System Enabled"
+    icon: "mdi:snowflake-melt"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 1
+    turn_on_action:
+      - lambda: |-
+          id(input_defrost_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Defrost system ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_defrost_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Defrost system DISABLED");
+    lambda: 'return id(input_defrost_enabled);'
+
+  - platform: template
+    id: sw_fallback_enabled
+    name: "Sensor Fallback Duty-Cycle Enabled"
+    icon: "mdi:swap-horizontal-circle"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_compressor
+      sorting_weight: 10
+    turn_on_action:
+      - lambda: |-
+          id(input_fallback_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Sensor fallback duty-cycle ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_fallback_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Sensor fallback duty-cycle DISABLED");
+    lambda: 'return id(input_fallback_enabled);'
+
+  - platform: template
+    id: sw_siren_enabled
+    name: "Alarm Siren Enabled"
+    icon: "mdi:alarm-bell"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 20
+    turn_on_action:
+      - lambda: |-
+          id(input_siren_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Alarm siren ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_siren_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Alarm siren DISABLED");
+    lambda: 'return id(input_siren_enabled);'
+
+  - platform: template
+    id: sw_door_sensor_enabled
+    name: "Door Sensor Enabled"
+    icon: "mdi:door"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_door
+      sorting_weight: 10
+    turn_on_action:
+      - lambda: |-
+          id(input_door_sensor_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Door sensor ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_door_sensor_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Door sensor DISABLED");
+    lambda: 'return id(input_door_sensor_enabled);'
+
+  - platform: template
+    id: sw_probe2_enabled
+    name: "Evaporator Probe (Probe 2) Enabled"
+    icon: "mdi:thermometer"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 20
+    turn_on_action:
+      - lambda: |-
+          id(input_probe2_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Evaporator probe (probe 2) ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_probe2_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Evaporator probe (probe 2) DISABLED");
+    lambda: 'return id(input_probe2_enabled);'
+
+  - platform: template
+    id: sw_humidity_internal_enabled
+    name: "Internal SHT31 Sensor Enabled"
+    icon: "mdi:water-percent"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 21
+    turn_on_action:
+      - lambda: |-
+          id(input_humidity_internal_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Internal SHT31 sensor ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_humidity_internal_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Internal SHT31 sensor DISABLED");
+    lambda: 'return id(input_humidity_internal_enabled);'
+
+  - platform: template
+    id: sw_humidity_external_enabled
+    name: "External SHT20 Sensor Enabled"
+    icon: "mdi:water-percent"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 22
+    turn_on_action:
+      - lambda: |-
+          id(input_humidity_external_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "External SHT20 sensor ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_humidity_external_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "External SHT20 sensor DISABLED");
+    lambda: 'return id(input_humidity_external_enabled);'
 
 ##############################################################################
 # Sensors — all temperature probes are RS485 RTD
@@ -1814,6 +1959,136 @@ number:
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
           ESP_LOGI("config", "Probe 2 calibration offset set to %.2f", (double) x);
 
+  # ── The seven tuning values below had no entity at all — same audit that
+  # found the missing switch entities above. All were already NVS-persistent
+  # (restore_value: yes) and already round-tripped through SD backup/restore;
+  # they just had no way to be changed without a reflash.
+  - platform: template
+    id: startup_grace_min
+    name: "Startup Alarm Grace Floor (min)"
+    icon: "mdi:timer-sand"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 60
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 20
+    lambda: 'return id(ctl_startup_grace_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_startup_grace_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_grace_min
+    name: "Post-Defrost Alarm Grace (min)"
+    icon: "mdi:timer-sand"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 60
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 21
+    lambda: 'return id(ctl_defrost_grace_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_grace_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: alarm_hysteresis_c
+    name: "Alarm Recovery Hysteresis (°C)"
+    icon: "mdi:thermometer-lines"
+    unit_of_measurement: "°C"
+    min_value: 0.1
+    max_value: 5.0
+    step: 0.1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 22
+    lambda: 'return id(ctl_alarm_hysteresis_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_alarm_hysteresis_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: fallback_on_min
+    name: "Sensor Fallback Compressor ON Time (min)"
+    icon: "mdi:timer-play"
+    unit_of_measurement: "min"
+    min_value: 1
+    max_value: 30
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_compressor
+      sorting_weight: 20
+    lambda: 'return id(ctl_fallback_on_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_fallback_on_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: fallback_off_min
+    name: "Sensor Fallback Compressor OFF Time (min)"
+    icon: "mdi:timer-off"
+    unit_of_measurement: "min"
+    min_value: 1
+    max_value: 60
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_compressor
+      sorting_weight: 21
+    lambda: 'return id(ctl_fallback_off_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_fallback_off_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: smart_delta_c
+    name: "Smart Defrost Delta Threshold (°C)"
+    icon: "mdi:chart-bell-curve"
+    unit_of_measurement: "°C"
+    min_value: 1.0
+    max_value: 20.0
+    step: 0.5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 20
+    lambda: 'return id(ctl_smart_delta_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_smart_delta_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: smart_dwell_min
+    name: "Smart Defrost Dwell Time (min)"
+    icon: "mdi:timer-sand"
+    unit_of_measurement: "min"
+    min_value: 1
+    max_value: 120
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 21
+    lambda: 'return id(ctl_smart_dwell_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_smart_dwell_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
 ##############################################################################
 # Text — web-side "Change PIN" control (touchscreen has its own keypad, see
 # page_set_pin). Mirrors the same djb2-hash storage as the LVGL side.
@@ -1987,7 +2262,7 @@ button:
           id(input_defrost_drip_enabled), id(input_smart_defrost_enabled),
           id(input_humidity_internal_enabled), id(input_humidity_external_enabled),
           id(ctl_probe1_offset_c), id(ctl_probe2_offset_c),
-          id(input_dew_point_trigger_enabled));
+          id(input_dew_point_trigger_enabled), id(ctl_startup_grace_min));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -2034,6 +2309,7 @@ button:
           float p1_off = id(ctl_probe1_offset_c);
           float p2_off = id(ctl_probe2_offset_c);
           bool dew_trigger_en = id(input_dew_point_trigger_enabled);
+          float startup_grace = id(ctl_startup_grace_min);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -2042,7 +2318,7 @@ button:
               probe2_en, door_mode_nc, door_en, siren_en,
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en,
-              p1_off, p2_off, dew_trigger_en)) {
+              p1_off, p2_off, dew_trigger_en, startup_grace)) {
               id(ctl_setpoint)         = sp;
               id(ctl_comp_diff)        = cd;
               id(ctl_alarm_high_delta) = ah;
@@ -2076,6 +2352,7 @@ button:
             id(ctl_probe1_offset_c) = p1_off;
             id(ctl_probe2_offset_c) = p2_off;
             id(input_dew_point_trigger_enabled) = dew_trigger_en;
+            id(ctl_startup_grace_min) = startup_grace;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");
@@ -2767,7 +3044,7 @@ globals:
 
   - id: ctl_startup_grace_min
     type: float
-    restore_value: no
+    restore_value: yes
     initial_value: ${default_startup_grace_min}
 
   - id: ctl_defrost_grace_min

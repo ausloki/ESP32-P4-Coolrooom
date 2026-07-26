@@ -1,5 +1,22 @@
 # Progress Tracking
 
+## 2026-07-26 Full Settings Audit: Web-Settable, NVS-Persistent, Backed Up
+
+- Asked to ensure every setting is settable from web GUI, has a help balloon, is in backup/
+  restore, and saved to NVS. Ran a full audit rather than assuming the prior session's fix
+  covered it — found 14 settings with no entity at all (not 3), one real NVS bug, one real
+  backup/restore omission.
+- Added 7 switch entities (probe2, humidity int/ext, door sensor, siren, defrost master enable,
+  fallback enable) and 7 number entities (startup/defrost alarm grace, alarm hysteresis, fallback
+  on/off timing, smart defrost delta/dwell) — all previously unreachable at runtime.
+- Fixed: `ctl_startup_grace_min` had `restore_value: no` (only setting global marked that way) and
+  was entirely missing from SD backup/restore. Both fixed, backward-compatible with old backups.
+- New "Advanced Settings" dashboard section, data-driven from a config array (5 groups, ~30
+  fields), each with a grounded help balloon — avoided hand-authoring 30 near-identical blocks.
+  Mirrored in the static preview with demo values.
+- No LVGL touchscreen controls added — web GUI was the explicit ask.
+- Build: RAM +1.9 KB, Flash +9.4 KB. Compile clean. Untested on hardware.
+
 ## 2026-07-26 Fixed the No-Runtime-Toggle Gap Found Last Session
 
 - Direct follow-up to a flagged issue: `input_smart_defrost_enabled`/`input_defrost_drip_enabled`/
