@@ -1883,4 +1883,35 @@ offset value to be entered" without custom dashboard.html work that wasn't asked
 real thermometer comparison — first things to check once hardware is connected, alongside the
 dirent.h warning above.
 
+## 2026-07-26 — Fixed the No-Runtime-Toggle Gap Found Last Session
+
+Follow-up to "found, not fixed" item 1 from the prior entry's closing message: three defrost
+enable flags — `input_smart_defrost_enabled`, `input_defrost_drip_enabled`,
+`input_defrost_term_temp_enabled` — had no `switch:` entity, no LVGL control, nothing; permanently
+stuck at their YAML compile-time defaults unless hand-edited into a backup.json.
+
+Added three new `platform: template` switch entities, mirroring `sw_dew_point_trigger`'s exact
+pattern (`entity_category: config`, `group_defrost`, `turn_on_action`/`turn_off_action` toggling
+the global + NVS sync + log line, `lambda:` getter reading the global back):
+
+- `sw_smart_defrost` ("Smart Defrost (Delta-Triggered)") → `input_smart_defrost_enabled`
+- `sw_defrost_drip` ("Defrost Drip/Drain Phase") → `input_defrost_drip_enabled`
+- `sw_defrost_term_temp` ("Defrost Early Termination by Temperature") → `input_defrost_term_temp_enabled`
+
+All three now reachable via ESPHome's own web_server UI and API (`POST /switch/<id>/toggle`), same
+as `sw_dew_point_trigger` from the prior entry — no LVGL touchscreen control added, matching that
+same scope decision (web/API reachability was the actual gap; LVGL wasn't part of either ask).
+
+Since these three already existed as `restore_value: yes` globals and were already threaded through
+SD backup/restore, no globals/backup-restore/p4_logging.h changes were needed here — purely
+additive `switch:` entities exposing controls that were otherwise invisible.
+
+**Build**: RAM 20.3% (116,868/576,464 B, +336 B), Flash 20.9% (1,530,888/7,340,032 B, +2.2 KB).
+Compile clean.
+
+**Hardware-gated follow-up**: none of the three has been toggled against a real defrost cycle to
+confirm the underlying logic (smart delta, drip hold, temp-based early termination) actually
+responds to the flag correctly — first check once hardware is connected, alongside everything else
+already queued from prior sessions.
+
 ---

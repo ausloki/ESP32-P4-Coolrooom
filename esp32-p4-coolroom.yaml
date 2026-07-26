@@ -663,6 +663,70 @@ switch:
           ESP_LOGI("config", "Dew point early defrost trigger DISABLED");
     lambda: 'return id(input_dew_point_trigger_enabled);'
 
+  # ── The three flags below existed only as globals with no way to change
+  # them at runtime — no switch entity, no LVGL control, permanently stuck
+  # at their YAML compile-time default. Found while wiring sw_dew_point_
+  # trigger above; fixed here rather than left as a second silent gap.
+  - platform: template
+    id: sw_smart_defrost
+    name: "Smart Defrost (Delta-Triggered)"
+    icon: "mdi:chart-bell-curve"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 7
+    turn_on_action:
+      - lambda: |-
+          id(input_smart_defrost_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Smart (delta-triggered) defrost ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_smart_defrost_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Smart (delta-triggered) defrost DISABLED");
+    lambda: 'return id(input_smart_defrost_enabled);'
+
+  - platform: template
+    id: sw_defrost_drip
+    name: "Defrost Drip/Drain Phase"
+    icon: "mdi:water-outline"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 8
+    turn_on_action:
+      - lambda: |-
+          id(input_defrost_drip_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Post-defrost drip/drain phase ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_defrost_drip_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Post-defrost drip/drain phase DISABLED");
+    lambda: 'return id(input_defrost_drip_enabled);'
+
+  - platform: template
+    id: sw_defrost_term_temp
+    name: "Defrost Early Termination by Temperature"
+    icon: "mdi:thermometer-check"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 9
+    turn_on_action:
+      - lambda: |-
+          id(input_defrost_term_temp_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Defrost early-termination-by-temperature ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_defrost_term_temp_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Defrost early-termination-by-temperature DISABLED");
+    lambda: 'return id(input_defrost_term_temp_enabled);'
+
 ##############################################################################
 # Sensors — all temperature probes are RS485 RTD
 ##############################################################################

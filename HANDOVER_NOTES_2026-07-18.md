@@ -1,12 +1,32 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-25  
-**Status**: In Progress — dew-point-triggered early defrost ported from the old S3 project, manual per-probe calibration offset added; hardware validation + device reflash both blocked  
-**Last Commit**: `7260442` (feat(control): port dew-point early defrost, add manual per-probe calibration offset)
+**Resume State Updated**: 2026-07-26  
+**Status**: In Progress — three defrost enable-flags now have real switch entities (were previously unreachable at runtime); hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-26 Addendum — Fixed the No-Runtime-Toggle Gap Found Last Session
+
+Follow-up to a "found, not fixed" item flagged at the end of the prior session: three defrost
+enable flags (`input_smart_defrost_enabled`, `input_defrost_drip_enabled`,
+`input_defrost_term_temp_enabled`) had no way to be toggled at runtime — no switch entity, no
+LVGL control, permanently stuck at compile-time defaults.
+
+Added three new `switch:` entities mirroring `sw_dew_point_trigger`'s exact pattern —
+`sw_smart_defrost`, `sw_defrost_drip`, `sw_defrost_term_temp` — all reachable via ESPHome's own
+web_server UI and API now. No LVGL touchscreen control added, matching the same scope as the
+dew-point trigger switch (web/API reachability was the actual gap). Since these three were already
+`restore_value: yes` globals already threaded through SD backup/restore, no other changes needed —
+purely additive switch entities.
+
+**Build**: RAM 20.3% (+336 B), Flash 20.9% (+2.2 KB). Compile clean.
+
+**Untested on hardware** — none of the three has been toggled against a real defrost cycle yet.
 
 ---
 

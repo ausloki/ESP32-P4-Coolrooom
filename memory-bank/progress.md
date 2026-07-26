@@ -1,5 +1,16 @@
 # Progress Tracking
 
+## 2026-07-26 Fixed the No-Runtime-Toggle Gap Found Last Session
+
+- Direct follow-up to a flagged issue: `input_smart_defrost_enabled`/`input_defrost_drip_enabled`/
+  `input_defrost_term_temp_enabled` had no switch entity or LVGL control, permanently stuck at
+  compile-time defaults.
+- Added three new switch entities (`sw_smart_defrost`, `sw_defrost_drip`, `sw_defrost_term_temp`),
+  mirroring the dew-point-trigger switch's exact pattern. All reachable via web_server UI/API now.
+  No LVGL control added, matching the same scope as the dew-point switch.
+- Purely additive — the underlying globals already existed and were already backed up/restored.
+- Build: RAM +336 B, Flash +2.2 KB. Compile clean. Untested on hardware.
+
 ## 2026-07-25 Dew-Point Early Defrost Ported; Manual Calibration Offset Added
 
 - User decision on the old S3 project's three deferred features: scrap primary-probe-override,
