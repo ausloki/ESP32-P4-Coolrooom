@@ -2,11 +2,43 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
-**Status**: In Progress — full settings audit: 14 previously-unreachable settings now have web entities, a real NVS-persistence bug and a real backup/restore gap fixed, new "Advanced Settings" dashboard section; hardware validation + device reflash both blocked  
-**Last Commit**: `a3e12fd` (feat(settings): full audit -- 14 settings web-exposed, NVS bug fixed, backup/restore completed)
+**Status**: In Progress — ntfy timestamps added, full event-log sensor context for every control decision, SD-optional operation confirmed + runtime-failure detection and ntfy alert added; hardware validation + device reflash both blocked  
+**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-26 Addendum — Ntfy Timestamps, Full Event Logging, SD-Optional + Failure Alert
+
+Four asks: ntfy messages need timestamps; every control decision (defrost/compressor/alarm) needs
+event-log entries with the sensor readings behind the decision; the system must run fully without
+an SD card; an ntfy alert must fire if the card fails.
+
+- **Ntfy timestamps**: all 4 existing scripts now prepend `[timestamp]` via `p4_fmt_time()`.
+- **Event logging audit found real gaps**: compressor on/off was never logged at all; door/no-cool/
+  ice alarms were never logged at all; existing alarm logging only happened *inside* the
+  WiFi-gated ntfy block, so an offline device logged nothing to SD for an alarm either — a bug,
+  since SD logging has nothing to do with WiFi. Fixed: new unconditional step logs all six alarm
+  types (+ clears) with sensor context, independent of WiFi/ntfy; new consolidated
+  `COMPRESSOR_ON`/`OFF` logging (one check at tick-end, not scattered across ~6 relay-toggle
+  sites); `DEFROST_START`/`END`/`MANUAL_STOP` now include actual temps, not just a reason string.
+- **SD-optional operation**: confirmed already structurally sound (every `p4_sd_*` function
+  already no-ops safely without a card; no control-critical logic depends on `sd_card_ok`) — but
+  found no runtime failure *detection* existed. New `p4_sd_mark_failed()` flips readiness the
+  instant a write genuinely fails (card removed mid-session), instead of `sd_card_ok` silently
+  staying "true" forever after that. New `ntfy_sd_failure_request` covers both boot-time and
+  runtime failure through the same check. No auto-remount on reinsertion — manual reboot to
+  recover, noted as a known limitation, not built (wasn't asked for).
+
+**Build**: RAM 20.6% (118,652/576,464 B), Flash 21.0% (1,541,560/7,340,032 B). Compile clean.
+
+**Not done**: no new ntfy push types for door/no-cool/ice — only event-log coverage was asked for
+those three.
+
+**Untested on hardware** — none of this has seen a real alarm/defrost/compressor cycle or an
+actual card failure.
 
 ---
 

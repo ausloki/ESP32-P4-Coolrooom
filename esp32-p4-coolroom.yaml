@@ -2234,7 +2234,12 @@ button:
           id(ctl_defrost_last_end_ms) = millis();
           id(ctl_dew_point_defrost_triggered) = false;
           ESP_LOGI("ctl", "Manual defrost stopped via button");
-          p4_sd_log_event("DEFROST_MANUAL_STOP", "button");
+          {
+              char detail[96];
+              snprintf(detail, sizeof(detail), "button coolroom=%.1f evap=%.1f setpoint=%.1f",
+                       id(probe1_temp).state, id(probe2_temp).state, id(ctl_setpoint));
+              p4_sd_log_event("DEFROST_MANUAL_STOP", detail);
+          }
   - platform: template
     id: btn_sd_backup
     name: "Backup All Settings to SD"
@@ -2379,6 +2384,11 @@ interval:
           float t    = id(probe1_temp).state;
           float evap = id(probe2_temp).state;
           bool evap_ok = p4_rtd_valid(evap) && p4_sample_fresh(id(rtd1_ch2_last_ms), ${probe_stale_ms} * 3);
+          // Captured up front so a single check at the end of this tick can
+          // log exactly one COMPRESSOR_ON/OFF event per actual transition,
+          // regardless of which branch below changed the relay.
+          bool comp_was_on = id(relay_compressor).state;
+          bool sd_was_ready = p4_sd_is_ready();
 
           // ── 1. Probe fault detection ────────────────────────────────────
           bool fault = p4_ctl_probe_fault(t, id(rtd1_ch1_last_ms), ${probe_stale_ms});
@@ -2468,7 +2478,12 @@ interval:
                       id(relay_defrost).turn_off();
                       id(ctl_defrost_last_end_ms) = now_ms;
                       id(ctl_dew_point_defrost_triggered) = false;
-                      p4_sd_log_event("DEFROST_END", end_by_temp ? "evap_temp" : "timeout");
+                      {
+                          char detail[96];
+                          snprintf(detail, sizeof(detail), "%s coolroom=%.1f evap=%.1f term_c=%.1f",
+                                   end_by_temp ? "evap_temp" : "timeout", t, evap, id(ctl_defrost_end_c));
+                          p4_sd_log_event("DEFROST_END", detail);
+                      }
                       if (id(input_defrost_drip_enabled) && drip_ms > 0) {
                           id(ctl_defrost_dripping) = true;
                           id(ctl_drip_start_ms) = now_ms;
@@ -2526,7 +2541,12 @@ interval:
                                            (smart_start ? "smart_delta" :
                                            (dew_point_start ? "dew_point" : "interval"));
                       ESP_LOGI("ctl", "Defrost started: %s", reason);
-                      p4_sd_log_event("DEFROST_START", reason);
+                      {
+                          char detail[112];
+                          snprintf(detail, sizeof(detail), "%s coolroom=%.1f evap=%.1f setpoint=%.1f",
+                                   reason, t, evap, id(ctl_setpoint));
+                          p4_sd_log_event("DEFROST_START", detail);
+                      }
                   }
 
                   // ── 6. Compressor hysteresis (skip if defrost, dripping, locked out) ──
@@ -2592,6 +2612,86 @@ interval:
               if (id(relay_siren).state) id(relay_siren).turn_off();
           }
 
+          // ── 7b. Event-log edge detection (independent of WiFi/ntfy) ─────
+          // Every alarm transition is logged to the SD event log for
+          // troubleshooting regardless of whether ntfy delivery succeeds or
+          // the device is online — reads the persisted *_active globals
+          // (set in both branches above) rather than the if/else-scoped
+          // locals, so it's agnostic to which branch actually ran this tick.
+          {
+              bool alarm_hi_now = id(ctl_alarm_high_active);
+              if (alarm_hi_now && !id(ctl_alarm_hi_logged)) {
+                  id(ctl_alarm_hi_logged) = true;
+                  char d[96];
+                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f delta=%.1f",
+                           t, id(ctl_setpoint), id(ctl_alarm_high_delta));
+                  p4_sd_log_event("ALARM_HI", d);
+              } else if (!alarm_hi_now && id(ctl_alarm_hi_logged)) {
+                  id(ctl_alarm_hi_logged) = false;
+                  char d[64];
+                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f", t, id(ctl_setpoint));
+                  p4_sd_log_event("ALARM_HI_CLEAR", d);
+              }
+
+              bool alarm_lo_now = id(ctl_alarm_low_active);
+              if (alarm_lo_now && !id(ctl_alarm_lo_logged)) {
+                  id(ctl_alarm_lo_logged) = true;
+                  char d[96];
+                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f delta=%.1f",
+                           t, id(ctl_setpoint), id(ctl_alarm_low_delta));
+                  p4_sd_log_event("ALARM_LO", d);
+              } else if (!alarm_lo_now && id(ctl_alarm_lo_logged)) {
+                  id(ctl_alarm_lo_logged) = false;
+                  char d[64];
+                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f", t, id(ctl_setpoint));
+                  p4_sd_log_event("ALARM_LO_CLEAR", d);
+              }
+
+              if (fault && !id(ctl_probe_fault_logged)) {
+                  id(ctl_probe_fault_logged) = true;
+                  p4_sd_log_event("PROBE_FAULT", "probe1 stale_or_invalid");
+              } else if (!fault && id(ctl_probe_fault_logged)) {
+                  id(ctl_probe_fault_logged) = false;
+                  p4_sd_log_event("PROBE_FAULT_CLEAR", "probe1 recovered");
+              }
+
+              bool door_now = id(ctl_door_alarm_active);
+              if (door_now && !id(ctl_door_alarm_logged)) {
+                  id(ctl_door_alarm_logged) = true;
+                  char d[80];
+                  uint32_t open_s = id(ctl_door_open_since_ms) > 0 ?
+                      (now_ms - id(ctl_door_open_since_ms)) / 1000U : 0U;
+                  snprintf(d, sizeof(d), "open_for=%us delay=%.0fs", (unsigned) open_s, id(ctl_door_alarm_delay_s));
+                  p4_sd_log_event("DOOR_ALARM", d);
+              } else if (!door_now && id(ctl_door_alarm_logged)) {
+                  id(ctl_door_alarm_logged) = false;
+                  p4_sd_log_event("DOOR_ALARM_CLEAR", "door closed");
+              }
+
+              bool nc_now = id(ctl_no_cool_alarm_active);
+              if (nc_now && !id(ctl_no_cool_alarm_logged)) {
+                  id(ctl_no_cool_alarm_logged) = true;
+                  char d[112];
+                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f diff=%.1f compressor_on=%d",
+                           t, id(ctl_setpoint), id(ctl_comp_diff), (int) id(relay_compressor).state);
+                  p4_sd_log_event("NO_COOL_ALARM", d);
+              } else if (!nc_now && id(ctl_no_cool_alarm_logged)) {
+                  id(ctl_no_cool_alarm_logged) = false;
+                  p4_sd_log_event("NO_COOL_ALARM_CLEAR", "room cooling normally");
+              }
+
+              bool ice_now = id(ctl_ice_alarm_active);
+              if (ice_now && !id(ctl_ice_alarm_logged)) {
+                  id(ctl_ice_alarm_logged) = true;
+                  char d[96];
+                  snprintf(d, sizeof(d), "coolroom=%.1f evap=%.1f delta_threshold=%.1f", t, evap, id(ctl_ice_delta_c));
+                  p4_sd_log_event("ICE_ALARM", d);
+              } else if (!ice_now && id(ctl_ice_alarm_logged)) {
+                  id(ctl_ice_alarm_logged) = false;
+                  p4_sd_log_event("ICE_ALARM_CLEAR", "delta recovered");
+              }
+          }
+
           // ── 8. SD temperature logging (Phase 5) ─────────────────────────
           const uint32_t log_every_ticks = (uint32_t)(${log_interval_min}) * 6U;
           id(log_tick_count) = id(log_tick_count) + 1U;
@@ -2605,6 +2705,8 @@ interval:
 
             // ── 9. ntfy push notifications — edge-triggered (Phase 5) ───────
             // Network delivery is optional; local control/alarm logic stays autonomous.
+            // Event LOGGING for these already happened unconditionally in 7b above —
+            // this block is purely about the WiFi-dependent push notification.
             if (id(ctl_wifi_connected)) {
               bool ntfy_hi = id(ctl_alarm_high_active);
               bool ntfy_lo = id(ctl_alarm_low_active);
@@ -2612,35 +2714,74 @@ interval:
               if (ntfy_hi && !id(ntfy_alarm_hi_sent)) {
                 id(ntfy_alarm_hi_sent) = true;
                 id(ntfy_high_alarm_request).trigger();
-                p4_sd_log_event("ALARM_HI", "");
               } else if (!ntfy_hi && id(ntfy_alarm_hi_sent)) {
                 id(ntfy_alarm_hi_sent) = false;
                 id(ntfy_alarm_clear_request).trigger();
-                p4_sd_log_event("ALARM_HI_CLEAR", "");
               }
               if (ntfy_lo && !id(ntfy_alarm_lo_sent)) {
                 id(ntfy_alarm_lo_sent) = true;
                 id(ntfy_low_alarm_request).trigger();
-                p4_sd_log_event("ALARM_LO", "");
               } else if (!ntfy_lo && id(ntfy_alarm_lo_sent)) {
                 id(ntfy_alarm_lo_sent) = false;
                 id(ntfy_alarm_clear_request).trigger();
-                p4_sd_log_event("ALARM_LO_CLEAR", "");
               }
               if (ntfy_pf && !id(ntfy_probe_fault_sent)) {
                 id(ntfy_probe_fault_sent) = true;
                 id(ntfy_probe_fault_request).trigger();
-                p4_sd_log_event("PROBE_FAULT", "");
               } else if (!ntfy_pf && id(ntfy_probe_fault_sent)) {
                 id(ntfy_probe_fault_sent) = false;
-                p4_sd_log_event("PROBE_FAULT_CLEAR", "");
+              }
+              // SD card failure — fires once per failure episode (mount-failed-at-boot
+              // or a runtime write failure via p4_sd_mark_failed()), independent of the
+              // event-log edge tracking above since a failed card can't log its own
+              // failure. Clears silently (no "recovered" push) if the card starts
+              // working again — auto-remount isn't implemented, so this only happens
+              // after a manual reboot with working storage.
+              if (!id(sd_card_ok) && !id(ntfy_sd_failure_sent)) {
+                id(ntfy_sd_failure_sent) = true;
+                id(ntfy_sd_failure_request).trigger();
+              } else if (id(sd_card_ok) && id(ntfy_sd_failure_sent)) {
+                id(ntfy_sd_failure_sent) = false;
               }
             } else {
               // Keep edge flags reset while offline so active alarms can notify after reconnect.
               id(ntfy_alarm_hi_sent) = false;
               id(ntfy_alarm_lo_sent) = false;
               id(ntfy_probe_fault_sent) = false;
+              id(ntfy_sd_failure_sent) = false;
             }
+
+          // ── 10. Compressor on/off event logging ──────────────────────────
+          // Single check for the whole tick rather than a log call scattered
+          // across every relay_compressor.turn_on()/turn_off() site above —
+          // guarantees exactly one log entry per actual transition, with the
+          // reason inferred from which mode was active this tick.
+          {
+              bool comp_is_on = id(relay_compressor).state;
+              if (comp_is_on != comp_was_on) {
+                  const char* reason = fault ? "sensor_fallback" :
+                                       (id(relay_defrost).state || id(ctl_defrost_dripping)) ? "defrost" :
+                                       locked_out ? "lockout_end" : "hysteresis";
+                  char d[112];
+                  snprintf(d, sizeof(d), "%s coolroom=%.1f setpoint=%.1f diff=%.1f",
+                           reason, t, id(ctl_setpoint), id(ctl_comp_diff));
+                  p4_sd_log_event(comp_is_on ? "COMPRESSOR_ON" : "COMPRESSOR_OFF", d);
+              }
+          }
+
+          // ── 11. SD card runtime-failure detection ────────────────────────
+          // p4_sd_mark_failed() (called from inside p4_logging.h's write
+          // paths) flips this the instant a write actually fails — mirror it
+          // into the sd_card_ok diagnostic immediately rather than waiting
+          // for something else to notice, so "SD Card Mounted" stops lying
+          // the moment the card is actually gone.
+          {
+              bool sd_is_ready = p4_sd_is_ready();
+              if (sd_was_ready && !sd_is_ready) {
+                  id(sd_card_ok) = false;
+                  ESP_LOGE("ctl", "SD card failure detected during runtime — logging/backup now unavailable");
+              }
+          }
 
   # ── Phase 4: 1s LVGL display updates ─────────────────────────────────────
   - interval: 1s
@@ -3025,6 +3166,49 @@ globals:
     initial_value: "false"
 
   - id: ntfy_probe_fault_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_sd_failure_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # ── Event-log edge tracking (SD-card side, independent of WiFi/ntfy) ────
+  # These mirror the ntfy_*_sent flags above but drive the always-on SD
+  # event log rather than the WiFi-gated ntfy push — a control decision
+  # should be logged for troubleshooting regardless of whether the device
+  # happens to be online at that exact moment. Previously ALARM_HI/LO/
+  # PROBE_FAULT logging lived inside the WiFi-gated block and simply never
+  # wrote to SD at all while offline; door/no-cool/ice alarms had no event
+  # logging whatsoever.
+  - id: ctl_alarm_hi_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_alarm_lo_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_probe_fault_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_door_alarm_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_no_cool_alarm_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ice_alarm_logged
     type: bool
     restore_value: no
     initial_value: "false"
@@ -5494,9 +5678,11 @@ script:
             Priority: "${ntfy_priority}"
             Tags: "thermometer,rotating_light"
           body: !lambda |-
-            char buf[80];
-            snprintf(buf, sizeof(buf), "Coolroom %.1f°C — setpoint %.1f°C",
-                     id(probe1_temp).state, id(ctl_setpoint));
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[104];
+            snprintf(buf, sizeof(buf), "[%s] Coolroom %.1f°C — setpoint %.1f°C",
+                     ts, id(probe1_temp).state, id(ctl_setpoint));
             return std::string(buf);
 
   - id: ntfy_low_alarm_request
@@ -5509,9 +5695,11 @@ script:
             Priority: "${ntfy_priority}"
             Tags: "snowflake,rotating_light"
           body: !lambda |-
-            char buf[80];
-            snprintf(buf, sizeof(buf), "Coolroom %.1f°C — setpoint %.1f°C",
-                     id(probe1_temp).state, id(ctl_setpoint));
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[104];
+            snprintf(buf, sizeof(buf), "[%s] Coolroom %.1f°C — setpoint %.1f°C",
+                     ts, id(probe1_temp).state, id(ctl_setpoint));
             return std::string(buf);
 
   - id: ntfy_alarm_clear_request
@@ -5524,8 +5712,10 @@ script:
             Priority: "low"
             Tags: "white_check_mark"
           body: !lambda |-
-            char buf[60];
-            snprintf(buf, sizeof(buf), "Temperature normal: %.1f°C", id(probe1_temp).state);
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[84];
+            snprintf(buf, sizeof(buf), "[%s] Temperature normal: %.1f°C", ts, id(probe1_temp).state);
             return std::string(buf);
 
   - id: ntfy_probe_fault_request
@@ -5537,7 +5727,36 @@ script:
             Title: "Coolroom PROBE FAULT"
             Priority: "urgent"
             Tags: "warning,thermometer"
-          body: "Probe 1 stale or invalid — check RS485 connection."
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[84];
+            snprintf(buf, sizeof(buf), "[%s] Probe 1 stale or invalid — check RS485 connection.", ts);
+            return std::string(buf);
+
+  # New — SD card failure alert. Fires once when the card goes from
+  # working (or never-tried) to unavailable, whether that's "not detected
+  # at boot" or "stopped working mid-session" (see p4_sd_mark_failed() in
+  # p4_logging.h for what counts as a runtime failure). The device keeps
+  # running fully without SD either way — logging/backup just become no-ops
+  # — this purely advises that troubleshooting data collection has stopped.
+  - id: ntfy_sd_failure_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return std::string("${ntfy_server}/${ntfy_topic}");
+          request_headers:
+            Title: "Coolroom SD CARD FAILURE"
+            Priority: "high"
+            Tags: "warning,sd_card"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[140];
+            snprintf(buf, sizeof(buf),
+                     "[%s] SD card not detected or failed — event/temperature logging and "
+                     "backup/restore are unavailable. Control continues normally without it.", ts);
+            return std::string(buf);
 
   # ── Phase 9: LVGL page navigation scripts ──────────────────────────────────
   # NOTE: these previously only flipped the page_*_active diagnostic globals

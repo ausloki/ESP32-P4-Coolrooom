@@ -1,5 +1,22 @@
 # Progress Tracking
 
+## 2026-07-26 Ntfy Timestamps, Full Event Logging, SD-Optional Operation + Failure Alert
+
+- Four asks: ntfy timestamps, full event-log sensor context for control decisions, SD-optional
+  operation, ntfy alert on SD failure.
+- Audit found real gaps: compressor on/off never logged; door/no-cool/ice alarms never logged;
+  existing alarm logging only happened inside the WiFi-gated ntfy block (so offline = nothing
+  logged to SD either, a real bug since SD logging shouldn't depend on WiFi).
+- Fixed: all 4 ntfy scripts get timestamps; new unconditional event logging for all 6 alarm types
+  with sensor context; new consolidated COMPRESSOR_ON/OFF logging (one tick-end check, not
+  scattered across relay-toggle sites); defrost start/end/manual-stop now include actual temps.
+- SD-optional: confirmed already structurally sound, but found no runtime failure *detection*
+  existed (card removed mid-session would leave `sd_card_ok` silently "true" forever). Added
+  `p4_sd_mark_failed()` + a new `ntfy_sd_failure_request` covering both boot and runtime failure.
+- Not built: auto-remount on card reinsertion (manual reboot to recover); ntfy push types for
+  door/no-cool/ice (event-log only, as asked).
+- Build: RAM 20.6%, Flash 21.0%. Compile clean. Untested on hardware.
+
 ## 2026-07-26 Full Settings Audit: Web-Settable, NVS-Persistent, Backed Up
 
 - Asked to ensure every setting is settable from web GUI, has a help balloon, is in backup/

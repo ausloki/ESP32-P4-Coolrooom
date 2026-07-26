@@ -1976,4 +1976,73 @@ the new dashboard section have been exercised on real hardware — add to the gr
 though these are all low-risk (entity exposure + persistence fixes on already-working control
 logic, not new control behavior).
 
+## 2026-07-26 — Ntfy Timestamps, Full Event-Log Sensor Context, SD-Optional Operation + Failure Alert
+
+Four related asks: (1) every ntfy message needs a timestamp, (2) every control decision (defrost,
+compressor, alarm) must be event-logged with the sensor readings behind that decision, for
+troubleshooting, (3) the system must run fully without an SD card and suppress the SD-dependent
+functions gracefully if none is detected at boot, (4) if the card fails, send an ntfy alert.
+
+**Audited before changing anything**: found compressor on/off transitions were never logged at
+all; door/no-cool/ice alarms were never logged at all; existing ALARM_HI/LO/PROBE_FAULT logging
+was real but **only happened inside the WiFi-gated ntfy block** — meaning if the device was
+offline when an alarm fired, nothing was written to the SD event log either, even though SD
+logging has nothing to do with WiFi. Also found the SD-optional requirement (3) was largely
+already satisfied structurally (every `p4_sd_*` function in `p4_logging.h` already starts with
+`if (!p4_sd_ready) return false;`, and no control-critical logic path reads `sd_card_ok` — only
+diagnostics and periodic-logging gating do) — but there was **no detection of a runtime SD
+failure** (card removed/corrupted after a successful boot mount): `p4_sd_ready` was only ever set
+false at boot-mount-failure, so `sd_card_ok`/`sd_card_online` would keep reporting "true" forever
+after a card failed mid-session, and nothing would ever have alerted on it.
+
+**1. Ntfy timestamps**: all four existing ntfy scripts (`ntfy_high_alarm_request`,
+`ntfy_low_alarm_request`, `ntfy_alarm_clear_request`, `ntfy_probe_fault_request`) now prepend
+`[timestamp]` via the existing `p4_fmt_time()` helper (already used for LVGL clock/event-log
+timestamps — same fallback-to-uptime behavior if NTP hasn't synced yet).
+
+**2. Full event-log sensor context** (`esp32-p4-coolroom.yaml`, main 10s control tick):
+
+- New **step 7b**: unconditional (WiFi-independent) edge-detection logging for `ALARM_HI`/`_LO`,
+  `PROBE_FAULT`, and two brand-new coverage gaps — `DOOR_ALARM`, `NO_COOL_ALARM`, `ICE_ALARM` (plus
+  matching `_CLEAR` events for all six) — each with the actual sensor readings behind the decision
+  (coolroom/evap temp, setpoint, relevant delta/threshold, door-open duration, compressor state).
+  New tracking globals `ctl_alarm_hi_logged`/`_lo_logged`/`_probe_fault_logged`/`_door_alarm_logged`/
+  `_no_cool_alarm_logged`/`_ice_alarm_logged` — separate from the pre-existing `ntfy_*_sent` flags,
+  since logging edge-detection must be independent of WiFi/ntfy-delivery edge-detection (resetting
+  the ntfy flags while offline — intentional, so ntfy fires once reconnected — must not also cause
+  duplicate SD log entries for an alarm that never actually changed state).
+- **New step 10**: `COMPRESSOR_ON`/`COMPRESSOR_OFF` event logging — didn't exist at all before.
+  Implemented as a single before/after check at the very end of the tick (comparing
+  `relay_compressor.state` captured at tick-start vs. tick-end) rather than a log call scattered
+  across the ~6 places the relay gets toggled (fallback duty-cycle, drip-phase, defrost-running,
+  defrost-start, main hysteresis ×2) — guarantees exactly one log entry per real transition, with
+  the reason (`hysteresis`/`defrost`/`sensor_fallback`/`lockout_end`) inferred from which mode was
+  active, plus temp/setpoint/hysteresis-diff context.
+- `DEFROST_START`/`DEFROST_END`/`DEFROST_MANUAL_STOP` detail strings extended with coolroom/evap
+  temps (+ setpoint or termination-temp as relevant) — previously just a bare reason string.
+
+**3 & 4. SD-optional operation + failure alert**: added `p4_sd_mark_failed()` in `p4_logging.h`,
+called from every write-path `fopen()` failure in `p4_sd_log_temps()`/`p4_sd_log_event()`/
+`p4_sd_backup_params()` (deliberately **not** the read-path in `p4_sd_restore_params()` — a missing
+`backup.json` on first boot is normal, not a failure). This flips the internal `p4_sd_ready` flag
+the instant a write genuinely fails, rather than a successfully-mounted card silently staying
+marked "ready" forever. New **step 11** in the control tick mirrors a detected ready→not-ready
+transition into the `sd_card_ok` diagnostic immediately. New `ntfy_sd_failure_request` script +
+edge-triggered logic in step 9 (mirroring the existing alarm pattern) fires once per failure
+episode — covers both "not detected at boot" and "failed mid-session" through the same `sd_card_ok`
+check, no separate boot-specific code path needed. No auto-remount-on-reinsertion implemented
+(would need active polling for a newly-inserted card); recovery is a manual reboot once storage is
+fixed — noted as a known limitation, not built, since it wasn't asked for.
+
+**Build**: RAM 20.6% (118,652/576,464 B), Flash 21.0% (1,541,560/7,340,032 B). Compile clean.
+
+**Not done**: no new ntfy push notification *types* for door/no-cool/ice alarms — only event-log
+coverage was explicitly requested for those three; only high/low/probe-fault/SD-failure have ntfy
+pushes, matching what existed before plus the one new SD-failure type. Flagging as a natural
+follow-up if push notifications for the other three alarm types are ever wanted.
+
+**Hardware-gated follow-up**: none of this has been observed against a real alarm/defrost/
+compressor cycle or an actual SD card failure (e.g. physically removing the card while running) —
+add to the growing hardware-validation queue.
+
 ---

@@ -92,6 +92,21 @@ inline void p4_sd_unmount() {
 /// True if card is currently mounted and accessible.
 inline bool p4_sd_is_ready() { return p4_sd_ready; }
 
+/// Marks the card as no longer usable after a write-path failure discovered
+/// at runtime (e.g. physically removed while running) — a successfully
+/// mounted FATFS volume doesn't normally fail a plain fopen("a"/"w") unless
+/// the underlying storage genuinely disappeared or corrupted, so this is
+/// treated as conclusive. Read-path "file not found" (e.g. no backup.json
+/// yet) is NOT failure — callers must not call this for that case. The
+/// control loop watches p4_sd_is_ready() for the true→false edge to fire an
+/// ntfy alert and flip the sd_card_online diagnostic in real time, instead
+/// of that entity silently staying "true" forever after a runtime failure.
+inline void p4_sd_mark_failed(const char* where) {
+    if (!p4_sd_ready) return;
+    p4_sd_ready = false;
+    ESP_LOGE(TAG_SD, "SD card write failed in %s — marking card as failed/unavailable", where);
+}
+
 // ─── Temperature logging ───────────────────────────────────────────────────
 
 /// Append one CSV row to the daily log file (/sdcard/YYYY-MM-DD.csv).
@@ -127,6 +142,7 @@ inline bool p4_sd_log_temps(
     FILE* f = fopen(path, "a");
     if (!f) {
         ESP_LOGE(TAG_SD, "Cannot open %s", path);
+        p4_sd_mark_failed("p4_sd_log_temps");
         return false;
     }
     if (is_new) {
@@ -168,6 +184,7 @@ inline bool p4_sd_log_event(const char* event_type, const char* detail = "") {
     FILE* f = fopen("/sdcard/events.csv", "a");
     if (!f) {
         ESP_LOGE(TAG_SD, "Cannot open events.csv");
+        p4_sd_mark_failed("p4_sd_log_event");
         return false;
     }
 
@@ -231,6 +248,7 @@ inline bool p4_sd_backup_params(
     FILE* f = fopen("/sdcard/backup.json", "w");
     if (!f) {
         ESP_LOGE(TAG_SD, "Cannot open backup.json for write");
+        p4_sd_mark_failed("p4_sd_backup_params");
         return false;
     }
 
