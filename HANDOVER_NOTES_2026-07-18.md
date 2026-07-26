@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
 **Status**: In Progress — full settings audit: 14 previously-unreachable settings now have web entities, a real NVS-persistence bug and a real backup/restore gap fixed, new "Advanced Settings" dashboard section; hardware validation + device reflash both blocked  
-**Last Commit**: pending (see `git log` — this addendum was written before the closeout commit)
+**Last Commit**: `a3e12fd` (feat(settings): full audit -- 14 settings web-exposed, NVS bug fixed, backup/restore completed)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
