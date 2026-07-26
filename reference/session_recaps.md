@@ -2139,3 +2139,68 @@ The SD auto-remount interval has likewise never been observed against a real car
 removal/reinsertion cycle.
 
 ---
+
+## 2026-07-26 — User Manual + Quick Start Guide (Documentation Only, No Firmware Changes)
+
+**Session scope**: Write end-user documentation covering every device function by group, with
+Nassi–Shneiderman (NS-style) structograms explaining the more involved control decisions in plain
+language, plus a condensed quick-start guide with worked recommended-settings examples. Screenshot
+placeholders included throughout for both surfaces (web dashboard + touchscreen), to be filled in
+once physical hardware is connected.
+
+### What Changed
+
+- **Researched before writing**, rather than relying on memory alone: extracted the full, current
+  settings inventory directly from `esp32-p4-coolroom.yaml` (all 34 `number`/`switch` template
+  entities — id, name, unit, min/max/step, `web_server` sorting group) and cross-checked every
+  default against its backing `substitutions:`/`globals:` value, so the manuals reflect what's
+  actually in the firmware today rather than what was true when each feature was first added.
+  Also re-read `p4_control.h` in full to build accurate structograms for every control decision
+  (compressor hysteresis, defrost multi-trigger scheduling, high/low alarm lifecycle with persist
+  and hysteresis-clear, door alarm, ice alarm, no-cool alarm, sensor-fallback duty cycle, probe
+  fault), and re-read `RBAC_USER_GUIDE.md` / `AUTHENTICATION_GUIDE.md` for the current (2026-07-24
+  rewrite) two-tier guest/operator web model rather than any older three-tier description.
+- **New `reference/USER_MANUAL.md`**: full reference, organized into the same groups the
+  touchscreen and web dashboard actually use (Compressor & Fallback, Defrost Schedule, Defrost
+  Smart & Drip, Alarm Thresholds, Alarms Advanced, Door, Probes & Sensors) plus five groups that
+  only exist on the web dashboard (Notifications, Data & SD Card, Network & WiFi, Access Control &
+  Security, System & Diagnostics). Every setting gets a plain-language "what it does / range /
+  default / when to change it" table row; every non-trivial control behavior gets an NS-style
+  structogram (nested boxes, no arrows) rather than a conventional flowchart, per the explicit ask.
+  Includes a troubleshooting quick-reference table and a group ↔ touchscreen-page ↔ web-section
+  cross-reference map.
+- **New `reference/QUICK_START_GUIDE.md`**: condensed setup checklist, a one-screen "7 groups at a
+  glance" table, and a fully worked recommended-settings example for **cold storage of dessert
+  plums at ~15° Brix** (the user's requested worked example) — every relevant setting mapped to a
+  concrete value with a one-line horticultural rationale (near-0°C setpoint without chill injury,
+  tight low-alarm delta for freeze sensitivity, both optional defrost triggers turned on for a
+  humid produce room, etc.), explicitly labeled as an illustrative starting point rather than an
+  authoritative food-safety prescription. Added a smaller bonus table of rough starting points for
+  three other common cases (apples, leafy greens/general veg, dairy/general chiller) to cover the
+  "etc." in the request without overstating precision on produce types not specifically asked for.
+  Includes two condensed structograms (compressor decision, defrost trigger overview) and a
+  plain-English table of what each ntfy push notification means and what to do about it.
+- **Screenshot placeholders**: every group/section in both documents has a clearly marked
+  `📷 Screenshot placeholder` line for both the web dashboard and touchscreen views, ready to swap
+  for real images once hardware is connected and flashed.
+- **One real discovery flagged, not fixed** (out of scope for a documentation task): the Door
+  Sensor Mode (NC/NO) switch's `turn_on_action`/`turn_off_action` also toggles the cabinet light
+  relay at the same time — almost certainly an unintentional coupling from whenever that switch
+  was first implemented. Documented accurately as current behavior with an explicit "known quirk"
+  callout in the User Manual's Door section, rather than silently working around it or fixing
+  firmware behavior during what was scoped as a docs-only session.
+
+### Outcome
+
+- No firmware, YAML, or header files were touched this session — `esp32-p4-coolroom.yaml` build
+  metrics are unchanged from the previous entry (RAM 21.3%, Flash 21.5%). No compile was run since
+  nothing compilable changed.
+- Static analysis (`code_review_graph_cli.sh update`) re-run for completeness; indexed the two new
+  markdown files (0 nodes/edges, expected for prose documents — the tool indexes code structure).
+
+**Not done**: no screenshots yet (hardware-gated, as noted throughout both documents); the light-
+relay/door-mode coupling above is flagged but not fixed; no markdown linter was available offline
+to auto-check formatting, so both documents were reviewed manually for table/structogram
+consistency instead.
+
+---

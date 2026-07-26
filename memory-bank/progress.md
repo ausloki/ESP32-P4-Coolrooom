@@ -1,5 +1,24 @@
 # Progress Tracking
 
+## 2026-07-26 User Manual + Quick Start Guide (Documentation Only, No Firmware Changes)
+
+- Wrote `reference/USER_MANUAL.md` (full reference) and `reference/QUICK_START_GUIDE.md`
+  (condensed + worked examples), covering every device function by group with NS-style
+  (Nassi–Shneiderman) structograms for non-trivial control decisions.
+- Extracted the settings inventory (34 entities: ranges/defaults/groups) directly from
+  `esp32-p4-coolroom.yaml` and re-read `p4_control.h` in full rather than relying on memory,
+  so the manuals reflect current firmware behavior, not stale assumptions.
+- Quick Guide's worked example: cold storage settings for dessert plums at ~15° Brix, every
+  relevant setting mapped to a value with a one-line rationale, explicitly labeled as an
+  illustrative starting point (not food-safety authoritative). Added a small bonus table for
+  apples/leafy-greens/dairy to cover the "etc." in the request without overstating precision.
+- Found and flagged (not fixed — out of scope for a docs session): the Door Sensor Mode
+  (NC/NO) switch also toggles the cabinet light relay — likely an unintentional coupling.
+  Documented as a "known quirk" callout rather than silently patched.
+- Screenshot placeholders throughout both docs for web dashboard + touchscreen, ready for
+  real images once hardware is connected.
+- No firmware/YAML changed — no compile run, no new build metrics.
+
 ## 2026-07-26 SD Auto-Remount + LVGL Settings Redesign (Single-Entry Paginated Model)
 
 - Two asks: (1) SD card auto-recovers after a runtime failure without a reboot, (2) replace the

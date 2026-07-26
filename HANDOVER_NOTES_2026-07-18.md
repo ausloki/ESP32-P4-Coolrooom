@@ -2,11 +2,38 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
-**Status**: In Progress — SD card now auto-remounts after a runtime failure (no reboot needed); LVGL touchscreen settings redesigned as a single-PIN-entry, 7-page paginated flow (was: 3 fixed, independently-gated tabs covering only 6 of 34 settings); hardware validation + device reflash both blocked  
-**Last Commit**: `9f54bb0` (feat(lvgl): auto-remount SD card, redesign settings as single-entry paginated flow)
+**Status**: In Progress — SD card now auto-remounts after a runtime failure (no reboot needed); LVGL touchscreen settings redesigned as a single-PIN-entry, 7-page paginated flow (was: 3 fixed, independently-gated tabs covering only 6 of 34 settings); new end-user documentation (User Manual + Quick Start Guide) added, no firmware changes in that pass; hardware validation + device reflash both blocked  
+**Last Commit**: (pending — this session's documentation not yet committed)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-26 Addendum — User Manual + Quick Start Guide (Documentation Only)
+
+**Two new documents**, no firmware/YAML changes: `reference/USER_MANUAL.md` (full reference,
+organized into the same 7 groups the touchscreen/web dashboard actually use, plus 5 web-only
+groups — Notifications, Data & SD Card, Network & WiFi, Access Control & Security, System &
+Diagnostics) and `reference/QUICK_START_GUIDE.md` (condensed setup checklist + a fully worked
+recommended-settings example for cold storage of dessert plums at ~15° Brix, plus a smaller bonus
+table for three other common produce types).
+
+Every setting explained in plain language (what/range/default/when to change it); every
+non-trivial control decision gets a Nassi–Shneiderman (NS-style) structogram — nested boxes, no
+arrows — built from a fresh full read of `p4_control.h` rather than from memory. Settings
+data (ranges/defaults/groups) extracted directly from the current `esp32-p4-coolroom.yaml` rather
+than assumed, to avoid documenting stale values.
+
+**One real discovery, flagged not fixed** (scoped as docs-only): the Door Sensor Mode (NC/NO)
+switch's actions also toggle the cabinet light relay — likely an unintentional coupling.
+Documented as a "known quirk" callout in the User Manual rather than silently patched.
+
+Screenshot placeholders throughout both documents for both web dashboard and touchscreen views —
+ready to fill in once hardware is connected.
+
+**Build**: unchanged — no compilable files touched this session, so no new build metrics to
+report.
 
 ---
 
