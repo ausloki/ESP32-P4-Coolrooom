@@ -183,7 +183,7 @@ periodic defrosting. This group controls the basic on/off timer for that.
 | **Defrost Max Duration** | Safety cap — defrost stops after this long even if it hasn't finished. | 5 – 60 min | 30 min | Raise slightly if defrost is being cut off before the coil is properly clear (check evaporator temp after a cycle). |
 | **Defrost Early Termination by Temperature** | Ends defrost as soon as the evaporator reaches the target temp below, instead of always running the full Max Duration. | On/Off | On | Recommended on — avoids unnecessarily warming the room once the coil is already clear. |
 | **Defrost Termination Temp** | The evaporator temperature that counts as "coil is clear" when the above is on. | 0.0 – 15.0 °C | 5.0 °C | Only relevant if Early Termination is on. |
-| **Defrost Drip/Drain Phase Enabled** | After defrost heat turns off, hold before resuming cooling so melted frost can drain instead of refreezing immediately. | On/Off | On | Recommended on for any room where meltwater could re-ice on a cold coil. |
+| **Defrost Drip-Drain Phase Enabled** | After defrost heat turns off, hold before resuming cooling so melted frost can drain instead of refreezing immediately. | On/Off | On | Recommended on for any room where meltwater could re-ice on a cold coil. |
 
 **Defrost cycle, start to finish:**
 
@@ -308,27 +308,34 @@ condition is evaluated at all — for their respective windows.)*
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
-| **Door Sensor Enabled** | Master switch for door-open monitoring. | On/Off | **Off** | The door alarm does nothing at all until you turn this on — if you have a door sensor fitted, enable it here. |
+| **Door Sensor Enabled** | Master switch for the door-open **alarm**. | On/Off | **Off** | The door alarm does nothing at all until you turn this on — if you have a door sensor fitted, enable it here. Does not affect the door-triggered light below, which has its own independent switch. |
 | **Door Sensor Mode (NC / NO)** | Tells the controller whether your physical door switch is Normally Closed or Normally Open wiring. | NC/NO | NC | Must match how the door switch is actually wired, or "open" and "closed" will read backwards. |
+| **Door-Triggered Light Enabled** | When on, opening the door turns the cabinet light on; closing it turns the light off — independent of the alarm switch above. | On/Off | On | Turn off if you'd rather control the cabinet light manually (Home screen light button) without it being overridden by door state. |
 | **Door Alarm Delay** | How long the door can stay open before an alarm fires. | 0 – 300 s | 300 s (5 min) | Shorten for rooms where doors should only ever be open briefly; lengthen for rooms with routine long-duration loading. |
-
-> ⚠️ **Known quirk — please read:** the **Door Sensor Mode (NC/NO)** toggle currently also
-> switches the cabinet **light relay** on/off at the same time (turning the switch on
-> selects NC mode *and* turns the light on; off does both the opposite). This coupling is
-> almost certainly unintentional and is flagged for review — until it's addressed, be aware
-> that changing the door wiring mode will also flip the cabinet light.
 
 > 📷 **Screenshot placeholder — Web Dashboard: Door section**
 > 📷 **Screenshot placeholder — Touchscreen: Settings 6/7**
 
-**Door alarm:**
+**Door-triggered light:**
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│                 Is Door-Triggered Light Enabled?                     │
+├─────────────────────────────────┬────────────────────────────────────┤
+│ NO — door state never touches    │ YES                                │
+│ the light relay                  │  Door opens → light ON             │
+│                                   │  Door closes → light OFF           │
+└─────────────────────────────────┴────────────────────────────────────┘
+```
+
+**Door alarm** (a separate feature — gated by Door Sensor Enabled, not the light switch above):
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                    Is Door Sensor Enabled?                           │
 ├─────────────────────────────────┬────────────────────────────────────┤
-│ NO — door monitoring does        │ YES                                │
-│ nothing, ever                     │  WHILE door is open               │
+│ NO — door alarm does nothing,    │ YES                                │
+│ ever                              │  WHILE door is open               │
 │                                   │ ┌────────────────────────────────┐│
 │                                   │ │ Has it been open for at least  ││
 │                                   │ │ "Door Alarm Delay"?            ││
@@ -395,18 +402,19 @@ no-account-needed push service. Every message includes a timestamp.
 |---|---|---|
 | 🌡️ Coolroom HIGH TEMP Alarm | High | High-temp alarm becomes active (past persist time, §4.4/§4.5) |
 | ❄️ Coolroom LOW TEMP Alarm | High | Low-temp alarm becomes active |
-| ✅ Coolroom Alarm CLEARED | Low | Either alarm above recovers past its hysteresis band |
+| 🚪 Coolroom DOOR OPEN Alarm | High | Door stays open past the Door Alarm Delay (§4.6) |
+| 🥶 Coolroom NO-COOL Alarm | Urgent | Compressor running but room isn't cooling (§4.5) |
+| ❄️ Coolroom ICE ALARM | High | Ice Alarm Delta condition met (§4.5) |
+| ✅ Coolroom Alarm CLEARED | Low | Any alarm above recovers past its threshold/hysteresis band |
 | ⚠️ Coolroom PROBE FAULT | Urgent | Main probe fails (§4.7) |
 | ⚠️ Coolroom SD CARD FAILURE | High | SD card missing at boot, or fails during operation (§4.9) |
 | ✅ Coolroom SD Card Recovered | Low | Auto-remount brings a previously-failed card back online (§4.9) |
 
+Every alarm type reaches ntfy — none are event-log-only any more.
+
 **Setup:** install the free ntfy app (iOS/Android) or use ntfy.sh in a browser, and
 subscribe to your device's topic name (set at build time — ask your installer, or check
 the firmware's `ntfy_topic` value). No further app-side configuration needed.
-
-**Not sent as push notifications** (yet): door-open, no-cool, and ice alarms are logged to
-the event log (§4.9) but don't currently trigger a phone push. If you want that, it's a
-small, well-understood addition — ask your installer/developer.
 
 ---
 
@@ -499,6 +507,12 @@ page* shows you — it is not a security boundary against anyone who already has
 access to the device. Treat your site network (or VPN) as the actual security perimeter,
 same as you would for any other network appliance. Full detail:
 `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md`.
+
+This two-tier model is the **intended, permanent design** for this system — not a stopgap
+awaiting a future "real" multi-account/role-based system. A guest can always see everything
+on the main display without logging in; a single operator login elevates to settings and
+administration. Real server-side authorization (separate accounts, enforced permissions)
+would only be worth building if a genuine multi-user need arises later.
 
 **Deliberately web-only, never added to the touchscreen** (by explicit design, not an
 oversight): WiFi configuration (§4.10), the web dashboard's login credential, and the SD

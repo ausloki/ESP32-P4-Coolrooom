@@ -265,7 +265,8 @@ inline bool p4_sd_backup_params(
     float probe1_offset_c,
     float probe2_offset_c,
     bool  dew_point_trigger_enabled,
-    float startup_grace_min
+    float startup_grace_min,
+    bool  door_light_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -314,7 +315,8 @@ inline bool p4_sd_backup_params(
         "  \"probe1_offset_c\": %.2f,\n"
         "  \"probe2_offset_c\": %.2f,\n"
         "  \"dew_point_trigger_enabled\": %s,\n"
-        "  \"startup_grace_min\": %.1f\n"
+        "  \"startup_grace_min\": %.1f,\n"
+        "  \"door_light_enabled\": %s\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -336,7 +338,8 @@ inline bool p4_sd_backup_params(
         humidity_external_enabled ? "true" : "false",
         probe1_offset_c, probe2_offset_c,
         dew_point_trigger_enabled ? "true" : "false",
-        startup_grace_min);
+        startup_grace_min,
+        door_light_enabled ? "true" : "false");
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              setpoint, comp_diff, alarm_high, alarm_low);
@@ -380,7 +383,8 @@ inline bool p4_sd_restore_params(
     float& probe1_offset_c,
     float& probe2_offset_c,
     bool&  dew_point_trigger_enabled,
-    float& startup_grace_min
+    float& startup_grace_min,
+    bool&  door_light_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -431,6 +435,8 @@ inline bool p4_sd_restore_params(
     // pre-existing setting that had simply never been added to backup/
     // restore until now (a real bug, not a new field), so older
     // backup.json files won't have this key either.
+    // door_light_enabled: brand new setting, same seeding rationale.
+    bool b_door_light_en = door_light_enabled;
     float startup_grace = startup_grace_min;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
@@ -486,6 +492,7 @@ inline bool p4_sd_restore_params(
     parse_field("\"probe2_offset_c\"", p2_off);
     parse_bool("\"dew_point_trigger_enabled\"", b_dew_trigger);
     parse_field("\"startup_grace_min\"", startup_grace);
+    parse_bool("\"door_light_enabled\"", b_door_light_en);
 
     if (!std::isfinite(sp) || !std::isfinite(cd) ||
         !std::isfinite(ah) || !std::isfinite(al) ||
@@ -535,6 +542,7 @@ inline bool p4_sd_restore_params(
     probe2_offset_c = p2_off;
     dew_point_trigger_enabled = b_dew_trigger;
     startup_grace_min = startup_grace;
+    door_light_enabled = b_door_light_en;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

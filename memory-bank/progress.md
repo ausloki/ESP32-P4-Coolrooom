@@ -1,5 +1,30 @@
 # Progress Tracking
 
+## 2026-07-26 Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed by Decision
+
+- Resolved 5 outstanding items in one pass: 2 closed by user decision (no code), 3 implemented.
+- Closed: four Carel-comparison divergences (behavior confirmed as wanted); the two-tier
+  guest/operator RBAC model (confirmed as the permanent design, not a stopgap — already
+  matched what the user described).
+- Door-triggered light is now its own feature: decoupled from `door_sensor_mode_light_control`
+  (renamed `door_sensor_mode_nc_no`, no longer touches the light), new independent
+  `sw_door_light_enabled` switch (default on) gates the reed sensor's light-on-open/off-close
+  behavior.
+- Found and fixed a second bug while in that code: `input_door_sensor_enabled` (door-alarm
+  master switch) was never checked in the control tick — the door-open alarm ran regardless
+  of its state. Fixed at the source and defensively in the control tick.
+- New setting threaded through backup/restore (all 3 call sites), LVGL Door page, both web
+  dashboard files.
+- All alarm types now push to ntfy (door/no-cool/ice were event-log only before) — three new
+  scripts matching the existing high/low/probe-fault pattern, reusing the generic "cleared"
+  push on recovery.
+- Renamed `sw_defrost_drip`'s name to remove a reserved `/` character (ESPHome deprecation
+  warning → confirmed gone from build output).
+- First real use of the new documentation-consistency closeout rule: updated both user-facing
+  manuals to match (removed a now-fixed "known quirk" callout, added new setting rows,
+  updated the ntfy table, added a permanent-design statement for the RBAC section).
+- Build: RAM 21.4%, Flash 21.6%. Compile clean. Untested on hardware.
+
 ## 2026-07-26 User Manual + Quick Start Guide (Documentation Only, No Firmware Changes)
 
 - Wrote `reference/USER_MANUAL.md` (full reference) and `reference/QUICK_START_GUIDE.md`

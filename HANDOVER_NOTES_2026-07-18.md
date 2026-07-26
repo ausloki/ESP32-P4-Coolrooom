@@ -2,11 +2,56 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-26  
-**Status**: In Progress — SD card now auto-remounts after a runtime failure (no reboot needed); LVGL touchscreen settings redesigned as a single-PIN-entry, 7-page paginated flow (was: 3 fixed, independently-gated tabs covering only 6 of 34 settings); new end-user documentation (User Manual + Quick Start Guide) added, no firmware changes in that pass; hardware validation + device reflash both blocked  
-**Last Commit**: `a3a7650` (docs(process): add documentation-consistency closeout step)
+**Status**: In Progress — door-triggered light is now its own independent feature (decoupled from the door NC/NO mode switch, which had been toggling it as a side effect); a related bug where the door-alarm master switch didn't actually gate anything at runtime is fixed; all alarm types (door/no-cool/ice included) now push to ntfy; one entity renamed to remove a reserved URL character; two outstanding items closed by user decision (Carel divergences, RBAC model) rather than code changes; hardware validation + device reflash both blocked  
+**Last Commit**: (pending — this session's changes not yet committed)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-26 Addendum — Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed
+
+Resolved 5 items from the outstanding list in one pass — first real use of the new
+documentation-consistency closeout rule (`CLAUDE.md`) against actual code changes.
+
+**Closed by decision, no code**: the four Carel-comparison divergences (symmetric hysteresis,
+no min ON-time, no fan-control confirmation, door switch not pausing compressor/alarm) — user
+confirmed current behavior is as wanted. The dashboard's two-tier guest/operator RBAC model —
+user confirmed it's the intended permanent design (main display visible without login, separate
+login elevates to settings/admin), which already matched the current implementation exactly.
+
+**Door-triggered light, decoupled from a bug**: the old `door_sensor_mode_light_control` switch
+toggled the cabinet light as a side effect of setting NC/NO wiring mode. Renamed to
+`door_sensor_mode_nc_no`, light-toggle removed. New independent `sw_door_light_enabled` switch
+(default on) now gates `door_reed_sensor`'s light-on-open/light-off-close behavior. **Second bug
+found and fixed while in this code**: the door-alarm master switch (`input_door_sensor_enabled`)
+was never actually checked in the control tick — the door-open alarm ran regardless of its state.
+Fixed at the source (reed sensor won't start the timer while disabled) and defensively in the
+control tick (re-checks the switch before alarming). New setting threaded through
+`p4_sd_backup_params()`/`p4_sd_restore_params()` and all 3 yaml call sites, the LVGL Door page,
+and both web dashboard files.
+
+**All alarms now push to ntfy**: three new scripts (`ntfy_door_alarm_request`,
+`ntfy_no_cool_alarm_request`, `ntfy_ice_alarm_request`) matching the existing high/low/probe-fault
+pattern exactly, reusing the existing generic "cleared" push on recovery. Door/no-cool/ice were
+previously event-log only.
+
+**Entity rename**: `sw_defrost_drip`'s name changed from `"Defrost Drip/Drain Phase"` to
+`"Defrost Drip-Drain Phase"` — removes the reserved `/` character that ESPHome will hard-error on
+in 2026.7.0 (previously just a warning). Confirmed gone from the build output.
+
+**Documentation updated per the new closeout rule**: `USER_MANUAL.md` §4.6 (known-quirk callout
+removed, new light-enable row + structogram added), §4.8 (door/no-cool/ice added to the ntfy
+table), §4.11 (permanent-design statement added); `QUICK_START_GUIDE.md` alerts table and plums
+worked example both updated.
+
+**Build**: RAM 21.4% (123,228/576,464 B), Flash 21.6% (1,583,256/7,340,032 B). Compile clean —
+only pre-existing unrelated warnings (SD log manager linker warnings, ESP-IDF framework
+warnings).
+
+**Untested on hardware** — door-triggered light behavior, the alarm-gating fix, and the three new
+ntfy push types all need a real door/compressor/coil test once reflashed.
 
 ---
 

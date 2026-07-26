@@ -2204,3 +2204,96 @@ to auto-check formatting, so both documents were reviewed manually for table/str
 consistency instead.
 
 ---
+
+## 2026-07-26 — Outstanding-Items Cleanup: Door Light Feature, All-Alarm ntfy, Entity Rename
+
+**Session scope**: Resolved 5 items from the previous "what's outstanding" list — 2 by decision
+(no code), 3 by implementation. First session to apply the new documentation-consistency closeout
+rule (`CLAUDE.md`, added last session) against real code changes.
+
+### What Changed
+
+**Closed by decision (no code change):**
+
+- **Carel-comparison divergences** (4 items: symmetric vs. asymmetric hysteresis, no min
+  compressor ON-time, no fan-control confirmation, door switch not pausing compressor/alarm
+  suppression) — user confirmed current behavior is as wanted. Closed, not fixed.
+- **Dashboard RBAC model** — user confirmed the existing two-tier guest/operator model (main
+  display visible without login, separate login elevates to settings/admin) is the *intended
+  permanent design*, not a stopgap awaiting real server-side multi-account authorization. This
+  already matched the current implementation exactly (per the 2026-07-24 dashboard rewrite) — no
+  code change needed, only closed out the "revisit if a need arises" framing in `USER_MANUAL.md`
+  §4.11 to state plainly that this is the final design.
+
+**Door-triggered light — new independent feature, decoupling a found bug:**
+
+- The old `door_sensor_mode_light_control` switch conflated two unrelated things: setting the
+  door reed switch's NC/NO wiring mode, and toggling the cabinet light relay as a side effect.
+  Renamed to `door_sensor_mode_nc_no`, stripped of the light-toggle entirely.
+- New `sw_door_light_enabled` switch (backed by `input_door_light_enabled`, default **on** to
+  preserve prior behavior) — `door_reed_sensor`'s `on_state` now turns `relay_light` on/off on
+  door open/close **only when this switch is on**, independent of the door-open *alarm* switch.
+- **Second bug found while touching this code, fixed as a direct extension**: `input_door_sensor_
+  enabled` (the door-alarm master switch) was read in backup/restore and the LVGL/web toggle, but
+  **never actually checked anywhere in the control tick** — the door-open alarm timer ran
+  regardless of this switch's state. Fixed: the reed sensor now only starts the open-timer while
+  the switch is on; the control tick's alarm-activation check re-verifies the switch as a
+  defensive second gate (covers the edge case of disabling mid-open); and `sw_door_sensor_enabled`'s
+  turn-off action now clears any in-progress open-timer/alarm state, so a stale timestamp can't
+  fire an alarm later after being re-enabled.
+- New setting threaded through `p4_sd_backup_params()`/`p4_sd_restore_params()` (`p4_logging.h`,
+  new `door_light_enabled` parameter on both, seeded from the caller's current value rather than
+  gated by the all-or-nothing `isfinite` check — same pattern as other settings added after the
+  backup format was already in use, so older `backup.json` files stay restorable) and all 3 yaml
+  call sites (boot restore, manual backup button, manual restore button).
+- Added as a 4th row on the LVGL Door settings page (`page_settings_6`) and to
+  `refresh_all_settings_labels`; added to both web dashboard files (`assets/dashboard.html`,
+  `assets/dashboard_virtual_preview.html`) with updated help text on the neighboring switches to
+  clarify the two features are independent.
+
+**All alarm types now push to ntfy** (previously door/no-cool/ice were event-log only):
+
+- Three new scripts — `ntfy_door_alarm_request` ("Coolroom DOOR OPEN Alarm"), `ntfy_no_cool_alarm_
+  request` ("Coolroom NO-COOL Alarm", urgent priority), `ntfy_ice_alarm_request` ("Coolroom ICE
+  ALARM") — each with a timestamp, matching the existing high/low/probe-fault pattern exactly.
+- Three new edge-detection tracking globals (`ntfy_door_alarm_sent`/`ntfy_no_cool_alarm_sent`/
+  `ntfy_ice_alarm_sent`), extending the existing step-9 WiFi-gated block; all three reuse the
+  existing generic `ntfy_alarm_clear_request` on recovery, same as high/low already do — no new
+  "cleared" message types needed. All three flags reset in the offline branch alongside the
+  existing ones, so they still notify once WiFi reconnects.
+- While in this block: updated a stale comment on the SD-failure ntfy logic that still said
+  "auto-remount isn't implemented" — it was implemented last session; the recovered-push is sent
+  by the 60s auto-remount interval, not this block, which now just defensively clears the flag.
+
+**Entity rename — fixes a real (if minor) deprecation warning:**
+
+- `sw_defrost_drip`'s `name:` changed from `"Defrost Drip/Drain Phase"` to `"Defrost
+  Drip-Drain Phase"` — the `/` is a reserved URL path separator that ESPHome currently only warns
+  about but will hard-error on in 2026.7.0. Updated everywhere the label appeared: the LVGL page,
+  both web dashboard files' field labels.
+
+**Documentation updated per the new closeout rule** (first real test of it):
+
+- `reference/USER_MANUAL.md` §4.6 (Door): removed the "known quirk" callout (fixed now), added
+  the new Door-Triggered Light Enabled row + its own structogram, clarified Door Sensor Enabled's
+  description to say it gates the alarm only.
+- §4.8 (Notifications): added Door/No-Cool/Ice rows to the ntfy table, removed the "not sent as
+  push" caveat since it's no longer true.
+- §4.11 (Access Control): added an explicit "this is the permanent design" statement.
+- Renamed "Defrost Drip/Drain Phase Enabled" row in §4.2.
+- `reference/QUICK_START_GUIDE.md`: added Door/No-Cool/Ice rows to the alerts table and the new
+  light-enable setting to the plums worked example.
+
+### Outcome
+
+- Compile clean: RAM 21.4% (123,228/576,464 B), Flash 21.6% (1,583,256/7,340,032 B). The
+  `Defrost Drip/Drain Phase` URL-separator warning is confirmed gone from the build output.
+- Only pre-existing, unrelated warnings remain (SD log manager `opendir`/`readdir`/`closedir`
+  linker warnings, ESP-IDF's own `periph_module_reset`/literal-suffix framework warnings —
+  neither introduced by, nor related to, this session's changes).
+
+**Not done / hardware-gated**: none of this session's changes have touched real hardware —
+door-triggered light behavior, the alarm-gating fix, and the three new ntfy push types all need a
+real door/compressor/coil test once the device is reflashed.
+
+---

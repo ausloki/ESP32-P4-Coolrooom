@@ -86,6 +86,7 @@ suffer freeze damage a little below 0 °C.
 | **Ice Alarm Delta** | `2.5 °C` (slightly above default) | A humid room frosts more readily — a slightly higher threshold gives you an earlier warning before ice becomes a real airflow problem. |
 | **No-Cool Alarm Timeout** | `45 min` (tighter than default 60) | Stone fruit is high-value enough to justify catching a refrigeration failure a bit faster. |
 | **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. |
+| **Door-Triggered Light Enabled** | `On` (default) | Convenient for staff picking/sorting fruit — light comes on automatically while the door's open. |
 | **Door Alarm Delay** | `300 s` (default) | Fine for routine loading/unloading; shorten if the room should never be open long. |
 | **Internal/External Humidity Sensors** | `On` (default) | Monitor toward a target ~90–95% RH — remember this controller only *reports* humidity, it doesn't control it (User Manual §4.7). Pair with your own humidification setup if the room runs dry. |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |
@@ -152,6 +153,9 @@ the less this list matches your actual product and packaging.
 |---|---|---|
 | 🌡️ HIGH TEMP Alarm | Room too warm, past persist time | Check door/load/compressor |
 | ❄️ LOW TEMP Alarm | Room too cold, past persist time | Check setpoint, check for a stuck compressor |
+| 🚪 DOOR OPEN Alarm | Door open past the alarm delay | Close the door / check the door sensor |
+| 🥶 NO-COOL Alarm | Compressor running but room isn't cooling | Check for a refrigeration fault urgently |
+| ❄️ ICE ALARM | Evaporator coil may be iced | Check airflow, consider a defrost cycle |
 | ✅ Alarm CLEARED | Whatever tripped above has recovered | No action needed |
 | ⚠️ PROBE FAULT | Main sensor has failed | Check probe wiring/connection urgently |
 | ⚠️ SD CARD FAILURE | Logging/backup paused, cooling still runs fine | Check the card when convenient — not urgent for cooling itself |
