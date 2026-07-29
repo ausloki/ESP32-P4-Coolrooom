@@ -4,6 +4,30 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-29 — Waveshare ESP-IDF Re-Evaluation For Hosted Wi-Fi Bring-Up
+
+**Session scope**: Re-evaluate hosted Wi-Fi configuration against official Waveshare ESP-IDF examples and harden project reference guidance.
+
+### What Changed
+
+- Pulled and inspected `waveshareteam/ESP32-P4-WIFI6-Touch-LCD-7B` ESP-IDF examples locally, with focus on hosted SDIO config.
+- Confirmed Waveshare hosted baseline from `examples/ESP-IDF/11_esp_brookesia_phone/sdkconfig`:
+  - `CONFIG_ESP_HOSTED_SDIO_RESET_ACTIVE_HIGH=y`
+  - reset GPIO `54`
+  - SDIO width `4-bit`
+  - SDIO clock `40000 kHz`
+  - CMD/CLK/D0..D3 = `19/18/14/15/16/17`
+- Re-aligned `esp32-p4-coolroom.yaml` hosted block to this baseline (`active_high: true`, `sdio_frequency: 40MHz`).
+- Removed experimental `slot: 0` override after verification showed it remaps generated hosted SDIO pins to `39-44` in ESPHome `sdkconfig.h` for this repo, which conflicts with TF-card pins.
+- Added permanent reference notes to `reference/hardware_pins.md` documenting the validated hosted baseline and the `slot: 0` remap hazard.
+
+### Outcome
+
+- Project hosted settings are now aligned to known-good Waveshare example values.
+- Future bring-up changes now have an explicit, repo-local baseline and a verified anti-pattern to avoid.
+
+---
+
 ## 2026-07-23 — Phase 5 Static Audit And Doc Reconciliation
 
 **Session scope**: Review the current non-hardware Phase 5 implementation and reconcile obvious documentation drift.

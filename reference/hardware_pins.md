@@ -247,6 +247,8 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 
 3. **Mandatory: Verify RS485 UART pins before RS485 devices work.** The relay board and RTD sensor require the correct UART TX/RX pin assignments.
 
-4. **Two separate SDIO buses.** The TF card (SD slot) uses SDMMC host 1 on GPIO 39-44. The C6 co-processor uses SDMMC host 0 on a separate set of GPIOs. These must never conflict.
+4. **Hosted SDIO reference behavior (critical).** On this board, the ESP32-C6 hosted link is wired to GPIO 14-19 with reset on GPIO 54 and wake on GPIO 6 (Waveshare FIB board header). In ESPHome's `esp32_hosted` component for this project, leaving `slot` at its default generated the correct pin map in `sdkconfig.h` (`CONFIG_ESP_HOSTED_SDIO_SLOT_1` + CMD/CLK/D0..D3 = 19/18/14/15/16/17). Forcing `slot: 0` remapped hosted SDIO pins to 39-44 in generated config, colliding with TF-card pins and breaking hosted link bring-up. Do not set `slot: 0` in this repo unless upstream component behavior changes and is re-verified in generated `sdkconfig.h`.
 
-5. **ESP32-P4 engineering sample flag.** If your board has chip revision < 3.0, set `engineering_sample: true` in the ESPHome `esp32:` block. Production boards ship with revision ≥ 3.0 and do not need this flag.
+5. **Waveshare ESP-IDF hosted baseline (11_esp_brookesia_phone).** Example `sdkconfig` sets: reset active high, reset GPIO 54, 4-bit SDIO, 40MHz clock, CMD/CLK/D0..D3 = 19/18/14/15/16/17. Use this as the first-pass reference before changing hosted settings.
+
+6. **ESP32-P4 engineering sample flag.** If your board has chip revision < 3.0, set `engineering_sample: true` in the ESPHome `esp32:` block. Production boards ship with revision ≥ 3.0 and do not need this flag.

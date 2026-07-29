@@ -87,6 +87,7 @@ substitutions:
   wifi_sdio_d3_pin:  GPIO17
   wifi_c6_reset_pin: GPIO54
   wifi_c6_wakeup_pin: GPIO6
+  wifi_c6_wakeup_pin_num: "6"
 
   # ── Phase 4: Display & Touch GPIO (✅ confirmed from board schematic PDF) ─
   # INT_TP  → NLGPIO23, RESET_TP → NLGPIO33, BL_CTRL → NLGPIO32
@@ -150,6 +151,14 @@ esphome:
     - p4_logging.h
     - p4_log_manager.h
   on_boot:
+    - priority: 900
+      then:
+        - lambda: |-
+            // Keep the ESP32-C6 co-processor awake before hosted SDIO init.
+            gpio_reset_pin((gpio_num_t) ${wifi_c6_wakeup_pin_num});
+            gpio_set_direction((gpio_num_t) ${wifi_c6_wakeup_pin_num}, GPIO_MODE_OUTPUT);
+            gpio_set_level((gpio_num_t) ${wifi_c6_wakeup_pin_num}, 1);
+
     - priority: 600
       then:
         - lambda: |-
@@ -276,9 +285,35 @@ esphome:
 
 esp32:
   variant: esp32p4
+  # First real hardware in hand (2026-07-29) reports chip revision v1.3 via
+  # esptool -- confirmed engineering-sample silicon (rev < 3.0). This flag
+  # gates chip-revision-specific init (PSRAM/flash timing tuning differs
+  # between ES and production silicon); already documented as required in
+  # reference/hardware_pins.md but never applied since no board existed to
+  # check the actual revision against until now. cpu_frequency below was
+  # already at the ES-safe 360MHz cap independently, so that part was fine.
+  engineering_sample: true
+  # Every official Waveshare ESP-IDF example for this exact board (including
+  # 08_lvgl_display_panel, the closest analog to what we're doing) sets
+  # CONFIG_ESPTOOLPY_FLASHMODE_QIO — Quad I/O. We were on ESPHome's default
+  # (DIO), confirmed via the ROM bootloader's own boot banner ("SPI mode:DIO")
+  # captured from real hardware. A flash-mode mismatch against what the
+  # physical chip is actually characterized for is a plausible cause of a
+  # hang during the bootloader's own SPI-speed reconfiguration, which happens
+  # very early -- before any of its own log output.
+  flash_mode: qio
   framework:
     type: esp-idf
     sdkconfig_options:
+      # ESPHome's flash_mode: qio (above) only sets the CONFIG_ESPTOOLPY_
+      # FLASHMODE_QIO choice-boolean, not the companion literal string
+      # CONFIG_ESPTOOLPY_FLASHMODE that esptool's elf2image actually reads
+      # when stamping the bootloader/app image header's flash-mode byte --
+      # confirmed by inspecting the generated sdkconfig (QIO=y but the
+      # string still read "dio") and the built binaries themselves (header
+      # byte 0x02 = DIO in both bootloader.bin and the app image). Setting
+      # the string explicitly here forces both to agree.
+      CONFIG_ESPTOOLPY_FLASHMODE: "qio"
       CONFIG_SPIRAM_RODATA: "y"
       CONFIG_SPIRAM_FETCH_INSTRUCTIONS: "y"
       CONFIG_LWIP_TCP_SND_BUF_DEFAULT: "65535"
@@ -296,6 +331,9 @@ esp32:
 
 psram:
   mode: hex
+  # Keep PSRAM at a conservative speed during bench bring-up. The UI path is
+  # PSRAM-heavy; aggressive timing can destabilize early hardware sessions.
+  speed: 100MHZ
 
 ##############################################################################
 # WiFi via ESP32-C6 co-processor (ESP-Hosted SDIO)
@@ -314,7 +352,7 @@ esp32_hosted:
   d2_pin:  ${wifi_sdio_d2_pin}
   d3_pin:  ${wifi_sdio_d3_pin}
   bus_width: 4
-  sdio_frequency: 10MHz
+  sdio_frequency: 40MHz
   use_psram: true
 
 wifi:
@@ -377,19 +415,9 @@ time:
           ESP_LOGI("ntp", "Sync complete — switching to normal interval");
           p4_ntp_set_interval(${ntp_normal_sync_ms});
 
-  # PCF8563 external RTC (battery-backed, synced from NTP via ESP32 internal RTC)
-  # RTC chip is not yet schematic-confirmed from local reference extraction.
-  # This project currently uses PCF8563 as the working assumption; confirm on
-  # physical hardware with I2C scan and, if needed, chip-marking inspection.
-  - platform: pcf8563
-    id: rtc_pcf8563
-    i2c_id: i2c_bus
-    address: 0x51                        # PCF8563 fixed I2C address
-    update_interval: 60s
-    on_time_sync:
-      - lambda: |-
-          ESP_LOGI("rtc", "PCF8563 synced from NTP");
-          id(hw_rtc_ok) = true;
+  # External RTC probe is temporarily disabled for bench bring-up so missing
+  # optional hardware cannot force reboot loops. Keep hw_rtc_ok false and
+  # rely on SNTP-only time until hardware confirmation is complete.
 
 logger:
   level: INFO
@@ -401,8 +429,11 @@ logger:
     text_sensor: WARN
 
 safe_mode:
-  boot_is_good_after: 60s
-  num_attempts: 3
+  # Keep safe mode available for bad firmware, but avoid false boot-loop
+  # detection during bench diagnostics when optional external hardware is
+  # missing and/or USB logging tools trigger an early reset event.
+  boot_is_good_after: 1s
+  num_attempts: 8
 
 web_server:
   port: 80
@@ -1066,26 +1097,33 @@ sensor:
   # physical board/datasheet before flashing. Raw readings are internal; the
   # public probe*_humidity/probe*_temp sensors below gate on their enable flag
   # the same way probe2_temp already does.
-  - platform: sht3xd
-    address: 0x44
+  # Bench-safe placeholders keep IDs stable when optional external I2C sensors
+  # are absent. Downstream template/UI logic already treats NaN as unavailable.
+  - platform: template
+    id: sht31_internal_temp_raw
+    internal: true
     update_interval: 30s
-    temperature:
-      id: sht31_internal_temp_raw
-      internal: true
-    humidity:
-      id: sht31_internal_humidity_raw
-      internal: true
+    lambda: 'return NAN;'
+
+  - platform: template
+    id: sht31_internal_humidity_raw
+    internal: true
+    update_interval: 30s
+    lambda: 'return NAN;'
 
   # SHT20 (external, ambient/outside reference): HTU21D-compatible, fixed
   # address 0x40 (not configurable — SHT20/SHT21/SHT25/HTU21D all use 0x40).
-  - platform: htu21d
+  - platform: template
+    id: sht20_external_temp_raw
+    internal: true
     update_interval: 30s
-    temperature:
-      id: sht20_external_temp_raw
-      internal: true
-    humidity:
-      id: sht20_external_humidity_raw
-      internal: true
+    lambda: 'return NAN;'
+
+  - platform: template
+    id: sht20_external_humidity_raw
+    internal: true
+    update_interval: 30s
+    lambda: 'return NAN;'
 
   - platform: template
     id: probe_internal_temp

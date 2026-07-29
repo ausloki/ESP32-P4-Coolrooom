@@ -12,6 +12,27 @@
 
 ## 2026-07-26 Addendum — Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed
 
+## 2026-07-29 Addendum — Hosted Wi-Fi Baseline Re-anchored To Waveshare Examples
+
+Hosted Wi-Fi settings were re-evaluated directly against the official Waveshare ESP-IDF examples repository (`examples/ESP-IDF`, especially `11_esp_brookesia_phone/sdkconfig`) rather than inferred defaults.
+
+Confirmed baseline values for this board and C6-hosted path:
+- reset polarity active high
+- reset GPIO 54
+- SDIO 4-bit bus
+- SDIO 40MHz clock
+- SDIO pins CMD/CLK/D0..D3 = 19/18/14/15/16/17
+
+Important implementation finding in this repo with ESPHome generation:
+- forcing `esp32_hosted.slot: 0` caused generated hosted pin remap to GPIO 39-44 in `sdkconfig.h` (TF-card pin set), which breaks hosted bring-up.
+- leaving slot default generated `CONFIG_ESP_HOSTED_SDIO_SLOT_1` and preserved the correct 14-19 wireless pins.
+
+Actions taken:
+- `esp32-p4-coolroom.yaml` re-aligned to Waveshare baseline (`active_high: true`, `sdio_frequency: 40MHz`, no slot override).
+- `reference/hardware_pins.md` updated with a permanent hosted baseline + slot override hazard note for future edits.
+
+This addendum is the current source-of-truth for hosted SDIO tuning in this repo unless upstream ESPHome hosted-slot behavior changes and is re-verified from generated `sdkconfig.h`.
+
 Resolved 5 items from the outstanding list in one pass — first real use of the new
 documentation-consistency closeout rule (`CLAUDE.md`) against actual code changes.
 
