@@ -12,6 +12,15 @@
 
 ## 2026-07-26 Addendum — Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed
 
+## 2026-07-29 Addendum — RTC Identity Wording Corrected (No Logic Change)
+
+Made an accuracy-only source comment correction in `p4_helpers.h`:
+- removed wording that implied RTC identity was confirmed
+- replaced with explicit statement that RTC chip identity is not hardware-confirmed yet
+- retained PCF8563 (`0x51`) as the working assumption for current integration
+
+No firmware behavior changed in this edit. This keeps code comments aligned with actual hardware-validation status before continuing RTC-focused verification.
+
 ## 2026-07-29 Addendum — Hosted Wi-Fi Baseline Re-anchored To Waveshare Examples
 
 Hosted Wi-Fi settings were re-evaluated directly against the official Waveshare ESP-IDF examples repository (`examples/ESP-IDF`, especially `11_esp_brookesia_phone/sdkconfig`) rather than inferred defaults.

@@ -180,7 +180,8 @@ inline uint32_t p4_pin_hash_djb2(const std::string& pin) {
 }
 
 // ─── RTC Notes ──────────────────────────────────────────────────────────────
-// The ESP32-P4 board has an onboard PCF8563 RTC (item 11, I2C addr 0x51).
+// The board's external RTC chip identity is not yet hardware-confirmed.
+// This project currently uses PCF8563 (I2C 0x51) as the working assumption.
 // ESPHome's pcf8563 component handles all RTC I2C communication.
 // Call id(rtc_pcf8563).now() from lambdas to get the RTC time.
 //

@@ -4,6 +4,24 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-29 — RTC Wording Correction + Verification Kickoff
+
+**Session scope**: Commit an accuracy-only RTC comment correction and begin hardware verification loop.
+
+### What Changed
+
+- Updated RTC comments in `p4_helpers.h` to reflect current status accurately:
+  - RTC identity is not hardware-confirmed yet.
+  - PCF8563 at `0x51` remains the project's working assumption.
+- No control logic or runtime behavior changed in this edit.
+
+### Outcome
+
+- Source comments now match actual project confidence level.
+- Verification work proceeds with explicit RTC uncertainty tracked in-code and docs.
+
+---
+
 ## 2026-07-29 — Waveshare ESP-IDF Re-Evaluation For Hosted Wi-Fi Bring-Up
 
 **Session scope**: Re-evaluate hosted Wi-Fi configuration against official Waveshare ESP-IDF examples and harden project reference guidance.
