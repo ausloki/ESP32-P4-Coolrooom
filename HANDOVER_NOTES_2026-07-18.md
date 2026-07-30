@@ -2,11 +2,54 @@
 
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-30  
-**Status**: In Progress, on real hardware — first physical device connected 2026-07-29 (full factory backup taken first). Device boots and runs a working LVGL touchscreen UI; the home-screen gauge (orientation, spacing, sizing) and left icon rail have been iteratively tuned live against the real screen and are in a good state as of this entry. WiFi is **deliberately disabled** (`wifi.enable_on_boot: false`) pending a real fix for a hosted-link reset loop found this same day — not a regression, a known tradeoff. A real, separate, unresolved bug: the device produces zero application-level log output on the USB console at any point after boot. See the three 2026-07-29/07-30 addenda below for full detail — the two before this one were previously undocumented/uncommitted work from an interrupted session, reconstructed here rather than lost.  
-**Last Commit**: `f38da05` (fix(lvgl): correct horseshoe orientation bug, tune gauge/icons on real hardware)
+**Status**: In Progress, on real hardware — first physical device connected 2026-07-29 (full factory backup taken first). Device boots and runs a working LVGL touchscreen UI; the home-screen gauge (orientation, spacing, sizing) and left icon rail have been iteratively tuned live against the real screen and confirmed good. Latest pass fixed two more real bugs found by cross-referencing Espressif's official BSP source: the SD card was never actually powered (missing on-chip LDO init), and the touchscreen was missing its own address-strapping reset pulse. Also added procedural animations to the 4 status icons. **None of this latest pass has been visually confirmed on hardware yet** — flashed but untested as of this entry. WiFi is **deliberately disabled** (`wifi.enable_on_boot: false`) pending a real fix for a hosted-link reset loop found 2026-07-30 — not a regression, a known tradeoff. A real, separate, unresolved bug: the device produces zero application-level log output on the USB console at any point after boot. See the addenda below for full detail — several from 2026-07-29/07-30 were previously undocumented/uncommitted work from an interrupted session, reconstructed rather than lost.  
+**Last Commit**: (pending — this entry's work not yet committed)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-30 Addendum (Late Evening) — SD Power Fix, Touch Fix, Icon Animations
+
+Continued straight on from the gauge/icon tuning session below. User installed a physical SD
+card and reported touch wasn't registering input; both root-caused by cross-referencing
+Espressif's official `esp32_p4_function_ev_board` BSP source (`espressif/esp-bsp` on GitHub) —
+same method that found the three boot bugs on 2026-07-29.
+
+**SD card was never actually powered.** Waveshare's own `04_sdmmc` example defaults to powering
+the SD I/O lines from on-chip LDO channel 4 on this board's high-speed SDMMC pins — our
+`p4_sd_mount()` never initialized this LDO at all. Pin assignments were correct; the card's I/O
+lines likely just never had real power. Fixed: lazily-initialized `sd_pwr_ctrl_handle_t` (once,
+persists across remounts) set on `host.pwr_ctrl_handle` before every mount.
+
+**Touch was missing its address-strap reset.** Our config deliberately omitted `reset_pin` on
+the (wrong) assumption that the shared display/touch reset pin (GPIO33) could only safely be
+driven by one component. Espressif's BSP does the opposite: the touch driver does its *own*
+reset pulse, after the display's, specifically to strap the GT911's I2C address. Fixed by
+re-adding `reset_pin` to the touchscreen config (+ matching `mirror_x`/`mirror_y` transform).
+Required `allow_other_uses: true` on **both** the touchscreen's and the display's reset_pin
+declarations — ESPHome validates pin exclusivity by default and initially rejected the shared
+pin outright. Small unconfirmed risk: the touch driver's reset pulse fires after display init
+completes, on the same pin — plausible brief flicker, not yet observed either way.
+
+**Added procedural icon animations** (separate feature request). Checked whether ESP32-P4's PPA
+hardware + 32-bit color could enable true hardware-accelerated alpha blending — the hardware and
+raw ESP-IDF both fully support it, but ESPHome's `lvgl:` YAML component currently hard-blocks
+both (`color_depth` schema only accepts 16; PPA is force-disabled for P4 in ESPHome's own
+codegen, citing unfixed upstream bugs). Not needed for the actual ask, though: rotation/opacity
+animation is a standard LVGL software-rendered feature, already available. New 50ms interval
+drives all 4 left-rail icons (snowflake spin+flicker, flame flicker, light glow, bell jiggle),
+each gated on its real relay/alarm state. Two real compile bugs hit and fixed along the way — see
+`reference/session_recaps.md`'s matching entry for the full technical detail (lambda code can't
+see LVGL's complete private struct, and these icon labels are raw `lv_obj_t*` globals, not
+wrapped in ESPHome's usual widget helper class).
+
+**Build**: RAM 22.1%, Flash 21.6%, config hash `0x9cf2e4ce`. Flashed and hash-verified.
+
+**Untested on hardware** — nothing in this addendum has been visually confirmed yet: touch
+input, display integrity after the shared-pin change, SD Card Mounted status, and all 4 icon
+animations (each needs its trigger condition actually active to observe).
 
 ---
 

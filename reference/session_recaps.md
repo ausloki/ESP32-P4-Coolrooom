@@ -2740,3 +2740,99 @@ cause not yet investigated); the hosted-WiFi reset loop itself (worked around vi
 arcs smaller still (needs a center-hub resize, a layout change, not just numbers).
 
 ---
+
+## 2026-07-30 (Late Evening) — SD Power Fix, Touch Fix, Icon Animations
+
+**Session scope**: Continued straight on from the gauge/icon tuning session. User installed a
+physical SD card and reported the touchscreen wasn't registering any input; both were investigated
+by cross-referencing Espressif's official `esp32_p4_function_ev_board` BSP source
+(`espressif/esp-bsp` on GitHub) rather than guessing — the same method that found the three real
+boot bugs on 2026-07-29. Also added procedural animations to the four home-screen status icons.
+
+### What Changed
+
+**SD card never actually powered (real bug, root-caused via Waveshare's official `04_sdmmc`
+example)**:
+
+- Cross-checked our SD mount code against `examples/ESP-IDF/04_sdmmc/main/sd_card_example_main.c`
+  and its `Kconfig.projbuild`. Found `EXAMPLE_SD_PWR_CTRL_LDO_INTERNAL_IO` defaults to **on** for
+  this board, with LDO channel 4 as the ESP32-P4 default — meaning the SD card's I/O lines on this
+  board's high-speed SDMMC pins draw power from an on-chip LDO rail, not a fixed board supply.
+  `p4_sd_mount()` in `p4_logging.h` never initialized this LDO or set `host.pwr_ctrl_handle` at
+  all — the GPIO pin assignments were correct, but the card's I/O lines were likely never actually
+  powered, which would explain unreliable/failing mounts independent of anything else being wired
+  correctly.
+- Fixed: added a lazily-initialized (once, persists across remounts) `sd_pwr_ctrl_handle_t` via
+  `sd_pwr_ctrl_new_on_chip_ldo()` (channel 4), set on `host.pwr_ctrl_handle` before every mount
+  attempt, guarded by `#if SOC_SDMMC_IO_POWER_EXTERNAL` for portability.
+
+**Touch not registering input (real bug, root-caused via the same BSP's `bsp_touch_new()`)**:
+
+- Our `touchscreen:` config deliberately omitted `reset_pin` on the reasoning that GPIO33 (shared
+  with the LCD's own reset line) was "owned by the mipi_dsi model." Cross-checking Espressif's BSP
+  showed this assumption was wrong: `bsp_touch_new()` explicitly passes `rst_gpio_num` (the same
+  shared pin) into `esp_lcd_touch_new_i2c_gt911()`, meaning the *touch* driver is expected to do
+  its own reset pulse *after* the display's own reset/init, specifically to strap the GT911's I2C
+  address correctly (ESPHome's own `gt911_touchscreen.cpp` only does this address-strap sequence
+  when `reset_pin` is configured — confirmed by reading its `setup()` directly). Without it, the
+  chip's address-strap state was left to chance.
+- Fixed: re-added `reset_pin: ${touch_rst_pin}` (same GPIO33) to the touchscreen config. This
+  requires `allow_other_uses: true` on **both** usages of the pin — ESPHome validates pin
+  exclusivity by default and initially rejected this as "Pin 33 is used in multiple places."
+  Since the display model's `reset_pin=33` is a hardcoded internal default
+  (`esphome/components/mipi_dsi/models/waveshare.py`), had to explicitly override it in our own
+  `display:` block (confirmed overridable via `model.option(CONF_RESET_PIN, cv.UNDEFINED)` in
+  ESPHome's mipi_dsi component) purely to attach the `allow_other_uses` flag on that side too.
+- Also matched the BSP's `tp_cfg.flags` (`mirror_x: 1, mirror_y: 1`) via ESPHome's `transform:`
+  block on the touchscreen — same touch orientation as the reference.
+- **Known small risk, not yet observed**: the touch driver's reset pulse fires *after* the
+  display's own init completes, on the same physical pin — plausible this causes a brief
+  flicker/redraw of the display when touch initializes. Matches official reference behavior, but
+  unconfirmed on our actual hardware as of this entry.
+
+**New: procedural icon animations** (unrelated feature, requested mid-session):
+
+- Investigated whether ESP32-P4's PPA (Pixel Processing Accelerator) hardware and 32-bit ARGB
+  color depth could be used for hardware-accelerated alpha blending, per a request framed around
+  `CONFIG_LV_USE_DRAW_PPA` / `CONFIG_LV_COLOR_DEPTH_32`. Found: the *hardware* fully supports both
+  (`SOC_PPA_SUPPORTED=1` confirmed in our exact ESP-IDF 5.5.4), and Espressif's own raw
+  `lvgl/lvgl` + `esp_lvgl_port` stack (what Waveshare's examples use) supports both too — but
+  ESPHome's own `lvgl:` YAML component hard-blocks both: `color_depth:` schema only accepts `16`
+  (`cv.one_of(16)`), and PPA fill acceleration is explicitly force-disabled for ESP32-P4 via a
+  hardcoded `LV_USE_PPA "0"` define in ESPHome's own generated code, citing unfixed upstream bugs.
+  Neither is reachable via `sdkconfig_options` since neither is a Kconfig value at that layer.
+- This didn't block the actual ask: rotation, opacity flicker, and "jiggle" are standard LVGL
+  software-rendered animation primitives (`LV_USE_DRAW_SW` is already on) and don't need PPA or
+  32-bit color at all.
+- Added a new 50ms (20fps) `interval:` driving all four left-rail status icons procedurally, each
+  gated on its real underlying state (matches the existing on/off color logic — an idle icon
+  doesn't animate): snowflake (compressor) slow continuous spin + gentle flicker; flame (defrost)
+  irregular two-sine-wave flicker; light globe smooth ~2-3s breathing glow; bell fast jiggle only
+  while any alarm condition is active (reuses the same "any alarm" expression the home banner
+  already uses).
+- **Real compile bug hit and fixed along the way**: `lv_obj_get_width()`/`lv_obj_get_height()`
+  (used for an initial rotation-pivot calculation) failed with "invalid use of incomplete type
+  lv_obj_t" — lambda code only sees LVGL's public opaque forward-declaration of `lv_obj_t`, not
+  the complete private struct those two functions need. Switched to `lv_pct(50)` (a
+  percentage-encoded marker value that doesn't need to touch the object at all) instead of
+  querying pixel dimensions directly.
+- **Second, more interesting compile bug**: initially wrote `id(ui_compressor_icon).obj`
+  (assuming these labels were wrapped in ESPHome's `LvCompound` helper class, which does have an
+  `.obj` member) — but checking the actual generated `main.cpp` showed these specific icon labels
+  are declared as plain `static lv_obj_t *ui_compressor_icon;` globals, not wrapped at all.
+  `id(ui_compressor_icon)` already **is** the raw pointer; the `.obj` suffix was invalid (and
+  produced the same confusing "incomplete type" error, since resolving `.obj` requires knowing
+  the struct's member layout). Fixed by removing `.obj` everywhere.
+
+### Outcome
+
+- Compile clean: RAM 22.1% (127,200/576,464 B), Flash 21.6% (1,588,620/7,340,032 B), config hash
+  `0x9cf2e4ce`. Flashed and hash-verified via `esphome upload`.
+
+**Not done / hardware-gated — nothing in this entry has been visually confirmed yet**: touch
+input registering, display integrity after the shared-reset-pin change, SD Card Mounted/Free
+space on the Info page, and all four icon animations (each needs its relay/alarm actually
+triggered to observe). The missing-app-log bug and the hosted-WiFi reset loop both remain open
+and untouched by this entry.
+
+---

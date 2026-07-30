@@ -29,6 +29,9 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "p4_helpers.h"
+#if SOC_SDMMC_IO_POWER_EXTERNAL
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
+#endif
 
 static const char* TAG_SD = "p4_sd";
 
@@ -36,6 +39,16 @@ static const char* TAG_SD = "p4_sd";
 
 static sdmmc_card_t* p4_sd_card = nullptr;
 static bool          p4_sd_ready = false;
+#if SOC_SDMMC_IO_POWER_EXTERNAL
+// ESP32-P4's high-speed SDMMC pins draw card VDD from an on-chip LDO rather
+// than a fixed board rail -- confirmed against Waveshare's own SD example
+// for this board (examples/ESP-IDF/04_sdmmc), which enables this by default
+// with LDO channel 4. Without powering this LDO first, the card's I/O lines
+// never get real power and the mount silently fails/behaves unreliably even
+// though the GPIO pin assignments themselves are correct. Initialized once
+// (the driver handle persists across remounts) rather than per-mount-call.
+static sd_pwr_ctrl_handle_t p4_sd_pwr_ctrl_handle = nullptr;
+#endif
 // True once esp_vfs_fat_sdmmc_mount() has succeeded, false only after an
 // explicit unmount — deliberately tracked separately from p4_sd_ready.
 // p4_sd_ready can go false at runtime (p4_sd_mark_failed(), a write
@@ -70,6 +83,19 @@ inline bool p4_sd_mount() {
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     host.slot         = SDMMC_HOST_SLOT_1;
     host.max_freq_khz = SDMMC_FREQ_DEFAULT;  // 20 MHz
+
+#if SOC_SDMMC_IO_POWER_EXTERNAL
+    if (p4_sd_pwr_ctrl_handle == nullptr) {
+        sd_pwr_ctrl_ldo_config_t ldo_config = { .ldo_chan_id = 4 };
+        esp_err_t pwr_err = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &p4_sd_pwr_ctrl_handle);
+        if (pwr_err != ESP_OK) {
+            ESP_LOGE(TAG_SD, "Failed to init SD I/O LDO power control (chan 4): %s",
+                     esp_err_to_name(pwr_err));
+            return false;
+        }
+    }
+    host.pwr_ctrl_handle = p4_sd_pwr_ctrl_handle;
+#endif
 
     sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = 4;

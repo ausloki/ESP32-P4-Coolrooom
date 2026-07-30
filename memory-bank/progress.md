@@ -1,5 +1,30 @@
 # Progress Tracking
 
+## 2026-07-30 (Late Evening) SD Power Fix, Touch Fix, Icon Animations
+
+- User installed a physical SD card and reported touch not registering input. Both root-caused
+  by cross-referencing Espressif's official esp32_p4_function_ev_board BSP source rather than
+  guessing (same method that found the three boot bugs on 2026-07-29).
+- SD card was never actually powered: this board's high-speed SDMMC pins draw card I/O power
+  from on-chip LDO channel 4, per Waveshare's own SD example — our mount code never initialized
+  it. Fixed with a lazily-initialized sd_pwr_ctrl_handle_t set before every mount.
+- Touch was missing its own address-strap reset pulse: wrongly assumed only one component could
+  safely drive the shared display/touch reset pin. Espressif's BSP has the touch driver do its
+  own reset (after the display's) specifically to strap the GT911 I2C address correctly. Fixed
+  by re-adding reset_pin to the touchscreen config + allow_other_uses: true on both usages
+  (ESPHome validates pin exclusivity by default) + matching mirror_x/mirror_y transform.
+- Added procedural icon animations (snowflake spin+flicker, flame flicker, light glow, bell
+  jiggle), each gated on real relay/alarm state. Checked PPA/32-bit color hardware acceleration
+  first — hardware and raw ESP-IDF support it, but ESPHome's lvgl: component currently
+  hard-blocks both for ESP32-P4 (not needed for this ask; software rendering is sufficient).
+- Two real compile bugs found and fixed: lambda code can't see LVGL's complete private struct
+  (lv_obj_get_width/height failed; switched to lv_pct(50) for pivot instead), and these icon
+  labels are raw lv_obj_t* globals, not wrapped in ESPHome's usual LvCompound helper — id()
+  already returns the pointer directly, no .obj suffix needed.
+- Build: RAM 22.1%, Flash 21.6%, config hash 0x9cf2e4ce. Flashed and hash-verified. Nothing in
+  this pass confirmed on hardware yet (touch, display integrity, SD status, animations all
+  pending visual check).
+
 ## 2026-07-30 (Evening) Arc Orientation Bug Fixed, Live-Hardware Gauge Tuning
 
 - Resumed the interrupted afternoon session (below) — it never completed closeout, so this entry
