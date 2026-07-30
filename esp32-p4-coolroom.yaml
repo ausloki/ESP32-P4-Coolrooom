@@ -151,6 +151,8 @@ esphome:
     - p4_control.h
     - p4_logging.h
     - p4_log_manager.h
+    - p4_dashboard_html.h
+    - p4_dashboard.h
   on_boot:
     - priority: 900
       then:
@@ -279,6 +281,7 @@ esphome:
             if (web_server_base::global_web_server_base != nullptr) {
                 web_server_base::global_web_server_base->add_handler(new p4_logs::LogManagerHandler());
                 ESP_LOGI("logmgr", "SD log manager endpoint registered at /logs");
+                p4_dash::p4_dashboard_register();
             }
     - priority: -100
       then:
@@ -385,6 +388,8 @@ wifi:
     - lambda: |-
         id(ctl_wifi_connected) = true;
         ESP_LOGI("wifi", "WiFi connected");
+        ESP_LOGI("wifi", "IP: %s  SSID: %s",
+                 id(ip_address).state.c_str(), id(wifi_ssid_text).state.c_str());
   on_disconnect:
     - lambda: id(ctl_wifi_connected) = false;
 
@@ -431,9 +436,11 @@ time:
           ESP_LOGI("ntp", "Sync complete — switching to normal interval");
           p4_ntp_set_interval(${ntp_normal_sync_ms});
 
-  # External RTC probe is temporarily disabled for bench bring-up so missing
-  # optional hardware cannot force reboot loops. Keep hw_rtc_ok false and
-  # rely on SNTP-only time until hardware confirmation is complete.
+  # External RTC NOT CONFIRMED on this board yet (PCF8563 @ 0x51 is only a
+  # working assumption in hardware_pins.md). Keep the ESPHome pcf8563 block
+  # disabled so a missing chip cannot reboot-loop; hw_rtc_ok stays false and
+  # time comes from SNTP. Confirm chip via I2C scan (look for 0x51 vs 0x68)
+  # and board marking near the RTC battery holder before enabling.
 
 logger:
   level: INFO
@@ -454,19 +461,19 @@ safe_mode:
 web_server:
   port: 80
   version: 3
-  auth:
-    type: basic
-    username: !secret web_server_username
-    password: !secret web_server_password
+  # No HTTP Basic Auth on the stock web_server / REST API — guest live metrics on
+  # the Coolroom dashboard need unauthenticated GET /api/states. Operator elevation
+  # is dashboard Login only: credentials from secrets.yaml are hashed into the
+  # embedded HTML at build time (scripts/embed_dashboard.py). LAN trust model —
+  # anyone on the network can call the API; treat the LAN as the trust boundary.
+  # Open: http://<device-ip>/  (redirects to /assets/dashboard.html) or /dashboard
   # Web dashboard access model (see reference/RBAC_USER_GUIDE.md):
-  # ESPHome's web_server auth supports exactly one username/password pair — there is
-  # no server-side concept of multiple accounts or roles. The dashboard's guest/operator
-  # split (assets/dashboard.html) is a client-side UI convenience only: "operator" means
-  # "knows this one credential", not a distinct backend privilege level.
+  # ESPHome's web_server auth is a single pair and cannot do "guest read / operator
+  # write". Dashboard guest/operator is UI-only; "operator" means "passed Login".
   #
-  # Access REST API: GET http://192.168.x.x/api/states (returns all entity states as JSON)
-  # Dashboard: /assets/dashboard.html or serve via external web server
-  # Example: curl -u admin:password http://192.168.x.x/api/states | jq '.'
+  # Access REST API: GET http://192.168.x.x/api/states (JSON, no auth)
+  # Dashboard: /assets/dashboard.html (or /dashboard) — served from firmware
+  # Example: curl http://192.168.x.x/api/states | jq '.'
   sorting_groups:
     - id: group_system_info
       name: "System"
@@ -686,7 +693,7 @@ switch:
   # see sw_door_light_enabled below and the door_reed_sensor on_state handler.
   - platform: template
     id: door_sensor_mode_nc_no
-    name: "Door Sensor Mode (NC/NO)"
+    name: "Door Sensor Mode (NC or NO)"
     icon: "mdi:door"
     web_server:
       sorting_group_id: group_door
@@ -2897,7 +2904,35 @@ interval:
             char buf[24];
             p4_fmt_time(buf, sizeof(buf));
             std::string s(buf);
+            // "dd-mm-yyyy HH:MM:SS" → time only
             return s.size() > 8 ? s.substr(s.size()-8) : s;
+      - lvgl.label.update:
+          id: lbl_date
+          text: !lambda |-
+            char buf[24];
+            p4_fmt_time(buf, sizeof(buf));
+            std::string s(buf);
+            // date portion "dd-mm-yyyy"
+            return s.size() >= 10 ? s.substr(0, 10) : s;
+      - lvgl.label.update:
+          id: lbl_wifi_hdr
+          text: !lambda |-
+            // Visual bars only — numeric dBm stays on the Info page.
+            if (!id(ctl_wifi_connected)) return std::string("\U000F092D");  // wifi-strength-off
+            float rssi = id(wifi_rssi).state;
+            if (isnan(rssi)) return std::string("\U000F0924");  // outline
+            if (rssi >= -55) return std::string("\U000F0928");  // 4
+            if (rssi >= -65) return std::string("\U000F0925");  // 3
+            if (rssi >= -75) return std::string("\U000F0922");  // 2
+            return std::string("\U000F091F");  // 1
+      - lvgl.label.update:
+          id: lbl_wifi_hdr
+          text_color: !lambda |-
+            if (!id(ctl_wifi_connected)) return id(col_grey);
+            float rssi = id(wifi_rssi).state;
+            if (!isnan(rssi) && rssi >= -65) return id(col_cyan);
+            if (!isnan(rssi) && rssi >= -75) return id(col_orange);
+            return id(col_subtext);
       - lvgl.label.update:
           id: lbl_power_info
           text: !lambda |-
@@ -3006,7 +3041,7 @@ interval:
             bool rtd_ok = id(hw_rs485_rtd1_ok);
             bool rtc_ok = id(hw_rtc_ok);
             snprintf(buf, sizeof(buf), "Relay:%s RTD:%s RTC:%s",
-              relay_ok ? "✓" : "✗", rtd_ok ? "✓" : "✗", rtc_ok ? "✓" : "✗");
+              relay_ok ? "OK" : "NO", rtd_ok ? "OK" : "NO", rtc_ok ? "OK" : "NO");
             return std::string(buf);
       - lvgl.label.update:
           id: lbl_info_probes
@@ -3016,8 +3051,21 @@ interval:
             bool sht31_ok = !isnan(id(sht31_internal_temp_raw).state);
             bool sht20_ok = !isnan(id(sht20_external_temp_raw).state);
             snprintf(buf, sizeof(buf), "RTD:%s SHT31:%s SHT20:%s Fault:%s",
-              rtd_ok ? "✓" : "✗", sht31_ok ? "✓" : "✗", sht20_ok ? "✓" : "✗",
+              rtd_ok ? "OK" : "NO", sht31_ok ? "OK" : "NO", sht20_ok ? "OK" : "NO",
               id(ctl_probe_fault) ? "YES" : "no");
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_sd
+          text: !lambda |-
+            if (!id(sd_card_ok))
+              return std::string("SD: not mounted");
+            char buf[80];
+            float free_mb = id(sd_free_mb).state;
+            float total_mb = p4_sd_total_mb();
+            if (total_mb > 0)
+              snprintf(buf, sizeof(buf), "SD: mounted  %.0f / %.0f MB free", free_mb, total_mb);
+            else
+              snprintf(buf, sizeof(buf), "SD: mounted  %.0f MB free", free_mb);
             return std::string(buf);
       - lvgl.led.update:
           id: led_rs485
@@ -3740,27 +3788,32 @@ font:
   - file: "gfonts://Roboto"
     id: font_huge
     size: 64
-    glyphs: "0123456789.-+NA "
+    # Include '*' so PIN masking (p4_pin_masked) actually draws.
+    glyphs: "0123456789.-+NA *"
   - file: "gfonts://Roboto"
     id: font_large
     size: 28
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>"
   - file: "gfonts://Roboto"
     id: font_medium
     size: 20
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%+"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>"
   - file: "gfonts://Roboto"
     id: font_small
     size: 15
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%+"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>"
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: font_mdi
     size: 28
-    glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A"
+    glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A\U000F05A9\U000F091F\U000F0922\U000F0925\U000F0928\U000F0924\U000F092D"
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: font_mdi_large
     size: 75
     glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A"
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: font_mdi_wifi
+    size: 32
+    glyphs: "\U000F05A9\U000F091F\U000F0922\U000F0925\U000F0928\U000F0924\U000F092D"
 
 ##############################################################################
 # Phase 4: LVGL Coolroom Dashboard
@@ -3835,7 +3888,7 @@ lvgl:
           id: bg_fx_snow_1
           x: 120
           y: 80
-          text: "❄"
+          text: "*"
           text_font: font_small
           text_color: col_blue
           text_opa: 45%
@@ -3846,7 +3899,7 @@ lvgl:
           id: bg_fx_snow_2
           x: 250
           y: 120
-          text: "❄"
+          text: "*"
           text_font: font_small
           text_color: col_blue
           text_opa: 45%
@@ -3857,7 +3910,7 @@ lvgl:
           id: bg_fx_snow_3
           x: 390
           y: 100
-          text: "❄"
+          text: "*"
           text_font: font_small
           text_color: col_blue
           text_opa: 45%
@@ -3868,7 +3921,7 @@ lvgl:
           id: bg_fx_snow_4
           x: 530
           y: 90
-          text: "❄"
+          text: "*"
           text_font: font_small
           text_color: col_blue
           text_opa: 45%
@@ -3879,7 +3932,7 @@ lvgl:
           id: bg_fx_snow_5
           x: 690
           y: 110
-          text: "❄"
+          text: "*"
           text_font: font_small
           text_color: col_blue
           text_opa: 45%
@@ -3890,7 +3943,7 @@ lvgl:
           id: bg_fx_snow_6
           x: 840
           y: 130
-          text: "❄"
+          text: "*"
           text_font: font_small
           text_color: col_blue
           text_opa: 45%
@@ -3903,38 +3956,49 @@ lvgl:
       bg_color: col_bg
       width: 1024
       height: 600
-      scrollable: false
-      scrollbar_mode: "OFF"
+      scrollable: true
+      scrollbar_mode: "AUTO"
       widgets:
-        # Header bar with clock and WiFi
+        # Header fits 1024 width: time | date | wifi icon (cyan when linked).
+        # scrollable so a long date string never permanently clips.
         - obj:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
             pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
               - label:
-                  x: 16
-                  y: 14
-                  text: "Coolroom"
-                  text_font: font_medium
+                  id: lbl_clock
+                  x: 12
+                  y: 8
+                  width: 160
+                  height: 40
+                  text: "--:--"
+                  text_font: font_large
                   text_color: col_text
               - label:
-                  id: lbl_clock
-                  x: 900
+                  id: lbl_date
+                  x: 180
                   y: 14
-                  text: "--:--"
-                  text_font: font_small
+                  width: 720
+                  height: 28
+                  text: "--/--/----"
+                  text_font: font_medium
                   text_color: col_subtext
               - label:
-                  x: 950
-                  y: 14
-                  text: "📶"
-                  text_font: font_small
+                  id: lbl_wifi_hdr
+                  x: 920
+                  y: 8
+                  width: 88
+                  height: 40
+                  text: "\U000F092D"
+                  text_font: font_mdi_wifi
                   text_color: col_subtext
 
         # Left Sidebar - Control Buttons (vertical stack)
@@ -4080,9 +4144,9 @@ lvgl:
         # Center Arc Gauge Container - Horseshoe Meter Display
         - obj:
             x: 80
-            y: 56
+            y: 64
             width: 864
-            height: 496
+            height: 480
             bg_color: col_bg
             border_width: 0
             radius: 0
@@ -4365,7 +4429,7 @@ lvgl:
             widgets:
               - label:
                   align: CENTER
-                  text: "🏠 Home"
+                  text: "Home"
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_home
@@ -4381,7 +4445,7 @@ lvgl:
             widgets:
               - label:
                   align: CENTER
-                  text: "⚙️ Settings"
+                  text: "Settings"
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_settings
@@ -4397,7 +4461,7 @@ lvgl:
             widgets:
               - label:
                   align: CENTER
-                  text: "ℹ️ Info"
+                  text: "Info"
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_info
@@ -4421,22 +4485,18 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label:
-                  x: 16
-                  y: 14
-                  text: "Settings 1/7: Compressor & Fallback"
-                  text_font: font_medium
-                  text_color: col_text
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "1/7 Compressor", text_font: font_medium, text_color: col_text}
               - button:
                   id: btn_change_pin
-                  x: 850
+                  x: 820
                   y: 6
-                  width: 158
+                  width: 180
                   height: 36
                   bg_color: col_blue
                   radius: 6
@@ -4451,208 +4511,320 @@ lvgl:
                         text: "Enter a new 4-digit PIN:"
                     - lvgl.page.show: page_set_pin
                   widgets:
-                    - label: {align: CENTER, text: "🔒 Change PIN", text_font: font_small, text_color: col_text}
-
+                    - label: {align: CENTER, text: "Change PIN", text_font: font_small, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "Setpoint (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Setpoint (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_setpoint, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_setpoint, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: setpoint, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: setpoint, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "Compressor Hysteresis (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Comp Hysteresis (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_compdiff, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_compdiff, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: compressor_differential, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: compressor_differential, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Compressor Lockout (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Comp Lockout (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_lockout, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_lockout, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: comp_lockout_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: comp_lockout_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Sensor Fallback Duty-Cycle Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Sensor Fallback Enable", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_fallbacken, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_fallbacken, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_fallback_enabled
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 272, text: "Fallback Compressor ON Time (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 216, width: 460, text: "Fallback ON (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 294
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_fbon, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_fbon, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: fallback_on_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: fallback_on_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 340, text: "Fallback Compressor OFF Time (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 216, width: 460, text: "Fallback OFF (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 362
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_fboff, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_fboff, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: fallback_off_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: fallback_off_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -4661,7 +4833,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_7
         - button:
@@ -4672,7 +4844,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -4683,7 +4855,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_2
 
@@ -4696,189 +4868,294 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label: {x: 16, y: 14, text: "Settings 2/7: Defrost Schedule", text_font: font_medium, text_color: col_text}
-
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "2/7 Defrost Schedule", text_font: font_medium, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "Defrost System Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Defrost Enabled", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_defrosten, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_defrosten, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_defrost_enabled
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "Defrost Interval (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Defrost Interval (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_definterval, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_definterval, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: defrost_interval_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: defrost_interval_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Defrost Max Duration (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Max Duration (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_defduration, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_defduration, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: defrost_duration_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: defrost_duration_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Defrost Early Termination by Temperature", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Early Stop by Temp", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_termtemp, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_termtemp, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_defrost_term_temp
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 272, text: "Defrost Termination Temp (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 216, width: 460, text: "Term Temp (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 294
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_defend, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_defend, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: defrost_end_temp, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: defrost_end_temp, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 340, text: "Defrost Drip-Drain Phase Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 216, width: 460, text: "Drip-Drain Phase", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 362
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_defdripen, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_defdripen, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_defrost_drip
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -4887,7 +5164,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_1
         - button:
@@ -4898,7 +5175,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -4909,7 +5186,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_3
 
@@ -4922,167 +5199,257 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label: {x: 16, y: 14, text: "Settings 3/7: Defrost Smart & Drip", text_font: font_medium, text_color: col_text}
-
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "3/7 Defrost Smart", text_font: font_medium, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "Defrost Drip Time (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Drip Time (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_defdrip, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_defdrip, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: defrost_drip_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: defrost_drip_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "Smart Defrost (Delta-Triggered) Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Smart Delta Defrost", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_smartdef, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_smartdef, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_smart_defrost
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Smart Defrost Delta Threshold (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Smart Delta (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_smartdelta, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_smartdelta, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: smart_delta_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: smart_delta_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Smart Defrost Dwell Time (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Smart Dwell (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_smartdwell, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_smartdwell, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: smart_dwell_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: smart_dwell_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 272, text: "Dew Point Early Defrost Trigger Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 216, width: 460, text: "Dew Point Trigger", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 294
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_dewpoint, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_dewpoint, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_dew_point_trigger
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -5091,7 +5458,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_2
         - button:
@@ -5102,7 +5469,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -5113,7 +5480,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_4
 
@@ -5126,179 +5493,273 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label: {x: 16, y: 14, text: "Settings 4/7: Alarm Thresholds", text_font: font_medium, text_color: col_text}
-
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "4/7 Alarm Thresholds", text_font: font_medium, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "High Temp Alarm (°C above SP)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "High Alarm (C above SP)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_alarmhi, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_alarmhi, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: alarm_high_delta, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: alarm_high_delta, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "Low Temp Alarm (°C below SP)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Low Alarm (C below SP)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_alarmlo, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_alarmlo, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: alarm_low_delta, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: alarm_low_delta, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Alarm Persist Time (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Persist Time (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_alarmpersist, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_alarmpersist, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: alarm_persist_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: alarm_persist_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Alarm Recovery Hysteresis (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Recovery Hyst (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_alarmhyst, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_alarmhyst, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: alarm_hysteresis_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: alarm_hysteresis_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 272, text: "Alarm Siren Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 216, width: 460, text: "Alarm Siren", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 294
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_siren, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_siren, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_siren_enabled
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -5307,7 +5768,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_3
         - button:
@@ -5318,7 +5779,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -5329,7 +5790,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_5
 
@@ -5342,157 +5803,236 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label: {x: 16, y: 14, text: "Settings 5/7: Alarms Advanced", text_font: font_medium, text_color: col_text}
-
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "5/7 Alarms Advanced", text_font: font_medium, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "Ice Alarm Delta (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Ice Alarm Delta (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_icedelta, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_icedelta, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: ice_delta_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: ice_delta_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "No-Cool Alarm Timeout (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "No-Cool Timeout (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_nocool, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_nocool, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: no_cool_alarm_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: no_cool_alarm_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Startup Alarm Grace Floor (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Startup Grace (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_startupgrace, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_startupgrace, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: startup_grace_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: startup_grace_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Post-Defrost Alarm Grace (min)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Post-Defrost Grace (min)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_defrostgrace, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_defrostgrace, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: defrost_grace_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: defrost_grace_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -5501,7 +6041,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_4
         - button:
@@ -5512,7 +6052,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -5523,7 +6063,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_6
 
@@ -5536,121 +6076,188 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label: {x: 16, y: 14, text: "Settings 6/7: Door", text_font: font_medium, text_color: col_text}
-
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "6/7 Door", text_font: font_medium, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "Door Sensor Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Door Sensor Enable", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_doorsensor, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_doorsensor, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_door_sensor_enabled
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "Door Sensor Mode (NC / NO)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Mode NC or NO", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_doormode, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_doormode, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: door_sensor_mode_nc_no
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Door-Triggered Light Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Door Light Enable", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_doorlight, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_doorlight, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_door_light_enabled
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Door Alarm Delay (s)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Door Alarm Delay (s)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_doordelay, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_doordelay, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: door_alarm_delay_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: door_alarm_delay_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -5659,7 +6266,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_5
         - button:
@@ -5670,7 +6277,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -5681,7 +6288,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_7
 
@@ -5694,155 +6301,241 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
-              - label: {x: 16, y: 14, text: "Settings 7/7: Probes", text_font: font_medium, text_color: col_text}
-
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "7/7 Probes", text_font: font_medium, text_color: col_text}
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              - label: {y: 0, text: "Probe 1 (Coolroom) Calibration Offset (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Probe 1 Offset (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 22
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_p1off, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_p1off, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: probe1_offset_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: probe1_offset_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 68, text: "Probe 2 (Evaporator) Calibration Offset (°C)", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Probe 2 Offset (°C)", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 90
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_st_p2off, x: 0, y: 2, width: 140, height: 38, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 150
-                        y: 0
-                        width: 32
-                        height: 19
-                        bg_color: col_blue
-                        radius: 4
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▲", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_p2off, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.increment: {id: probe2_offset_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
                     - button:
-                        x: 150
-                        y: 21
-                        width: 32
-                        height: 19
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
                         bg_color: col_blue
-                        radius: 4
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "▼", text_font: font_small}}]
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: probe2_offset_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 136, text: "Evaporator Probe (Probe 2) Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Probe 2 Enabled", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 158
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_probe2, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_probe2, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_probe2_enabled
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 204, text: "Internal SHT31 Sensor Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Internal SHT31", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 226
-                  width: 200
-                  height: 42
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_shtint, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_shtint, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_humidity_internal_enabled
                           - script.execute: refresh_all_settings_labels
-
-              - label: {y: 272, text: "External SHT20 Sensor Enabled", text_font: font_small, text_color: col_text}
+              - label: {x: 0, y: 216, width: 460, text: "External SHT20", text_font: font_medium, text_color: col_text}
               - obj:
-                  y: 294
-                  width: 200
-                  height: 42
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
                   bg_color: col_bg
                   border_width: 0
+                  pad_all: 0
                   widgets:
-                    - label: {id: lbl_sw_shtext, x: 0, y: 8, width: 90, height: 30, text: "---", text_font: font_large, text_color: col_text}
-                    - button:
-                        x: 100
-                        y: 2
-                        width: 90
-                        height: 38
-                        bg_color: col_blue
-                        radius: 6
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
                         border_width: 0
-                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_small}}]
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_shtext, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_humidity_external_enabled
                           - script.execute: refresh_all_settings_labels
-
         - button:
             x: 0
             y: 552
@@ -5851,7 +6544,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_6
         - button:
@@ -5862,7 +6555,7 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "🏠 Home", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
             on_click:
               - script.execute: switch_to_page_home
         - button:
@@ -5873,12 +6566,11 @@ lvgl:
             bg_color: col_panel
             border_width: 0
             radius: 0
-            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_small}}]
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_1
 
-
-    # Info page
+    # Info page — two-column diagnostics, readable spacing for 1024x600
     - id: page_info
       bg_color: col_bg
       widgets:
@@ -5886,138 +6578,59 @@ lvgl:
             x: 0
             y: 0
             width: 1024
-            height: 48
+            height: 56
             bg_color: col_panel
             border_width: 0
             radius: 0
+            pad_all: 0
             widgets:
               - label:
                   x: 16
-                  y: 14
+                  y: 0
+                  width: 900
+                  height: 56
+                  align: LEFT_MID
                   text: "System Information"
                   text_font: font_medium
                   text_color: col_text
 
         - obj:
-            x: 16
-            y: 60
-            width: 992
-            height: 440
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
             bg_color: col_bg
             border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
             widgets:
-              # System Memory section
-              - label:
-                  y: 0
-                  text: "System Memory"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_heap
-                  y: 24
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
+              # Left column
+              - label: {x: 0, y: 0, width: 470, text: "Memory", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_heap, x: 0, y: 32, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 80, width: 470, text: "PSRAM", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_psram, x: 0, y: 112, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 160, width: 470, text: "Uptime", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_uptime, x: 0, y: 192, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 240, width: 470, text: "WiFi SSID", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_ssid, x: 0, y: 272, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 320, width: 470, text: "WiFi Signal", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_signal, x: 0, y: 352, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 400, width: 470, text: "IP Address", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_ip, x: 0, y: 432, width: 470, text: "---", text_font: font_medium, text_color: col_text}
 
-              - label:
-                  y: 45
-                  text: "PSRAM Status"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_psram
-                  y: 69
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
+              # Right column
+              - label: {x: 500, y: 0, width: 470, text: "RS485 / RTC", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_rs485, x: 500, y: 32, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 80, width: 470, text: "Probe Health", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_probes, x: 500, y: 112, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 200, width: 470, text: "SD Card", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_sd, x: 500, y: 232, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 280, width: 470, text: "Compressor Lockout", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_lockout_timer_display, x: 500, y: 312, width: 470, text: "Ready", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 360, width: 470, text: "External RTC", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_rtc, x: 500, y: 392, width: 470, text: "Not confirmed (SNTP only)", text_font: font_small, text_color: col_subtext}
 
-              # System Uptime section
-              - label:
-                  y: 90
-                  text: "System Uptime"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_uptime
-                  y: 114
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              # WiFi section
-              - label:
-                  y: 135
-                  text: "WiFi: SSID / Signal"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_ssid
-                  y: 159
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-              - label:
-                  id: lbl_info_signal
-                  y: 175
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              # IP Address section
-              - label:
-                  y: 196
-                  text: "IP Address"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_ip
-                  y: 220
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              # RS485 Bus section
-              - label:
-                  y: 241
-                  text: "RS485 / RTC Status"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_rs485
-                  y: 265
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              # Probe Health section
-              - label:
-                  y: 286
-                  text: "Probe Health"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_info_probes
-                  y: 310
-                  text: "---"
-                  text_font: font_small
-                  text_color: col_text
-
-              # Compressor Lockout section — live 1s countdown, moved here
-              # from the retired Settings 3/Fallback page (which was actually
-              # mislabeled System Status diagnostics, not fallback settings).
-              - label:
-                  y: 331
-                  text: "Compressor Lockout"
-                  text_font: font_small
-                  text_color: col_subtext
-              - label:
-                  id: lbl_lockout_timer_display
-                  y: 355
-                  text: "Ready"
-                  text_font: font_small
-                  text_color: col_text
-
-        # Tab bar buttons
         - button:
             x: 0
             y: 552
@@ -6027,13 +6640,9 @@ lvgl:
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  align: CENTER
-                  text: "🏠 Home"
-                  text_font: font_small
+              - label: {align: CENTER, text: "Home", text_font: font_medium}
             on_click:
               - script.execute: switch_to_page_home
-
         - button:
             x: 342
             y: 552
@@ -6043,13 +6652,9 @@ lvgl:
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  align: CENTER
-                  text: "⚙️ Settings"
-                  text_font: font_small
+              - label: {align: CENTER, text: "Settings", text_font: font_medium}
             on_click:
               - script.execute: switch_to_page_settings
-
         - button:
             x: 684
             y: 552
@@ -6059,10 +6664,7 @@ lvgl:
             border_width: 0
             radius: 0
             widgets:
-              - label:
-                  align: CENTER
-                  text: "ℹ️ Info"
-                  text_font: font_small
+              - label: {align: CENTER, text: "Info", text_font: font_medium}
             on_click:
               - script.execute: switch_to_page_info
 
@@ -6089,13 +6691,13 @@ lvgl:
             id: ui_pin_entry_display
             text: ""
             align: TOP_MID
-            y: 95
+            y: 72
             text_font: font_huge
             text_color: col_text
         # Row 1: 1 2 3
         - button:
             x: 280
-            y: 150
+            y: 175
             width: 140
             height: 70
             bg_color: col_panel
@@ -6109,7 +6711,7 @@ lvgl:
               - label: {align: CENTER, text: "1", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 150
+            y: 175
             width: 140
             height: 70
             bg_color: col_panel
@@ -6123,7 +6725,7 @@ lvgl:
               - label: {align: CENTER, text: "2", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 150
+            y: 175
             width: 140
             height: 70
             bg_color: col_panel
@@ -6138,7 +6740,7 @@ lvgl:
         # Row 2: 4 5 6
         - button:
             x: 280
-            y: 240
+            y: 255
             width: 140
             height: 70
             bg_color: col_panel
@@ -6152,7 +6754,7 @@ lvgl:
               - label: {align: CENTER, text: "4", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 240
+            y: 255
             width: 140
             height: 70
             bg_color: col_panel
@@ -6166,7 +6768,7 @@ lvgl:
               - label: {align: CENTER, text: "5", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 240
+            y: 255
             width: 140
             height: 70
             bg_color: col_panel
@@ -6181,7 +6783,7 @@ lvgl:
         # Row 3: 7 8 9
         - button:
             x: 280
-            y: 330
+            y: 335
             width: 140
             height: 70
             bg_color: col_panel
@@ -6195,7 +6797,7 @@ lvgl:
               - label: {align: CENTER, text: "7", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 330
+            y: 335
             width: 140
             height: 70
             bg_color: col_panel
@@ -6209,7 +6811,7 @@ lvgl:
               - label: {align: CENTER, text: "8", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 330
+            y: 335
             width: 140
             height: 70
             bg_color: col_panel
@@ -6224,7 +6826,7 @@ lvgl:
         # Row 4: backspace, 0, OK
         - button:
             x: 280
-            y: 420
+            y: 415
             width: 140
             height: 70
             bg_color: col_grey
@@ -6238,7 +6840,7 @@ lvgl:
               - label: {align: CENTER, text: "<", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 420
+            y: 415
             width: 140
             height: 70
             bg_color: col_panel
@@ -6252,7 +6854,7 @@ lvgl:
               - label: {align: CENTER, text: "0", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 420
+            y: 415
             width: 140
             height: 70
             bg_color: col_blue
@@ -6322,13 +6924,13 @@ lvgl:
             id: ui_set_pin_display
             text: ""
             align: TOP_MID
-            y: 95
+            y: 72
             text_font: font_huge
             text_color: col_text
         # Row 1: 1 2 3
         - button:
             x: 280
-            y: 150
+            y: 175
             width: 140
             height: 70
             bg_color: col_panel
@@ -6342,7 +6944,7 @@ lvgl:
               - label: {align: CENTER, text: "1", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 150
+            y: 175
             width: 140
             height: 70
             bg_color: col_panel
@@ -6356,7 +6958,7 @@ lvgl:
               - label: {align: CENTER, text: "2", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 150
+            y: 175
             width: 140
             height: 70
             bg_color: col_panel
@@ -6371,7 +6973,7 @@ lvgl:
         # Row 2: 4 5 6
         - button:
             x: 280
-            y: 240
+            y: 255
             width: 140
             height: 70
             bg_color: col_panel
@@ -6385,7 +6987,7 @@ lvgl:
               - label: {align: CENTER, text: "4", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 240
+            y: 255
             width: 140
             height: 70
             bg_color: col_panel
@@ -6399,7 +7001,7 @@ lvgl:
               - label: {align: CENTER, text: "5", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 240
+            y: 255
             width: 140
             height: 70
             bg_color: col_panel
@@ -6414,7 +7016,7 @@ lvgl:
         # Row 3: 7 8 9
         - button:
             x: 280
-            y: 330
+            y: 335
             width: 140
             height: 70
             bg_color: col_panel
@@ -6428,7 +7030,7 @@ lvgl:
               - label: {align: CENTER, text: "7", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 330
+            y: 335
             width: 140
             height: 70
             bg_color: col_panel
@@ -6442,7 +7044,7 @@ lvgl:
               - label: {align: CENTER, text: "8", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 330
+            y: 335
             width: 140
             height: 70
             bg_color: col_panel
@@ -6457,7 +7059,7 @@ lvgl:
         # Row 4: backspace, 0, Save
         - button:
             x: 280
-            y: 420
+            y: 415
             width: 140
             height: 70
             bg_color: col_grey
@@ -6471,7 +7073,7 @@ lvgl:
               - label: {align: CENTER, text: "<", text_font: font_large, text_color: col_text}
         - button:
             x: 440
-            y: 420
+            y: 415
             width: 140
             height: 70
             bg_color: col_panel
@@ -6485,7 +7087,7 @@ lvgl:
               - label: {align: CENTER, text: "0", text_font: font_large, text_color: col_text}
         - button:
             x: 600
-            y: 420
+            y: 415
             width: 140
             height: 70
             bg_color: col_green

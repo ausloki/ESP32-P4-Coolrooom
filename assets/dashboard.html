@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Coolroom Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -384,7 +383,30 @@
             border-top: 1px solid #ddd;
         }
         
-        .hidden { display: none !important; }
+        .lock-chip {
+            display: inline-block;
+            background: #FF9800;
+            color: #111;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .settings-gate {
+            text-align: center;
+            padding: 28px 20px;
+            border: 1px dashed #555;
+            border-radius: 8px;
+            background: #252528;
+            margin: 16px 0 8px;
+        }
+        .settings-gate p {
+            margin: 0 0 14px;
+            color: #bbb;
+        }
+        .guest-only { }
+        .operator-only.hidden, .guest-only.hidden, .hidden { display: none !important; }
 
         /* Central horseshoe gauge — mirrors the LVGL touchscreen's three concentric
            arcs (coolroom / setpoint / ambient) so the web dashboard and the on-device
@@ -621,13 +643,56 @@
             </div>
         </div>
 
-        <!-- Settings Section: always visible — guest just can't submit (inputs/buttons
-             disabled below in updateUIForRole()). No section-level hiding; the actual
-             device call is what's gated, not the view of it. -->
-        <div id="settingsSection" class="chart-section">
+        <!-- Timers: live countdowns for compressor lockout and defrost phases.
+             All four backing sensors are computed straight from the control
+             tick's own globals — no new state, just previously-invisible
+             progress on durations that were already configurable above. -->
+        <div class="chart-section">
+            <h2>⏱️ Timers</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+                <div>
+                    <strong>Compressor Lockout</strong>
+                    <div id="lockoutTimer" style="margin-top: 8px;">--</div>
+                </div>
+                <div>
+                    <strong>Defrost</strong>
+                    <div id="defrostTimer" style="margin-top: 8px;">--</div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Health Status -->
+        <div class="chart-section">
+            <h2>System Health</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div>
+                    <strong>RS485 Bus</strong>
+                    <div id="rs485Status" style="margin-top: 8px;"></div>
+                </div>
+                <div>
+                    <strong>Memory Usage</strong>
+                    <div id="memoryStatus" style="margin-top: 8px;"></div>
+                </div>
+                <div>
+                    <strong>I2C Sensors</strong>
+                    <div id="probeStatus" style="margin-top: 8px;"></div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Settings gated behind Login — guests see main status + health/timers only. -->
+        <div id="settingsGate" class="settings-gate guest-only">
+            <p>Main display and system info are available without login. Settings and administration require operator login.</p>
+            <button type="button" class="primary" onclick="openLoginModal()">🔐 Login to access settings</button>
+        </div>
+
+
+        <!-- Settings Section: operator only -->
+        <div id="settingsSection" class="chart-section operator-only hidden">
             <div class="card-header-row">
                 <h2>⚙️ Operational Settings</h2>
-                <span class="lock-chip hidden" id="settingsLockChip">🔒 Login to edit</span>
             </div>
             <div id="settingsContent">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
@@ -697,62 +762,20 @@
             </div>
         </div>
 
-        <!-- Timers: live countdowns for compressor lockout and defrost phases.
-             All four backing sensors are computed straight from the control
-             tick's own globals — no new state, just previously-invisible
-             progress on durations that were already configurable above. -->
-        <div class="chart-section">
-            <h2>⏱️ Timers</h2>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
-                <div>
-                    <strong>Compressor Lockout</strong>
-                    <div id="lockoutTimer" style="margin-top: 8px;">--</div>
-                </div>
-                <div>
-                    <strong>Defrost</strong>
-                    <div id="defrostTimer" style="margin-top: 8px;">--</div>
-                </div>
-            </div>
-        </div>
 
-        <!-- Advanced Settings: every remaining tunable/enable parameter that
-             isn't in the four headline Operational Settings above. Rendered
-             from ADVANCED_SETTINGS_GROUPS by renderAdvancedSettings() rather
-             than hand-authored — 30 near-identical fields would otherwise be
-             a lot of repetition to keep in sync. Same always-visible,
-             guest-can't-submit convention as the rest of this page. -->
-        <div id="advancedSettingsSection" class="chart-section">
+        <!-- Advanced Settings: operator only -->
+        <div id="advancedSettingsSection" class="chart-section operator-only hidden">
             <div class="card-header-row">
                 <h2>🛠️ Advanced Settings</h2>
-                <span class="lock-chip hidden" id="advancedSettingsLockChip">🔒 Login to edit</span>
             </div>
             <div id="advancedSettingsContent"></div>
         </div>
 
-        <!-- Health Status -->
-        <div class="chart-section">
-            <h2>System Health</h2>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
-                <div>
-                    <strong>RS485 Bus</strong>
-                    <div id="rs485Status" style="margin-top: 8px;"></div>
-                </div>
-                <div>
-                    <strong>Memory Usage</strong>
-                    <div id="memoryStatus" style="margin-top: 8px;"></div>
-                </div>
-                <div>
-                    <strong>I2C Sensors</strong>
-                    <div id="probeStatus" style="margin-top: 8px;"></div>
-                </div>
-            </div>
-        </div>
 
-        <!-- System Administration: always visible — see the settings-section note above. -->
-        <div id="adminSection" class="chart-section">
+        <!-- System Administration: operator only -->
+        <div id="adminSection" class="chart-section operator-only hidden">
             <div class="card-header-row">
                 <h2>🔐 System Administration</h2>
-                <span class="lock-chip hidden" id="adminLockChip">🔒 Login to edit</span>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
                 <div>
@@ -859,15 +882,8 @@
             </div>
         </div>
 
-        <!-- Temperature Chart (Placeholder) -->
-        <div class="chart-section">
-            <h2>Temperature Trend (Last 24 hours)</h2>
-            <canvas id="tempChart" style="max-height: 300px;"></canvas>
-        </div>
-
         <footer>
-            <p>Coolroom Controller &mdash; Phase 12 Web Dashboard with Role-Based Access Control</p>
-            <p>Role: <span id="roleLabel">Loading...</span> | Auto-refresh: <span id="autoRefresh">enabled (10s)</span></p>
+            <p>Coolroom Controller — guest view is status only. Auto-refresh: <span id="autoRefresh">enabled (10s)</span></p>
         </footer>
     </div>
 
@@ -891,7 +907,7 @@
                 <strong>Dashboard starts in guest mode by default.</strong><br>
                 Enter the same username/password configured in the device's
                 <code>secrets.yaml</code> (<code>web_server_username</code> / <code>web_server_password</code>).
-                This is checked against the live device, not a value stored in this page.
+                Main status stays available without login; this only unlocks settings.
             </div>
         </div>
     </div>
@@ -901,12 +917,11 @@
         // USER AUTHENTICATION & ROLE-BASED ACCESS CONTROL
         // ═══════════════════════════════════════════════════════════════════════════════
         
-        // There is exactly one real credential (the device's web_server basic-auth
-        // username/password from secrets.yaml) — ESPHome's web_server component has
-        // no concept of multiple accounts or privilege tiers on the backend. This
-        // dashboard only ever distinguishes "not logged in" (guest, read-only) from
-        // "logged in" (operator, elevated) — anything implying finer-grained roles
-        // would be UI decoration with no real access control behind it.
+        // There is exactly one real credential (web_server_username / web_server_password
+        // from secrets.yaml). ESPHome cannot do "guest read / operator write" on the
+        // API, so HTTP Basic Auth is off: GET/POST /api/states is open on the LAN.
+        // Login only elevates this UI (settings/admin). The expected SHA-256 of
+        // "username:password" is baked in at firmware build (embed_dashboard.py).
         const ROLE_PERMISSIONS = {
             guest: {
                 name: 'Guest',
@@ -922,57 +937,114 @@
             }
         };
 
+        // Replaced at embed time with SHA-256 hex of username:password from secrets.yaml
+        const DASHBOARD_AUTH_TOKEN = '__DASHBOARD_AUTH_TOKEN__';
+
         let currentRole = 'guest';
-        let currentUser = 'unknown';
-        let authHeader = null; // "Basic base64(username:password)" once elevated; sent on write calls
-        const HA_LAN_IP = '192.168.37.136';
+        let currentUser = 'guest';
+        let authHeader = null; // unused for API (open LAN); kept for future hardening
         const API_PATH = '/api/states';
         let activeApiUrl = null;
-        let tempChart = null;
         
         // Session timeout tracking
         const SESSION_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
         let inactivityTimer = null;
         let lastActivityTime = Date.now();
 
-        function isPrivateHostname(hostname) {
-            if (!hostname) return false;
-            if (hostname === 'localhost') return true;
-            if (hostname.endsWith('.local')) return true;
-            if (/^10\./.test(hostname)) return true;
-            if (/^192\.168\./.test(hostname)) return true;
-            if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) return true;
-            return false;
-        }
-
         function buildApiCandidates(path = API_PATH) {
             const candidates = [];
             const host = window.location.hostname;
             const protocol = window.location.protocol || 'http:';
             const params = new URLSearchParams(window.location.search);
-            const overrideHost = params.get('ha_host');
+            const overrideHost = params.get('api_host') || params.get('ha_host');
 
-            // Try same-origin first when browsing the dashboard from a local subnet.
-            if (isPrivateHostname(host)) {
+            // Same-origin first (device IP / .local). Do not fall back to a hardcoded
+            // foreign host — that previously made login succeed/fail against the wrong box.
+            if (host && host !== 'localhost') {
                 candidates.push(`${protocol}//${host}${path}`);
                 if (protocol !== 'http:') {
                     candidates.push(`http://${host}${path}`);
                 }
             }
 
-            // Relative path still works for direct device hosting.
             candidates.push(path);
 
-            // Primary routed target through the inter-site VPN.
-            candidates.push(`http://${HA_LAN_IP}${path}`);
-
-            // Optional runtime override: ?ha_host=192.168.37.136 (or DNS name)
             if (overrideHost) {
                 candidates.unshift(`http://${overrideHost}${path}`);
             }
 
-            // De-duplicate while preserving order.
             return [...new Set(candidates)];
+        }
+
+        // SHA-256 that works on plain HTTP (device IP). crypto.subtle is only
+        // available in secure contexts (HTTPS/localhost) — without a fallback,
+        // Login always fails on http://<device-ip>/.
+        function sha256HexSync(message) {
+            // Minimal SHA-256 (public domain style) for ASCII credential strings.
+            function rotr(n, x) { return (x >>> n) | (x << (32 - n)); }
+            const K = [
+                0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+                0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+                0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+                0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+                0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+                0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+                0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+                0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+            ];
+            const bytes = unescape(encodeURIComponent(message));
+            const len = bytes.length;
+            const withOne = new Uint8Array(((len + 9 + 63) >> 6) << 6);
+            for (let i = 0; i < len; i++) withOne[i] = bytes.charCodeAt(i);
+            withOne[len] = 0x80;
+            const bitLen = len * 8;
+            withOne[withOne.length - 4] = (bitLen >>> 24) & 0xff;
+            withOne[withOne.length - 3] = (bitLen >>> 16) & 0xff;
+            withOne[withOne.length - 2] = (bitLen >>> 8) & 0xff;
+            withOne[withOne.length - 1] = bitLen & 0xff;
+            let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+            let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+            const w = new Uint32Array(64);
+            for (let i = 0; i < withOne.length; i += 64) {
+                for (let j = 0; j < 16; j++) {
+                    const o = i + j * 4;
+                    w[j] = (withOne[o] << 24) | (withOne[o + 1] << 16) | (withOne[o + 2] << 8) | withOne[o + 3];
+                }
+                for (let j = 16; j < 64; j++) {
+                    const s0 = rotr(7, w[j - 15]) ^ rotr(18, w[j - 15]) ^ (w[j - 15] >>> 3);
+                    const s1 = rotr(17, w[j - 2]) ^ rotr(19, w[j - 2]) ^ (w[j - 2] >>> 10);
+                    w[j] = (w[j - 16] + s0 + w[j - 7] + s1) >>> 0;
+                }
+                let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+                for (let j = 0; j < 64; j++) {
+                    const S1 = rotr(6, e) ^ rotr(11, e) ^ rotr(25, e);
+                    const ch = (e & f) ^ (~e & g);
+                    const t1 = (h + S1 + ch + K[j] + w[j]) >>> 0;
+                    const S0 = rotr(2, a) ^ rotr(13, a) ^ rotr(22, a);
+                    const maj = (a & b) ^ (a & c) ^ (b & c);
+                    const t2 = (S0 + maj) >>> 0;
+                    h = g; g = f; f = e; e = (d + t1) >>> 0;
+                    d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+                }
+                h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0;
+                h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + h) >>> 0;
+            }
+            return [h0, h1, h2, h3, h4, h5, h6, h7]
+                .map((x) => x.toString(16).padStart(8, '0'))
+                .join('');
+        }
+
+        async function sha256Hex(text) {
+            try {
+                if (window.crypto && window.crypto.subtle) {
+                    const data = new TextEncoder().encode(text);
+                    const digest = await crypto.subtle.digest('SHA-256', data);
+                    return Array.from(new Uint8Array(digest))
+                        .map((b) => b.toString(16).padStart(2, '0'))
+                        .join('');
+                }
+            } catch (e) { /* fall through */ }
+            return sha256HexSync(text);
         }
 
         // POST to a control endpoint (e.g. a switch toggle), trying the same
@@ -1117,48 +1189,24 @@
                 return;
             }
 
-            const candidateHeader = `Basic ${btoa(`${username}:${password}`)}`;
             const loginButton = document.querySelector('#loginModal button.primary');
             loginButton.disabled = true;
             loginButton.textContent = 'Checking...';
 
             try {
-                // Verify the credential against the live device rather than a value
-                // stored in this page — there is nothing else to check it against.
-                const candidates = buildApiCandidates();
-                let verified = false;
-                let lastStatus = null;
-
-                for (const url of candidates) {
-                    try {
-                        const response = await fetchWithTimeoutUsingHeader(url, candidateHeader);
-                        lastStatus = response.status;
-                        if (response.ok) {
-                            verified = true;
-                            activeApiUrl = url;
-                            break;
-                        }
-                        if (response.status !== 401) {
-                            // Reachable but failing for a non-auth reason; still worth trying other candidates.
-                            continue;
-                        }
-                    } catch (error) {
-                        // Unreachable candidate; try the next one.
-                    }
+                if (!DASHBOARD_AUTH_TOKEN || DASHBOARD_AUTH_TOKEN.includes('__DASHBOARD')) {
+                    alert('Firmware missing login token — rebuild with scripts/embed_dashboard.py');
+                    return;
                 }
-
-                if (!verified) {
-                    if (lastStatus === 401) {
-                        alert('Invalid username or password');
-                    } else {
-                        alert('Could not reach the device to verify credentials');
-                    }
+                const hash = await sha256Hex(`${username}:${password}`);
+                if (hash !== DASHBOARD_AUTH_TOKEN) {
+                    alert('Invalid username or password');
                     return;
                 }
 
                 currentUser = username;
                 currentRole = 'operator';
-                authHeader = candidateHeader;
+                authHeader = null;
 
                 closeLoginModal();
                 initializeRole();
@@ -1169,16 +1217,6 @@
             } finally {
                 loginButton.disabled = false;
                 loginButton.textContent = 'Login';
-            }
-        }
-
-        async function fetchWithTimeoutUsingHeader(url, header, timeoutMs = 2500) {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), timeoutMs);
-            try {
-                return await fetch(url, { signal: controller.signal, headers: { Authorization: header } });
-            } finally {
-                clearTimeout(timeout);
             }
         }
 
@@ -1264,36 +1302,22 @@
             }
         }
 
-        // Settings/admin sections are always visible to guest and operator alike —
-        // there's nothing sensitive in seeing the current setpoint or the existence of
-        // a backup button. What actually matters is that guests can't submit anything,
-        // which is enforced here (disabled inputs/buttons) and backstopped in every
-        // update*/backup*/etc. handler's own canPerformAction()/currentRole check.
-        function setSectionInteractive(sectionId, chipId, enabled) {
-            const section = document.getElementById(sectionId);
-            const chip = document.getElementById(chipId);
-            if (chip) chip.classList.toggle('hidden', enabled);
-            section.querySelectorAll('input, button, select').forEach((el) => {
-                if (el.classList.contains('help-icon')) return;
-                el.disabled = !enabled;
-            });
-            // Help balloons are only shown once logged in — a guest browsing the
-            // main page has no use for "what does this setting do?" explanations
-            // of controls they can't touch anyway.
-            section.querySelectorAll('.help-icon').forEach((el) => {
-                el.classList.toggle('hidden', !enabled);
-            });
-            if (!enabled) {
-                section.querySelectorAll('.help-popover').forEach((el) => el.classList.add('hidden'));
-            }
-        }
-
+        // Guest: main status + timers/health. Operator: settings/admin after Login.
+        let advancedSettingsRendered = false;
         function updateUIForRole() {
-            const roleInfo = ROLE_PERMISSIONS[currentRole];
-            setSectionInteractive('settingsSection', 'settingsLockChip', roleInfo.canView.includes('settings'));
-            setSectionInteractive('advancedSettingsSection', 'advancedSettingsLockChip', roleInfo.canView.includes('settings'));
-            setSectionInteractive('adminSection', 'adminLockChip', roleInfo.canAdmin);
-            document.getElementById('iconLight').disabled = currentRole !== 'operator';
+            const isOperator = currentRole === 'operator';
+            document.querySelectorAll('.operator-only').forEach((el) => {
+                el.classList.toggle('hidden', !isOperator);
+            });
+            document.querySelectorAll('.guest-only').forEach((el) => {
+                el.classList.toggle('hidden', isOperator);
+            });
+            const light = document.getElementById('iconLight');
+            if (light) light.disabled = !isOperator;
+            if (isOperator && !advancedSettingsRendered) {
+                renderAdvancedSettings();
+                advancedSettingsRendered = true;
+            }
         }
 
         function canPerformAction(action) {
@@ -1960,7 +1984,10 @@
                 showAlert('error', 'Could not reach the device to back up settings');
                 return;
             }
-            showAlert('success', 'Settings backed up to backup.json on the SD card');
+            // Button press is accepted over HTTP even if SD write fails on device —
+            // check System Health / serial for "Cannot open backup.json". Need a mounted SD card.
+            showAlert('success', 'Backup requested. If SD is missing or full, the device log will show write failure — confirm SD Card status under System Health.');
+            fetchStatus();
         }
 
         async function restoreSettings() {
@@ -2103,9 +2130,8 @@
         // INITIALIZATION & AUTO-REFRESH
         // ═══════════════════════════════════════════════════════════════════════════════
         
-        // Initialize and start auto-refresh
+        // Initialize and start auto-refresh (no Chart.js CDN — was slowing first load)
         initGaugeTracks();
-        renderAdvancedSettings();
         initializeRole();
         setInterval(fetchStatus, 10000);
         fetchStatus();

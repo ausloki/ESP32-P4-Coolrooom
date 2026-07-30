@@ -1,34 +1,45 @@
 # Active Context — Current Session State
 
-**Date:** 2026-07-30 (night)
-**Session:** Emergency display recovery after `79758c6` black/delayed screen + dead touch.
-**Status:** Recovery firmware **compiled + flashed** (config hash `0x698d1304`). Serial shows
-device in main loop. **Awaiting operator visual confirm** that the 7" panel and touch come up
-promptly (seconds, not minutes). WiFi still disabled on boot. Changes **not committed**.
+**Date:** 2026-07-30 (late night)
+**Branch:** `cursor/wifi-sdmmc-slot-fix`
+**Status:** WiFi/SDMMC slot fix already on branch (`dd53feb`). Follow-on web/LVGL work compiled +
+flashed (see latest config hash in handover). **Commit this session’s tree before leaving.**
 
-## What Broke
+## Working well
 
-Commit `79758c6` re-added GT911 `reset_pin` on shared GPIO33 after mipi_dsi init. ESPHome
-pulses that pin in `gt911_touchscreen.cpp::setup()`, hard-resetting the LCD with no re-init →
-blank display; touch also dead in that window. Operator also reported blank lasting up to ~6
-minutes on a prior boot (not always permanent).
+- Display/touch usable; WiFi on boot with TF on SDMMC **slot 0**, hosted C6 on **slot 1**
+- Coolroom dashboard served at `/` (handler prepended over ESPHome stock UI)
+- Guest web view: gauge + timers + health; settings hidden until Login
+- Login uses SHA-256 of `secrets.yaml` credentials baked at embed time — **must use
+  `sha256HexSync` fallback** because `crypto.subtle` is unavailable on plain `http://`
 
-## Fix Applied (working tree)
+## Just fixed / still verify on hardware
 
-- Removed shared `reset_pin` from `display:` / `touchscreen:`
-- `p4_gt911_prepare_for_lcd_reset()` in `p4_helpers.h` + `on_boot` priority 950 (hold INT
-  GPIO23 low before LCD reset straps addr 0x5D)
-- Kept mirror_x / mirror_y
-- Flashed via `/dev/cu.usbmodem5B7B0287481`; monitor on `/dev/cu.usbmodem213401` (JTAG)
+1. **Web Login over HTTP** — pure-JS SHA-256 fallback (was silently failing with SubtleCrypto)
+2. **LVGL settings blue +/- / Toggle** — larger 100×56 / 240×56 controls, value in panel chip
+3. **Home header** — page + header scrollable; time | date | wifi icon fitted to 1024 width;
+   connected WiFi icon **cyan** (not green); dBm text stays on Info page
+4. **Backup.json** — remount/retry before write (still needs a mounted writable SD)
 
-## Immediate Next Actions
+## Leave for next session
 
-1. Operator: confirm display + touch within a few seconds of boot/power-cycle.
-2. If OK: commit recovery fix; leave WiFi disabled.
-3. WiFi: delayed `wifi.enable` experiment only after UI confirmed; hosted still logs
-   `ESP-Hosted link not yet up` even with `enable_on_boot: false`.
-4. Still open: SD mount/log-manager `opendir` warnings; Phase 2 RS485; screenshot docs.
+- Re-check LVGL settings blue control sizing after flash (operator feedback loop)
+- Confirm Login on `http://<device-ip>/` with current `secrets.yaml` password
+- Web GUI visual pass vs `assets/dashboard_virtual_preview.html` (deferred — leave gating as-is)
+- RTC chip still **unconfirmed** (SNTP-only; PCF8563@0x51 assumption only)
+- SD log manager `opendir`/`readdir` linker warnings
+- RS485/Modbus hardware validation
+- Manual screenshots still placeholders
+
+## Key commands
+
+```bash
+python3 scripts/embed_dashboard.py   # after dashboard.html or secrets web password change
+./tools/esphome_compile.sh esp32-p4-coolroom.yaml
+.venv/bin/esphome upload esp32-p4-coolroom.yaml --device /dev/cu.usbmodem5B7B0287481
+```
 
 ## Manuals
 
-No USER_MANUAL / QUICK_START update needed — internal bring-up only.
+USER_MANUAL / QUICK_START / RBAC / AUTHENTICATION updated for guest vs Login and `/` dashboard.
+No further manual edit needed for this closeout beyond handover.

@@ -303,9 +303,21 @@ inline bool p4_sd_backup_params(
     float startup_grace_min,
     bool  door_light_enabled
 ) {
-    if (!p4_sd_ready) return false;
+    if (!p4_sd_ready) {
+        ESP_LOGW(TAG_SD, "SD not ready for backup — attempting remount");
+        if (!p4_sd_mount()) {
+            ESP_LOGE(TAG_SD, "Cannot write backup.json — SD card not mounted");
+            return false;
+        }
+    }
 
     FILE* f = fopen("/sdcard/backup.json", "w");
+    if (!f) {
+        ESP_LOGW(TAG_SD, "backup.json open failed — remount and retry");
+        p4_sd_unmount();
+        if (p4_sd_mount())
+            f = fopen("/sdcard/backup.json", "w");
+    }
     if (!f) {
         ESP_LOGE(TAG_SD, "Cannot open backup.json for write");
         p4_sd_mark_failed("p4_sd_backup_params");
@@ -594,4 +606,12 @@ inline float p4_sd_free_mb() {
     const uint64_t free_bytes =
         (uint64_t)free_clust * fs->csize * 512UL;  // 512 bytes per sector (standard)
     return static_cast<float>(free_bytes) / (1024.0f * 1024.0f);
+}
+
+/// Returns total SD capacity in megabytes, or -1 if not mounted.
+inline float p4_sd_total_mb() {
+    if (!p4_sd_ready || p4_sd_card == nullptr) return -1.0f;
+    const uint64_t total_bytes =
+        ((uint64_t)p4_sd_card->csd.capacity) * p4_sd_card->csd.sector_size;
+    return static_cast<float>(total_bytes) / (1024.0f * 1024.0f);
 }

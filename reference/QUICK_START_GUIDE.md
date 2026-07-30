@@ -20,11 +20,10 @@ the unit, or from a web page on any browser on your network.
 - [ ] **Connect to WiFi.** No known network on first boot → connect to the controller's own
       access point → browse to `192.168.4.1` → enter your real network's SSID/password.
 - [ ] **Find the device IP** (router's device list, or touchscreen Info page) and open
-      `http://<device-ip>/assets/dashboard.html` in a browser.
-- [ ] **Log in** with the device credential (`🔐 Login`, top of dashboard) to unlock every
-      setting. Ask your installer if you don't have this.
-- [ ] **Change the touchscreen PIN** from the factory default `0000` — tap **⚙️ Settings**
-      on the touchscreen → enter `0000` → **🔒 Change PIN** button.
+      `http://<device-ip>/` in a browser (also `/dashboard`). Main status loads without a
+      password; settings stay hidden until 🔐 Login with your `secrets.yaml` web credentials.
+- [ ] **Change the touchscreen PIN** from the factory default `0000` — tap **Settings**
+      on the touchscreen → enter `0000` → **Change PIN** button.
 - [ ] **Check both probes are reading sensibly** (System/Diagnostics section — Probe Health
       Summary) before relying on the unit.
 - [ ] **Subscribe to push notifications** — install the free ntfy app and subscribe to your

@@ -40,7 +40,7 @@ to your phone.
 | Surface | What it's for | Where |
 |---|---|---|
 | **Touchscreen** (7" LCD on the unit) | Day-to-day monitoring + on-site adjustments, PIN-protected | Physically on the controller |
-| **Web Dashboard** | Full monitoring + every setting, from any browser on the network | `http://<device-ip>/assets/dashboard.html` |
+| **Web Dashboard** | Full monitoring + every setting, from any browser on the network | `http://<device-ip>/assets/dashboard.html` (or `/dashboard`) |
 
 **What it's physically connected to:**
 
@@ -67,11 +67,11 @@ to your phone.
    point. Connect to it and browse to `192.168.4.1` to enter your real WiFi network's name
    and password.
 2. Once connected to your network, find the device's IP address (your router's device list,
-   or the touchscreen's Info page) and open `http://<device-ip>/assets/dashboard.html`.
-3. The dashboard opens in **Guest** mode — view-only. Click **🔐 Login** and enter the
-   device credential (set in `secrets.yaml` at build time — ask whoever installed the unit
-   if you don't have it) to unlock every setting. See §4.11 for how this works and its
-   limits.
+   or the touchscreen's Info page) and open `http://<device-ip>/` — that is the Coolroom
+   dashboard (not ESPHome's stock entity list). Main status, timers, and system health load
+   **without** a password. Settings stay hidden until **🔐 Login** with
+   `web_server_username` / `web_server_password` from `secrets.yaml`.
+3. After **🔐 Login**, settings and administration unlock. See §4.11.
 4. To change WiFi network later, or reconnect after a network change, use the **New WiFi
    SSID / Password** fields in the web dashboard's Network section — this is deliberately
    **web-only**, not available on the touchscreen.
@@ -81,7 +81,7 @@ to your phone.
 The touchscreen has its own, separate 4-digit PIN (unrelated to the web login above) that
 gates the on-screen settings pages. **Factory default PIN: `0000`.**
 
-> Change this on first use. Tap **⚙️ Settings** → enter the PIN → **🔒 Change PIN** button
+> Change this on first use. Tap **Settings** → enter the PIN → **Change PIN** button
 > on the first settings page.
 
 The touchscreen PIN only unlocks settings shown on the touchscreen. It cannot be used to
@@ -309,7 +309,7 @@ condition is evaluated at all — for their respective windows.)*
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
 | **Door Sensor Enabled** | Master switch for the door-open **alarm**. | On/Off | **Off** | The door alarm does nothing at all until you turn this on — if you have a door sensor fitted, enable it here. Does not affect the door-triggered light below, which has its own independent switch. |
-| **Door Sensor Mode (NC / NO)** | Tells the controller whether your physical door switch is Normally Closed or Normally Open wiring. | NC/NO | NC | Must match how the door switch is actually wired, or "open" and "closed" will read backwards. |
+| **Door Sensor Mode (NC or NO)** | Tells the controller whether your physical door switch is Normally Closed or Normally Open wiring. | NC or NO | NC | Must match how the door switch is actually wired, or "open" and "closed" will read backwards. |
 | **Door-Triggered Light Enabled** | When on, opening the door turns the cabinet light on; closing it turns the light off — independent of the alarm switch above. | On/Off | On | Turn off if you'd rather control the cabinet light manually (Home screen light button) without it being overridden by door state. |
 | **Door Alarm Delay** | How long the door can stay open before an alarm fires. | 0 – 300 s | 300 s (5 min) | Shorten for rooms where doors should only ever be open briefly; lengthen for rooms with routine long-duration loading. |
 
@@ -491,21 +491,20 @@ There are **two completely separate locks** on this system — don't confuse the
 |---|---|---|
 | **What it protects** | Every web-dashboard setting + admin function | Only the 7 touchscreen settings pages |
 | **Credential** | The device's one HTTP username/password (`secrets.yaml`, set at build time) | 4-digit PIN, factory default `0000`, changeable on-device |
-| **How to change it** | Not changeable from the dashboard — requires re-flashing firmware with new `secrets.yaml` values | Touchscreen: Settings 1/7 → 🔒 Change PIN |
+| **How to change it** | Not changeable from the dashboard — requires re-flashing firmware with new `secrets.yaml` values (re-run `scripts/embed_dashboard.py` before compile) | Touchscreen: Settings 1/7 → Change PIN |
 | **Session behavior** | Logs out automatically after 2 minutes of inactivity; never persisted across a page reload | Stays unlocked until you navigate back to Home |
 
 **Web dashboard has exactly two states** — there is no third "admin" or "superadmin" tier
 (an earlier version of this documentation described one; it never actually existed
 server-side and has been removed):
 
-- **Guest** (default): view-only — status, alarms, system health.
-- **Operator** (logged in): everything Guest sees, plus every setting in this manual and
-  the admin functions in §4.9/§4.10.
+- **Guest** (default): main status / health only — no settings UI on the page.
+- **Operator** (logged in): settings, advanced controls, and administration appear.
 
-**Important limitation, worth understanding:** the login only controls what the *dashboard
-page* shows you — it is not a security boundary against anyone who already has network
-access to the device. Treat your site network (or VPN) as the actual security perimeter,
-same as you would for any other network appliance. Full detail:
+**Important limitation, worth understanding:** Login only controls what the *dashboard
+page* lets you edit — the REST API (`/api/states`) is intentionally open on the LAN so
+guests can load live metrics without a password. Treat your site network (or VPN) as the
+actual security perimeter, same as you would for any other network appliance. Full detail:
 `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md`.
 
 This two-tier model is the **intended, permanent design** for this system — not a stopgap

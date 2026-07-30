@@ -17,13 +17,13 @@ this document does not restate that model.
 
 ## Current Behavior
 
-- The dashboard has two states: **guest** (default, view-only) and **operator** (logged in with
-  the device's one real HTTP Basic Auth credential). See `RBAC_USER_GUIDE.md` for the login flow.
-- Session state (`currentRole`, `authHeader`) lives only in page memory — it is **not** persisted
-  to `localStorage` or any cookie. Reloading the page always returns to guest and requires
+- The dashboard has two states: **guest** (default, view-only metrics) and **operator**
+  (logged in with the device credential from `secrets.yaml`). See `RBAC_USER_GUIDE.md`.
+- Session state (`currentRole`) lives only in page memory — it is **not** persisted to
+  `localStorage` or any cookie. Reloading the page always returns to guest and requires
   logging in again to re-elevate.
 - No password-change feature exists in the dashboard. The device credential is set once, in
-  `secrets.yaml`, at build time.
+  `secrets.yaml`, at build time (re-run `scripts/embed_dashboard.py` after changing it).
 
 ## Inactivity Timeout (Operator Only)
 
@@ -46,13 +46,12 @@ begin with.
 ## Security Model — Read This Before Assuming Anything Is Enforced
 
 - All permission checks (`currentRole !== 'operator'`) run in the browser. They gate what the
-  *dashboard UI* shows/does, not what the *device* will accept. Anyone who has the device's
-  HTTP Basic Auth credential (or who can reach an endpoint the device doesn't itself gate) has
-  full control regardless of this dashboard.
-- The login step now at least verifies the entered credential against the live device before
-  elevating (a real `GET /api/states` call with the entered `Authorization` header must return
-  `200`), so the dashboard can no longer be tricked into showing "Operator" for a wrong password.
-  It still cannot restrict what a *correct* password is allowed to do beyond hiding UI sections.
+  *dashboard UI* shows/does, not what the *device* will accept. The REST API is open on the
+  LAN so guests can load live metrics without a password — treat the LAN/VPN as the trust
+  boundary.
+- Login verifies the entered username/password against a SHA-256 token baked into the
+  firmware from `secrets.yaml` at embed time. A wrong password cannot elevate the UI; a
+  correct password still only unlocks the form controls, not a separate API privilege.
 - Not suitable for a deployment where the network between browser and device isn't already
   trusted. This project treats that trust boundary as the LAN/VPN perimeter (see the main
   `README.md` site-to-site VPN section), not the dashboard's login screen.

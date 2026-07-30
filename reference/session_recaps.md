@@ -4,6 +4,28 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-30 — Web Login HTTP Fix + LVGL Settings/Header Pause Point
+
+**Session scope**: Fix web Login on device IP; LVGL settings blue controls + home header;
+document resume state and commit.
+
+### What Changed
+
+- Root-caused Login failure on `http://<device-ip>/`: `crypto.subtle` unavailable → pure-JS
+  `sha256HexSync` fallback; re-embed dashboard.
+- Coolroom dashboard prepended at `/` (stock ESPHome UI was winning handler order earlier).
+- LVGL settings steppers/toggles rebuilt with larger blue hit targets + value chips.
+- Home: scrollable page/header; time | date | wifi icon fit to width; wifi icon cyan when up.
+- Backup remount/retry; manuals + handover/activeContext updated. Web GUI layout left as-is
+  (preview alignment deferred).
+
+### Outcome
+
+- Config hash `0x9b1da7d5` compiled and flashed.
+- Resume: confirm Login + LVGL blue control sizing on glass; RTC still unconfirmed.
+
+---
+
 ## 2026-07-30 — Emergency Display Recovery: Hosted Reset Loop Suppression
 
 **Session scope**: Recover from "cyan flash / no UI" state.

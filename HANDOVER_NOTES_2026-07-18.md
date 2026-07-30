@@ -1,12 +1,59 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-30 (night)  
-**Status**: In Progress, on real hardware. Commit `79758c6`'s GT911 `reset_pin` on shared GPIO33 caused a black/delayed display regression (post-init hard-reset of the LCD with no re-init). **Recovery firmware is compiled + flashed** (config hash `0x698d1304`, uncommitted): removes touch/display shared `reset_pin` override and straps GT911 addr 0x5D by holding INT (GPIO23) low *before* the mipi_dsi reset pulse (`on_boot` priority 950 / `p4_gt911_prepare_for_lcd_reset()`). Post-flash serial shows steady main-loop activity (Modbus timeouts expected without RS485 gear; hosted still logs `ESP-Hosted link not yet up` ~60s). **Needs operator visual confirm**: display up promptly, touch works. WiFi remains `enable_on_boot: false`.  
-**Last Commit**: `79758c6` (broken touch-reset approach) — working tree has display recovery fix not yet committed.
+**Resume State Updated**: 2026-07-30 (late night)  
+**Status**: On real hardware. Branch `cursor/wifi-sdmmc-slot-fix` — WiFi/SDMMC slot split
+committed as `dd53feb`. Later web + LVGL work flashed as config hash `0x9b1da7d5` (commit with
+this session). External RTC still unconfirmed (SNTP-only).  
+**Last known good WiFi commit**: `dd53feb`. Latest flash: `0x9b1da7d5`. See addendum below.
 
-> Resume note: this file now reflects the current repository state at `HEAD`.
-> Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+> Resume note: historical sections below preserve earlier phase wording; treat the latest
+> addendum + `memory-bank/activeContext.md` as the current resume point.
+
+---
+
+## 2026-07-30 Addendum (Late Night) — Web Login HTTP Fix, LVGL Controls, Pause Point
+
+**Why Login failed on the device IP:** dashboard Login hashed credentials with
+`crypto.subtle`, which browsers only expose in secure contexts (HTTPS / localhost). On
+`http://<device-ip>/` the call throws and Login always rejects. **Fix:** `sha256HexSync()`
+pure-JS SHA-256 fallback in `assets/dashboard.html`, then `python3 scripts/embed_dashboard.py`.
+Token still = SHA-256(`web_server_username`:`web_server_password`) from `secrets.yaml`.
+
+**Web GUI layout:** leave current gating as-is for now (guest = gauge/timers/health; Login
+unlocks settings). Design reference remains `assets/dashboard_virtual_preview.html` for a
+later visual pass. Stock ESPHome UI at `/` was overridden by **prepending** the Coolroom
+dashboard handler (`p4_dashboard.h`).
+
+**LVGL this pass:**
+- Settings blue +/- and Toggle rebuilt larger (value in `col_panel` chip; blue hit targets
+  ~100×56 / 240×56, theme pad zeroed) — **re-check on glass after flash**
+- Home page + header `scrollable: true`; time | date | wifi icon laid out for 1024 width
+- WiFi strength icon colour when linked: **cyan** (`col_cyan`); numeric dBm only on Info
+- Page titles use taller 56px bars / LEFT_MID where applied earlier
+
+**Backup:** `p4_sd_backup_params` remounts/retries if `fopen` fails; still needs a mounted
+writable SD (Info page SD line).
+
+**RTC:** still not confirmed. Do not enable `pcf8563` until I2C scan shows `0x51` (or `0x68`
+for DS-family) and/or board marking near battery holder.
+
+**Resume checklist:**
+1. Flash latest build if not already on device; hard-refresh browser on `http://<ip>/`
+2. Confirm Login with current secrets password (not any historically leaked value)
+3. Confirm LVGL settings blue controls readable; tweak sizes if still wrong
+4. Confirm home header time/date/wifi + cyan icon
+5. Optional: align web GUI to virtual preview; confirm RTC via I2C scan; SD opendir warnings
+
+**Build / flash:**
+```bash
+python3 scripts/embed_dashboard.py
+./tools/esphome_compile.sh esp32-p4-coolroom.yaml
+.venv/bin/esphome upload esp32-p4-coolroom.yaml --device /dev/cu.usbmodem5B7B0287481
+```
+
+**Manuals:** USER_MANUAL / QUICK_START / RBAC / AUTHENTICATION already updated for `/`
+dashboard + Login model. Touchscreen emoji→ASCII earlier this evening.
 
 ---
 
