@@ -1,16 +1,164 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-26  
-**Status**: In Progress — door-triggered light is now its own independent feature (decoupled from the door NC/NO mode switch, which had been toggling it as a side effect); a related bug where the door-alarm master switch didn't actually gate anything at runtime is fixed; all alarm types (door/no-cool/ice included) now push to ntfy; one entity renamed to remove a reserved URL character; two outstanding items closed by user decision (Carel divergences, RBAC model) rather than code changes; hardware validation + device reflash both blocked  
-**Last Commit**: `fb8250d` (feat(door): independent light-enable option, fix alarm-gating bug; ntfy for all alarms)
+**Resume State Updated**: 2026-07-30  
+**Status**: In Progress, on real hardware — first physical device connected 2026-07-29 (full factory backup taken first). Device boots and runs a working LVGL touchscreen UI; the home-screen gauge (orientation, spacing, sizing) and left icon rail have been iteratively tuned live against the real screen and are in a good state as of this entry. WiFi is **deliberately disabled** (`wifi.enable_on_boot: false`) pending a real fix for a hosted-link reset loop found this same day — not a regression, a known tradeoff. A real, separate, unresolved bug: the device produces zero application-level log output on the USB console at any point after boot. See the three 2026-07-29/07-30 addenda below for full detail — the two before this one were previously undocumented/uncommitted work from an interrupted session, reconstructed here rather than lost.  
+**Last Commit**: (pending — this entry's work not yet committed)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
 
 ---
 
-## 2026-07-26 Addendum — Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed
+## 2026-07-30 Addendum (Evening) — Arc Orientation Bug Fixed, Live-Hardware Gauge Tuning
+
+Resumed the interrupted afternoon session below (see its addenda for full detail — that session
+never completed closeout: header status was left stale, nothing was committed, no session recap
+existed until this evening). Full narrative in `reference/session_recaps.md`'s matching entry;
+this is the handover-level summary.
+
+**Root-caused the horseshoe orientation bug** the afternoon session kept flip-flopping on without
+resolving: LVGL angles run clockwise from 0°=3 o'clock. `330/210` (what the afternoon session
+landed on, believing it was "bottom-opening") actually centers the gap at 270°=12 o'clock — top,
+not bottom. `150/30` correctly centers it at 90°=6 o'clock. Fixed on all four gauge arcs, which
+also fixed a second latent issue: the perimeter tick marks had been correctly positioned for a
+bottom-opening design the whole time, so they and the (wrongly-oriented) arcs had been silently
+contradicting each other visually all afternoon. **Tick marks removed entirely** per explicit
+operator feedback on a later pass.
+
+**Gauge diameter/spacing tuned in five live flash-and-observe rounds** directly against the
+physical screen: zero-gap touching bands (looked too big) → real ~10px gaps between every ring →
+~3.5mm smaller → ~2mm smaller (twice, the second of which required holding the innermost/pink
+ring back to preserve clearance from the fixed 270px center circle — LVGL draws `border_width`
+*inside* a box, not outside it, correcting an earlier wrong assumption made mid-session) → outer
+and middle rings grown back +1mm each. Final: grey 377px / blue 350px / cyan 316px / pink 284px,
+all `start_angle: 150` / `end_angle: 30`.
+
+**Left icon rail resized twice** on request: doubled (`font_mdi_large` 50→100, buttons 72→100),
+then reduced 25% (100→75) — both passes kept the 4 icons evenly spaced across the full 504px
+content height and updated `radius` each time to keep true circles (36→50→38).
+
+**New confirmed-but-unresolved bug**: three independent, properly reset-triggered raw-serial
+captures (5–6 minutes each) show only the 229-byte ROM bootloader banner and nothing else — no
+app-level log output ever, despite the device reliably reaching a working UI within that window.
+Not yet root-caused; worth investigating once the visual work settles.
+
+**Documentation hygiene**: cleaned up now-stale/self-contradictory inline comments left in the
+yaml's arc gauge section from the rapid iteration; corrected the same wrong `330/210`
+"bottom-opening" claim (and a wrong alarm-icon glyph code) in
+`reference/DISPLAY_ARCHITECTURE_VISUAL.md`, flagging the rest of that document's detailed
+pixel-coordinate diagrams as stale rather than fully rewriting them; fixed a structural bug in
+*this* file where the afternoon session's insertions had severed the 2026-07-26 addendum's
+heading from its own body text, silently merging that body onto the end of an unrelated section.
+
+**Build**: RAM 22.1%, Flash 21.6% (config hash `0x831afa6a`), stable across every pass. WiFi
+remains deliberately disabled (inherited from the afternoon's stability fix, untouched here).
+
+---
+
+## 2026-07-30 Addendum — Emergency Recovery Build (Display Stability First)
+
+Observed symptom: display mostly cyan flashes with no stable UI.
+
+Live serial logs confirmed runtime reboot loop in hosted Wi-Fi path:
+- `H_API: ESP-Hosted link not yet up`
+- followed by assert/reset (`xQueueSemaphoreTake` panic path)
+
+Recovery action applied:
+- removed delayed boot action that re-enabled Wi-Fi after 30s
+- kept hosted Wi-Fi disabled so UI can remain up while hosted instability is isolated.
+
+Validation/deploy:
+- config valid, compile successful, USB flash successful
+- config hash: `0xb6918970`
+- RAM `22.1%`, Flash `21.6%`
+
+## 2026-07-30 Addendum — UI Refinement Pass 4
+
+Additional visual refinements applied per hardware feedback:
+
+- left icon rail enlarged again and kept uniformly spaced
+- alarm icon switched to true bell glyph (`F009A`)
+- arcs resized to uniform width/radial spacing constrained to grey donut ring bounds
+- dense incremental radial ticks added along the horseshoe sweep
+- page/container scroll hardening retained (no right slider)
+- LVGL refresh behavior set to `full_refresh: true` and `update_when_display_idle: true` to reduce intermittent cyan flash.
+
+Validation/deploy:
+- config valid, compile successful, USB flash successful
+- config hash: `0x4a9b2d6a`
+- RAM `22.1%`, Flash `21.6%`
+
+## 2026-07-30 Addendum — UI Regression Recovery Hotfix
+
+Addressed immediate regression after visual pass 3:
+
+- center gauge container had expanded over left icon rail, making MDI icons appear missing
+- fixed by constraining center container footprint (`x: 80`, `width: 864`) while retaining centered gauge
+- forced center container non-scrollable + scrollbar off
+- restored requested arc orientation (`150 -> 30`)
+- moved right-panel text positions inward for container-safe layout.
+
+Validation/deploy:
+- config valid, compile successful, USB flash successful
+- config hash: `0xf2bbfb49`
+- RAM `22.1%`, Flash `21.6%`
+
+## 2026-07-30 Addendum — UI Correction Pass 3 (Icon-Only Left Rail + Centered Arc Rework)
+
+Applied another visual correction pass directly from operator feedback:
+
+- removed visible left icon boxes and text labels; kept icon-only touch targets
+- increased MDI icon size for left rail readability (`font_mdi_large` = 42)
+- centered arc zone on full content width and normalized all arc widths to 12
+- restored bottom-opening horseshoe direction (`330 -> 210`)
+- added clock-style perimeter tick marks around the horseshoe
+- forced home-page scrollbar off and kept widgets in-bounds to eliminate right slider
+- disabled background snow/flame FX updates to reduce intermittent cyan flashing artifacts.
+
+Validation/deploy:
+- config valid, compile successful, USB flash successful
+- config hash: `0xaff3307d`
+- RAM `22.1%`, Flash `21.6%`
+
+## 2026-07-30 Addendum — UI Correction Pass 2 (No Duplicates + Arc Direction)
+
+Follow-up changes applied directly from on-device operator feedback:
+
+- removed the inner duplicated status icon set around the center gauge
+- left rail is now the single source of truth for status icons (state-color bindings moved there)
+- increased left MDI icon size for readability (`font_mdi_large`)
+- adjusted left-box border colors to requested palette mapping
+- flipped horseshoe arcs (`start_angle: 150`, `end_angle: 30`)
+- changed internal reading text color from cyan to white to suppress unwanted cyan emphasis/flicker on `Int` row.
+
+Validation/deploy:
+- config valid, compile successful, USB flash successful
+- config hash: `0x2b5e9132`
+- RAM `22.1%`, Flash `21.6%`
+
+## 2026-07-30 Addendum — Home Screen Full-Screen Fit (No Scroll) + Screenshot Alignment Pass
+
+Follow-up to the home-screen visibility/UI pass using live hardware feedback and screenshot matching.
+
+What changed in `esp32-p4-coolroom.yaml`:
+- Kept bottom tab bar (`Home / Settings / Info`) as-is per user preference.
+- Locked `page_home` to explicit `1024x600` dimensions.
+- Removed out-of-bounds home-page widgets that were inflating the virtual canvas and causing scroll behavior:
+  - right-column labels moved back inside the center container bounds
+  - left icon rail offsets tightened to stay in-bounds
+  - hidden status-LED container moved in-bounds and set `hidden: true`.
+- Preserved the previously applied MDI icon rendering + compressor/defrost swap + bottom-opening centered horseshoe arcs.
+
+Validation/deploy:
+- `esphome config` valid.
+- Compile + USB flash successful.
+- Build hash: `0x7935bd9d`
+- Size/usage: Flash `1,584,332` bytes (`21.6%`), RAM `22.1%`.
+
+Documentation consistency check:
+- `USER_MANUAL.md` / `QUICK_START_GUIDE.md` reviewed for impact.
+- No operator-setting semantics changed; no manual table/range/default updates required for this pass.
 
 ## 2026-07-30 Addendum — Hosted-Link Isolation: Resets Track Wi-Fi Bring-Up
 
@@ -71,6 +219,8 @@ Actions taken:
 - `reference/hardware_pins.md` updated with a permanent hosted baseline + slot override hazard note for future edits.
 
 This addendum is the current source-of-truth for hosted SDIO tuning in this repo unless upstream ESPHome hosted-slot behavior changes and is re-verified from generated `sdkconfig.h`.
+
+## 2026-07-26 Addendum — Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed
 
 Resolved 5 items from the outstanding list in one pass — first real use of the new
 documentation-consistency closeout rule (`CLAUDE.md`) against actual code changes.

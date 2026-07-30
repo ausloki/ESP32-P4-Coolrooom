@@ -4,6 +4,206 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-30 — Emergency Display Recovery: Hosted Reset Loop Suppression
+
+**Session scope**: Recover from "cyan flash / no UI" state.
+
+### What Changed
+
+- Captured live serial logs and confirmed repeated hosted-link failure (`H_API link not yet up`) followed by assert/reset loops.
+- Disabled delayed runtime Wi-Fi re-enable in `on_boot` to keep hosted stack from retriggering reset loop during UI bring-up.
+- Kept `wifi.enable_on_boot: false` and removed the `delay 30s -> wifi.enable` step.
+
+### Outcome
+
+- Config validation passed.
+- Build + flash succeeded.
+- Build metrics:
+  - RAM: `22.1%` (127,232 / 576,464 bytes)
+  - Flash: `21.6%` (1,584,684 / 7,340,032 bytes)
+  - Config hash: `0xb6918970`.
+- Purpose of this build is display/runtime stability first; hosted Wi-Fi remains intentionally disabled.
+
+---
+
+## 2026-07-30 — LVGL Refinement Pass 4 (Bell Icon, Ring-Constrained Uniform Arcs, Dense Incremental Ticks)
+
+**Session scope**: Apply detailed visual corrections after regression hotfix confirmation.
+
+### What Changed
+
+- Increased left rail icon size again (`font_mdi_large` 42 -> 50).
+- Kept left rail top-to-bottom spacing uniform (`y: 66, 162, 258, 354`).
+- Changed alarm icon glyph from alarm-bell/ringer to bell (`F009A`).
+- Set home/page no-scroll hardening:
+  - `page_home.scrollable: false`
+  - `page_home.scrollbar_mode: OFF`
+  - retained center container `scrollable: false` + `scrollbar_mode: OFF`.
+- Reworked arc geometry to uniform, evenly spaced radii bounded by the grey donut ring:
+  - outer `406x406`, middle `358x358`, inner `310x310`
+  - all `arc_width: 12`
+  - bottom-open horseshoe orientation (`start_angle: 330`, `end_angle: 210`).
+- Replaced sparse static ticks with dense incremental radial ticks along the horseshoe sweep.
+- Added LVGL refresh stability tuning for cyan flash reduction:
+  - `full_refresh: true`
+  - `update_when_display_idle: true`.
+
+### Outcome
+
+- `esphome config` passed.
+- Build + flash succeeded.
+- Build metrics:
+  - RAM: `22.1%` (127,256 / 576,464 bytes)
+  - Flash: `21.6%` (1,585,116 / 7,340,032 bytes)
+  - Config hash: `0x4a9b2d6a`.
+
+---
+
+## 2026-07-30 — LVGL Recovery Hotfix (Pass 3 Regression Fix)
+
+**Session scope**: Recover from the previous UI pass regression where left MDI icons disappeared and arc orientation/scroll behavior were reported incorrect.
+
+### What Changed
+
+- Reduced center arc container footprint to avoid overlapping/covering left icon rail:
+  - `x: 80`, `width: 864` (keeps gauge centered while preserving visible left rail).
+- Forced center container non-scrollable and scrollbar off:
+  - `scrollable: false`
+  - `scrollbar_mode: "OFF"`.
+- Restored arc direction to the prior expected orientation:
+  - `start_angle: 150`
+  - `end_angle: 30`.
+- Pulled right-column label x positions inward to avoid overflow pressure within the resized container.
+
+### Outcome
+
+- `esphome config` passed.
+- Build + flash succeeded.
+- Build metrics:
+  - RAM: `22.1%` (127,192 / 576,464 bytes)
+  - Flash: `21.6%` (1,582,748 / 7,340,032 bytes)
+  - Config hash: `0xf2bbfb49`.
+
+---
+
+## 2026-07-30 — LVGL Home UI Correction Pass 3 (Icon-Only Rail, Centered Equal-Width Arcs, Ticks)
+
+**Session scope**: Apply operator-requested visual cleanup: remove icon boxes/text labels, increase icon size, center arcs, remove right-side scroll bar, add perimeter ticks, and suppress cyan-flash artifacts.
+
+### What Changed
+
+- Left control rail converted to icon-only touch targets (no label text, no visible button boxes).
+- Added larger MDI icon size (`font_mdi_large` now 42).
+- Center arc container widened/centered to full content width (`x: 0`, `width: 1024`).
+- All three value arcs normalized to equal thickness (`arc_width: 12`) to match the cyan setpoint arc.
+- Arc orientation set back to bottom-open horseshoe (`start_angle: 330`, `end_angle: 210`).
+- Added clock-style perimeter tick marks around the horseshoe.
+- Forced no-scroll mode on home page (`scrollbar_mode: "OFF"`) and kept all widgets in-bounds.
+- Disabled background motion FX updates (`bg_fx_*`) to reduce intermittent cyan redraw/flicker artifacts.
+
+### Outcome
+
+- `esphome config` passed.
+- Build + flash succeeded.
+- Build metrics:
+  - RAM: `22.1%` (127,192 / 576,464 bytes)
+  - Flash: `21.6%` (1,582,748 / 7,340,032 bytes)
+  - Config hash: `0xaff3307d`.
+
+---
+
+## 2026-07-30 — LVGL Home UI Correction Pass 2 (Duplicate Icons Removed, Arc Flipped)
+
+**Session scope**: Apply operator feedback after first screenshot-alignment pass.
+
+### What Changed
+
+- Removed duplicate inner MDI status icons from the center gauge container.
+- Kept a single status icon set on the left control rail and increased icon size (`font_mdi_large`, 34px).
+- Re-bound state-driven icon color updates (`ui_compressor_icon`, `ui_defrost_icon`, `ui_light_icon`, `ui_alarm_icon`) to the left rail widgets.
+- Adjusted left button border colors to match requested semantics:
+  - compressor box `col_blue`
+  - defrost box `col_orange`
+  - light box `col_subtext`
+  - alarm box `col_red`.
+- Added alarm clear action to the left alarm button.
+- Flipped horseshoe arcs by changing arc geometry from top-open to bottom-open target direction:
+  - `start_angle: 150`
+  - `end_angle: 30`.
+- Changed `lbl_int_humidity_large` color from cyan to white (`col_text`) to remove cyan-highlight behavior on the internal reading.
+
+### Outcome
+
+- `esphome config` passed.
+- Build + flash succeeded.
+- Build metrics:
+  - RAM: `22.1%` (127,168 / 576,464 bytes)
+  - Flash: `21.6%` (1,583,628 / 7,340,032 bytes)
+  - Config hash: `0x2b5e9132`.
+
+---
+
+## 2026-07-30 — LVGL Home Layout Fit: No Scroll Full-Screen Pass
+
+**Session scope**: Align home screen closer to the approved screenshot while guaranteeing all content is visible at once on a fixed 1024×600 canvas.
+
+### What Changed
+
+- Set `page_home` explicit size to `1024x600`.
+- Corrected widget positions that were outside page/container bounds:
+  - right-side labels (`lbl_evap_temp_large`, `lbl_int_humidity_large`, `lbl_ext_humidity_large`, `lbl_power_info`)
+  - left status icon offsets (`ui_compressor_icon`, `ui_defrost_icon`, `ui_light_icon`, `ui_alarm_icon`)
+  - hidden status-LED container relocated in-bounds and flagged hidden.
+- Kept bottom nav tabs (`Home`, `Settings`, `Info`) unchanged per operator preference.
+- Preserved prior icon/arc pass (MDI icons, compressor/defrost order swap, bottom-opening centered horseshoe arcs).
+
+### Outcome
+
+- `esphome config` passed.
+- Build + flash succeeded.
+- Build metrics:
+  - RAM: `22.1%` (127,136 / 576,464 bytes)
+  - Flash: `21.6%` (1,584,332 / 7,340,032 bytes)
+  - Config hash: `0x7935bd9d`.
+- Manual consistency check: no setting semantics changed; no `USER_MANUAL.md` / `QUICK_START_GUIDE.md` table updates required.
+
+---
+
+## 2026-07-30 — LVGL Visibility Follow-Up: MDI Icons, Control Order Swap, Arc Orientation Fix
+
+**Session scope**: Resolve remaining home-screen usability issues after backlight recovery: missing status icons, compressor/defrost ordering mismatch, and horseshoe arc orientation/placement.
+
+### What Changed
+
+- Added a local LVGL icon font asset: `fonts/materialdesignicons-webfont.ttf`.
+- Added `font_mdi` in `esp32-p4-coolroom.yaml` with explicit glyph set for:
+  - snowflake (`F0717`), fire (`F0238`), lightbulb (`F0335`), alarm bell (`F078E`).
+- Replaced emoji-based home/status icon labels with MDI glyph labels to avoid missing-glyph rendering.
+- Swapped left control rail order to match requested semantics:
+  - top = Compressor
+  - second = Defrost
+  - then Light, Alarm.
+- Updated horseshoe arc geometry to open at the bottom and remain centered in the gauge container:
+  - `y: 0`
+  - `rotation: 0`
+  - `start_angle: 330`
+  - `end_angle: 210`.
+- Repositioned center text and status icon rail to match the new centered arc geometry.
+- Updated `reference/DISPLAY_ARCHITECTURE_VISUAL.md` with a dated layout-update block that records the new canonical icon/font/arc settings.
+
+### Outcome
+
+- Config validation passed.
+- Build + flash completed successfully.
+- Build metrics after this change:
+  - RAM: `22.1%` (127,136 / 576,464 bytes)
+  - Flash: `21.6%` (1,584,332 / 7,340,032 bytes)
+  - Image size: `1,584,332` bytes
+  - Config hash: `0x953d67fa`.
+- Hardware-side confirmation still required for final visual acceptance (icon appearance, arc orientation, and no intermittent cyan fallback during runtime).
+
+---
+
 ## 2026-07-30 — Hosted-Link Isolation Results + Diagnostic Boot Mode
 
 **Session scope**: Determine whether boot-loop resets are caused by hosted Wi-Fi bring-up and capture controlled comparison data.
@@ -2360,5 +2560,183 @@ rule (`CLAUDE.md`, added last session) against real code changes.
 **Not done / hardware-gated**: none of this session's changes have touched real hardware —
 door-triggered light behavior, the alarm-gating fix, and the three new ntfy push types all need a
 real door/compressor/coil test once the device is reflashed.
+
+---
+
+## 2026-07-29 — First Real Hardware: Factory Backup, First Flash, Three Real Boot Bugs Found
+
+**Session scope**: Physical hardware arrived. Backed up the factory firmware before touching
+anything, then did this project's first-ever flash to real silicon — which immediately hit a
+silent boot hang, root-caused to three genuine config bugs never catchable without real hardware.
+
+### What Changed
+
+- **Full factory backup before any flashing**: `esptool.py read_flash 0x0 0x2000000` (32MB, the
+  chip's actual detected flash size) to `backups/factory_backup_2026-07-29_e8f60ae08f52_32MB.bin`
+  (gitignored, local-only). Verified non-trivially: bootloader magic (`0xE9`) at the correct
+  `0x2000` offset, valid partition table at `0x8000`, 13.8MB of genuine non-erased data with
+  ESP-IDF/Waveshare factory-firmware strings — confirmed a real, complete backup, not a truncated
+  or corrupted read. First attempts at 921600/460800 baud failed with "Invalid head of packet";
+  115200 worked but would have taken ~2 hours for the full 32MB, so settled on 230400 (validated
+  with a 1MB test read first) — full backup took ~27 minutes.
+- **First flash immediately hung**: after upload succeeded and hash-verified, the device showed
+  zero output beyond the ROM bootloader banner across multiple long (up to 30-minute-equivalent
+  across several capture attempts) raw-serial capture windows — not a crash loop (banner only
+  printed once per reset), just silence.
+- **Root cause 1 — engineering-sample silicon never flagged**: `esptool` reported this chip as
+  revision `v1.3`. `reference/hardware_pins.md` already documented (from a much earlier session)
+  that ESP32-P4 revision < 3.0 requires `engineering_sample: true` in the `esp32:` block — never
+  applied, because no board existed to check the actual revision against until now. Fixed.
+  Cross-confirmed against Waveshare's own official example repo
+  (`waveshareteam/ESP32-P4-WIFI6-Touch-LCD-7B`, `examples/ESP-IDF/*/sdkconfig.defaults`), which
+  consistently sets `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` / `CONFIG_ESP32P4_REV_MIN_1=y`.
+- **Root cause 2 — flash mode never actually applied (real ESPHome gap)**: set `flash_mode: qio`
+  to match Waveshare's reference examples (all consistently `CONFIG_ESPTOOLPY_FLASHMODE_QIO`,
+  versus our then-default DIO, confirmed via the ROM's own `SPI mode:DIO` boot banner). Discovered
+  ESPHome's `esp32` component only writes the `CONFIG_ESPTOOLPY_FLASHMODE_QIO` choice-boolean, not
+  the companion literal string `CONFIG_ESPTOOLPY_FLASHMODE` that `esptool`'s `elf2image` actually
+  reads when stamping the image header's flash-mode byte — confirmed by inspecting both the
+  generated sdkconfig (boolean said QIO, string still said `"dio"`) and the compiled binaries
+  directly (header byte `0x02` = DIO in both bootloader.bin and the app image, even after a full
+  clean rebuild). Worked around by also setting the raw string via
+  `sdkconfig_options: CONFIG_ESPTOOLPY_FLASHMODE: "qio"`.
+- **Root cause 3 — PSRAM speed silently defaulted low**: ESPHome's `psram` component defaults
+  ESP32-P4 speed to the first entry in its supported list (20MHz) when left unset — not a
+  deliberate choice, just never overridden. Waveshare's reference examples all set
+  `CONFIG_SPIRAM_SPEED_200M`. Set `speed: 200MHZ` to match.
+- Also hit and worked around the pre-existing "ESPHome native IDF REQUIRES omission" reconfigure
+  bug (already known, `tools/esphome_compile.sh` has an auto-retry for it) twice — its own retry
+  path picked up a wrong-architecture `ninja` binary on Apple Silicon and failed; re-running the
+  compile script a second time succeeded both times since the CMakeLists.txt patch had already
+  landed.
+
+### Outcome
+
+- Device now boots and eventually reaches a working LVGL UI (confirmed later the same evening —
+  see the following two recap entries). Compile clean throughout;
+  final config for this session: RAM 22.0% / Flash 21.6%.
+- **New standing hardware note** (`reference/hardware_pins.md` item 7): this board exposes two
+  simultaneous USB connections (confirmed same MAC on both `/dev/cu.usbmodem*` paths) — practical
+  workflow is one port for flashing, the other held open for a persistent log/monitor session.
+
+**Not done**: the underlying ESPHome flash-mode string/boolean mismatch is worked around in this
+project's yaml, not fixed upstream — worth an ESPHome issue/PR at some point, out of scope here.
+
+---
+
+## 2026-07-30 (Afternoon, Reconstructed) — Hosted WiFi Reset-Loop Fix + Initial UI Passes
+
+**Session scope**: A separate session ran through the afternoon making substantial changes but
+never completed proper closeout (no session recap entry, header status left stale, nothing
+committed) — this entry reconstructs what happened from the `HANDOVER_NOTES_2026-07-18.md`
+addenda that session did leave behind, so the history isn't lost. Full detail lives in those
+addenda; this is a summary index.
+
+### What Happened (per that session's own addenda)
+
+- **Hosted-link isolation**: swept SDIO frequency (40/20/10MHz), bus width (4-bit/1-bit), and C6
+  wake-pulse timing trying to fix a `H_API link not yet up` → assert/reset loop. None of the
+  variants helped. Isolated the trigger conclusively: `wifi.enable_on_boot: false` produced zero
+  resets; re-enabling WiFi (even delayed 30s post-boot) reintroduced the loop. Root cause
+  boundary: hosted/WiFi bring-up path, not LVGL or core control logic.
+- **Emergency recovery build**: removed the delayed 30s WiFi re-enable entirely and shipped with
+  hosted WiFi disabled outright, prioritizing a stable, non-crashing UI over WiFi connectivity
+  until the hosted-link issue gets a real fix. This is the state the device is still in as of this
+  entry — **WiFi is currently disabled on this device**, a known, deliberate, temporary tradeoff,
+  not a regression.
+- **Five UI correction passes** (2/3/hotfix/4 + the full-screen-fit pass), all screenshot/hardware
+  feedback driven: MDI icon font for status icons, left icon rail made icon-only (no boxes/text),
+  removed a duplicated inner icon set, fixed page/container bounds to eliminate an unwanted
+  scrollbar, added (later removed — see next entry) tick marks around the horseshoe gauge, and
+  repeatedly adjusted the horseshoe arc orientation (flip-flopping between `150/30` and `330/210`
+  without ever mathematically confirming which was actually correct — see the next entry for the
+  resolution).
+
+### Outcome
+
+- Six builds flashed successfully across the afternoon (config hashes `0x7935bd9d`, `0x2b5e9132`,
+  `0xaff3307d`, `0xf2bbfb49`, `0x4a9b2d6a`, `0xb6918970`) — all compiled and uploaded without
+  error, per that session's own addenda.
+- **Not done by that session**: closeout. Header status in `HANDOVER_NOTES_2026-07-18.md` was
+  left at the prior (2026-07-26) state despite six addenda being appended below it; nothing was
+  committed to git; no session recap entry existed until this one (written retroactively).
+
+---
+
+## 2026-07-30 (Evening) — Arc Orientation Bug Fixed, Iterative Live-Hardware Gauge Tuning
+
+**Session scope**: Resumed the interrupted afternoon session's work. Read the (stale) handover
+header and live code together, diagnosed the horseshoe's actual orientation bug mathematically
+rather than continuing to guess, then ran several rapid flash/observe/adjust cycles directly
+against operator feedback on the physical screen to tune the gauge and icon rail. Also confirmed
+a real, separate, still-open bug: the device produces zero application-level log output on the
+USB console at any point after boot, regardless of how long it runs.
+
+### What Changed
+
+- **Found and fixed the real horseshoe bug**: the afternoon session's repeated flip-flopping
+  between `150/30` and `330/210` never actually resolved because nobody had verified which one is
+  correct against LVGL's actual angle convention (0°=3 o'clock, clockwise-increasing). Computed
+  both by hand: `330/210` centers its gap at 270° (12 o'clock/top) — confirmed mathematically
+  wrong despite being labeled "bottom-opening" in that session's own comments and handover notes.
+  `150/30` centers the gap at 90° (6 o'clock/bottom) — correct. Applied `150/30` to all four
+  arcs (grey reference ring + the three reading arcs); this also happened to align them correctly
+  with the tick marks (which had been correctly positioned for a bottom-opening design all along —
+  the ticks and arcs had been silently fighting each other's orientation all afternoon).
+- **Removed the perimeter tick marks entirely** per explicit operator feedback ("it isn't what i
+  wanted either") — deleted all 24 tick label widgets.
+- **Four-pass live diameter/spacing tuning**, each flashed and confirmed against the physical
+  screen before the next pass:
+  1. Tightened the three reading arcs from a loose, widely-spread layout (48px gaps) to a
+     zero-gap touching-bands design.
+  2. Operator feedback: touching bands read as "too big/no separation" — redesigned with real
+     ~10px gaps between every ring (34px diameter pitch: 12px arc width × 2 + 10px gap).
+  3. Sized down ~3.5mm, confirmed on a physical 7" 1024×600 panel (~6.68px/mm computed from
+     panel diagonal), matching a general operator "make it smaller" request.
+  4. A further ~2mm reduction requested twice more; the third of these hit a real geometric
+     constraint — shrinking the innermost (pink) ring the full amount would have tucked its inner
+     edge behind the fixed 270px black center circle (LVGL draws `border_width` inside a box, not
+     outside it — confirmed the true outer edge is exactly 270px, correcting an earlier wrong
+     assumption in this session's own reasoning that it was 306px). Held pink back to a smaller
+     -4px step to preserve a small ~2px clearance instead of applying the full request and hiding
+     it; flagged that shrinking the center hub itself (a layout change, since it holds the
+     temp-readout text) would be a separate, deliberate change if more headroom is ever needed.
+  5. Final adjustment: outer (blue) and middle (cyan) rings grown back +1mm each on request,
+     independent of the reference ring and inner ring — this tightened the grey→blue gap
+     (10px→3px, still clearly separated) and, as a side effect, opened up the previously-tight
+     cyan→pink gap (was ~1px, now ~8px).
+- **Left icon rail resized twice**: first doubled (`font_mdi_large` 50→100, buttons 72→100,
+  evenly spaced across the full 504px content height with ~21px gaps), then reduced 25% on
+  follow-up feedback (100→75, buttons to match, re-spaced with ~41px gaps). Button `radius`
+  updated each time to keep a true circle (36→50→38).
+- **Confirmed (not fixed) a separate, real bug**: three independent reset-triggered raw-serial
+  captures (5–6 minutes each, proper DTR/RTS reset at the start of each) all show *only* the
+  229-byte ROM bootloader banner and nothing else — no bootloader log, no ESPHome boot sequence,
+  no steady-state logging — despite the device reliably reaching a working, interactive LVGL UI
+  within that window. The app-level logger (`hardware_uart: USB_SERIAL_JTAG`) is producing zero
+  output on this console, independent of boot duration. Not yet root-caused.
+- Cleaned up now-stale/self-contradictory inline comments in the arc gauge section of
+  `esp32-p4-coolroom.yaml` left over from the rapid iteration (some referenced superseded diameter
+  values or a wrong inner-cover-edge calculation) and corrected the same wrong `330/210`
+  "bottom-opening" claim in `reference/DISPLAY_ARCHITECTURE_VISUAL.md`, along with a wrong alarm
+  icon glyph code (`F078E` documented vs. `F009A` actually used) — flagged the rest of that
+  document's detailed pixel/coordinate diagrams as stale (predate today's tuning) rather than
+  rewriting all of it, since current values are simpler to read directly from the yaml.
+
+### Outcome
+
+- Confirmed correct on real hardware, in order: arc orientation, ring spacing, ring size (three
+  rounds), icon size (two rounds). Final gauge state: grey ring 377px, blue (outer/coolroom) arc
+  350px, cyan (middle/setpoint) arc 316px, pink (inner/ambient) arc 284px, all `arc_width: 12`,
+  all `start_angle: 150` / `end_angle: 30`. Icon rail: `font_mdi_large` 75, buttons 75×75 at
+  `radius: 38`, y-positions 89/205/320/436.
+- Build stable throughout every pass: RAM 22.1%, Flash ~21.6% (final config hash `0x831afa6a`).
+- WiFi remains deliberately disabled (inherited from the afternoon session's stability fix,
+  untouched by any of this evening's changes).
+
+**Not done / still open**: the missing-logger-output bug (confirmed real and reproducible, root
+cause not yet investigated); the hosted-WiFi reset loop itself (worked around via
+`wifi.enable_on_boot: false`, not fixed); further gauge sizing if the operator wants the reading
+arcs smaller still (needs a center-hub resize, a layout change, not just numbers).
 
 ---

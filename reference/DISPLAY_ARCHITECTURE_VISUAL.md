@@ -3,6 +3,34 @@
 
 ---
 
+## 2026-07-30 Layout Update (Current)
+
+- Left control stack order is now: Compressor, Defrost, Light, Alarm.
+- Home/status icon glyphs now use local MDI font file `fonts/materialdesignicons-webfont.ttf`.
+  - Snowflake: `F0717`
+  - Fire: `F0238`
+  - Lightbulb: `F0335`
+  - Alarm bell: `F009A` (corrected 2026-07-30 evening — an earlier version of this note
+    said `F078E`, which was never what the yaml actually used)
+- Horseshoe arcs are now centered in the gauge container (`align: CENTER`, `y: 0`).
+- Horseshoe opening is at the bottom via arc geometry: `rotation: 0`,
+  `start_angle: 150`, `end_angle: 30` — **corrected 2026-07-30 evening**. An earlier
+  version of this note claimed `330`/`210` produced the bottom opening; that's
+  mathematically wrong (LVGL angles run clockwise from 0=3 o'clock, so 330/210
+  actually centers the gap at the *top*). This was live-verified as upside-down on
+  real hardware and fixed to 150/30.
+
+> ⚠️ **The detailed diagrams below (exact pixel coordinates, arc diameters, icon
+> positions) are from an earlier design pass and have not been kept in sync with the
+> live-hardware tuning done on 2026-07-30 — arc diameters, icon size/spacing, and
+> several coordinates have all changed since. Treat this file as historical context
+> for the overall structure (layer order, which arc is which reading, container
+> nesting), not as a source of current exact values. For current values, read the
+> `# Center Arc Gauge Container` block in `esp32-p4-coolroom.yaml` directly, or see
+> `HANDOVER_NOTES_2026-07-18.md`'s 2026-07-30 addenda for the tuning history.**
+
+---
+
 ## Display Layout Diagram
 
 ```

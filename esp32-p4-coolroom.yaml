@@ -284,9 +284,7 @@ esphome:
         - lambda: id(status_text).publish_state("Booting...");
     - priority: -90
       then:
-        - delay: 30s
-        - logger.log: "Diagnostic: enabling Wi-Fi after boot delay"
-        - wifi.enable:
+        - logger.log: "Diagnostic: Wi-Fi kept disabled to avoid hosted-link reset loop"
 
 esp32:
   variant: esp32p4
@@ -2920,81 +2918,31 @@ interval:
             if (id(ctl_ice_alarm_active))     s += "ICE DETECTED   ";
             return s;
       - lambda: |-
-          const bool motion_suppressed =
-              id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
-              id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active);
-          const bool snow_active = !motion_suppressed && id(relay_compressor).state && !id(relay_defrost).state;
-          const bool flame_active = !motion_suppressed && id(relay_defrost).state;
-          if (snow_active || flame_active) {
-            id(fx_anim_tick) = (id(fx_anim_tick) + 1U) % 240U;
-          } else {
-            id(fx_anim_tick) = 0U;
-          }
+          // Background motion disabled to prevent intermittent redraw artifacts.
+          id(fx_anim_tick) = 0U;
       - lvgl.widget.update:
           id: bg_fx_defrost_border
-          hidden: !lambda 'return !(id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          border_width: !lambda |-
-            if (!id(relay_defrost).state || id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active))
-              return 0;
-            switch (id(fx_anim_tick) % 4U) {
-              case 0: return 3;
-              case 1: return 6;
-              case 2: return 4;
-              default: return 7;
-            }
-          border_opa: !lambda |-
-            if (!id(relay_defrost).state || id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active))
-              return 0;
-            switch (id(fx_anim_tick) % 4U) {
-              case 0: return 55;
-              case 1: return 90;
-              case 2: return 70;
-              default: return 100;
-            }
-          border_color: !lambda |-
-            return (id(fx_anim_tick) % 2U == 0U) ? id(col_orange) : lv_color_hex(0xFFCF33);
+          hidden: true
+          border_width: 0
+          border_opa: 0
       - lvgl.widget.update:
           id: bg_fx_snow_1
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          x: !lambda |-
-            return 120 + (int)((id(fx_anim_tick) * 7U + 11U) % 760U);
-          y: !lambda |-
-            return 60 + (int)((id(fx_anim_tick) * 13U + 19U) % 470U);
+          hidden: true
       - lvgl.widget.update:
           id: bg_fx_snow_2
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          x: !lambda |-
-            return 250 + (int)((id(fx_anim_tick) * 9U + 29U) % 660U);
-          y: !lambda |-
-            return 80 + (int)((id(fx_anim_tick) * 11U + 37U) % 450U);
+          hidden: true
       - lvgl.widget.update:
           id: bg_fx_snow_3
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          x: !lambda |-
-            return 390 + (int)((id(fx_anim_tick) * 5U + 53U) % 560U);
-          y: !lambda |-
-            return 100 + (int)((id(fx_anim_tick) * 15U + 71U) % 430U);
+          hidden: true
       - lvgl.widget.update:
           id: bg_fx_snow_4
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          x: !lambda |-
-            return 530 + (int)((id(fx_anim_tick) * 8U + 97U) % 460U);
-          y: !lambda |-
-            return 70 + (int)((id(fx_anim_tick) * 17U + 23U) % 460U);
+          hidden: true
       - lvgl.widget.update:
           id: bg_fx_snow_5
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          x: !lambda |-
-            return 690 + (int)((id(fx_anim_tick) * 6U + 131U) % 360U);
-          y: !lambda |-
-            return 90 + (int)((id(fx_anim_tick) * 12U + 41U) % 440U);
+          hidden: true
       - lvgl.widget.update:
           id: bg_fx_snow_6
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(relay_defrost).state && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
-          x: !lambda |-
-            return 840 + (int)((id(fx_anim_tick) * 10U + 173U) % 220U);
-          y: !lambda |-
-            return 110 + (int)((id(fx_anim_tick) * 14U + 59U) % 420U);
+          hidden: true
       # Phase 10: Update info page diagnostics
       - lvgl.label.update:
           id: lbl_info_heap
@@ -3638,6 +3586,8 @@ output:
   - platform: ledc
     id: backlight_pwm
     pin: ${display_bl_pin}
+    # Waveshare ESP-IDF BSP uses LEDC output_invert=1 for BL_CTRL.
+    inverted: true
     frequency: 1000Hz
 
 light:
@@ -3672,6 +3622,14 @@ font:
     id: font_small
     size: 15
     glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-: /%+"
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: font_mdi
+    size: 28
+    glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A"
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: font_mdi_large
+    size: 75
+    glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A"
 
 ##############################################################################
 # Phase 4: LVGL Coolroom Dashboard
@@ -3711,6 +3669,8 @@ lvgl:
   text_color: col_text
   log_level: WARN
   default_font: font_small
+  full_refresh: true
+  update_when_display_idle: true
 
   bottom_layer:
     bg_opa: TRANSP
@@ -3804,6 +3764,10 @@ lvgl:
     # Home page - Horseshoe Arc Design
     - id: page_home
       bg_color: col_bg
+      width: 1024
+      height: 600
+      scrollable: false
+      scrollbar_mode: "OFF"
       widgets:
         # Header bar with clock and WiFi
         - obj:
@@ -3837,47 +3801,20 @@ lvgl:
                   text_color: col_subtext
 
         # Left Sidebar - Control Buttons (vertical stack)
-        # Defrost button
-        - button:
-            x: 8
-            y: 56
-            width: 80
-            height: 110
-            bg_color: col_panel
-            radius: 12
-            border_width: 2
-            border_color: col_blue
-            widgets:
-              - led:
-                  id: led_defrost
-                  x: -20
-                  y: -20
-                  width: 8
-                  height: 8
-                  color: col_blue
-                  brightness: 0%
-              - label:
-                  align: CENTER
-                  text: "❄️\nDefrost"
-                  text_font: font_small
-                  text_color: col_text
-            on_click:
-              - switch.toggle: relay_defrost
-              - lvgl.led.update:
-                  id: led_defrost
-                  brightness: !lambda |-
-                    return id(relay_defrost).state ? 100 : 0;
-
+        # Icon font doubled (50->100), then reduced 25% (100->75) per
+        # operator feedback; buttons resized/repositioned to match,
+        # evenly distributed across the full content height (below the
+        # 48px header, above the 552px tab bar -- 504px of usable height)
+        # with equal ~41px gaps above, between, and below all 4.
         # Compressor button
         - button:
-            x: 8
-            y: 174
-            width: 80
-            height: 110
-            bg_color: col_panel
-            radius: 12
-            border_width: 2
-            border_color: col_green
+            x: 6
+            y: 89
+            width: 75
+            height: 75
+            bg_opa: TRANSP
+            radius: 38
+            border_width: 0
             widgets:
               - led:
                   id: led_compressor
@@ -3888,10 +3825,12 @@ lvgl:
                   color: col_green
                   brightness: 0%
               - label:
+                  id: ui_compressor_icon
                   align: CENTER
-                  text: "🔥\nComp"
-                  text_font: font_small
-                  text_color: col_text
+                  y: 0
+                  text: "\U000F0717"
+                  text_font: font_mdi_large
+                  text_color: col_grey
             on_click:
               - switch.toggle: relay_compressor
               - lvgl.led.update:
@@ -3899,16 +3838,47 @@ lvgl:
                   brightness: !lambda |-
                     return id(relay_compressor).state ? 100 : 0;
 
+        # Defrost button
+        - button:
+            x: 6
+            y: 205
+            width: 75
+            height: 75
+            bg_opa: TRANSP
+            radius: 38
+            border_width: 0
+            widgets:
+              - led:
+                  id: led_defrost
+                  x: -20
+                  y: -20
+                  width: 8
+                  height: 8
+                  color: col_blue
+                  brightness: 0%
+              - label:
+                  id: ui_defrost_icon
+                  align: CENTER
+                  y: 0
+                  text: "\U000F0238"
+                  text_font: font_mdi_large
+                  text_color: col_grey
+            on_click:
+              - switch.toggle: relay_defrost
+              - lvgl.led.update:
+                  id: led_defrost
+                  brightness: !lambda |-
+                    return id(relay_defrost).state ? 100 : 0;
+
         # Light button
         - button:
-            x: 8
-            y: 292
-            width: 80
-            height: 110
-            bg_color: col_panel
-            radius: 12
-            border_width: 2
-            border_color: col_orange
+            x: 6
+            y: 320
+            width: 75
+            height: 75
+            bg_opa: TRANSP
+            radius: 38
+            border_width: 0
             widgets:
               - led:
                   id: led_light
@@ -3919,10 +3889,12 @@ lvgl:
                   color: col_orange
                   brightness: 0%
               - label:
+                  id: ui_light_icon
                   align: CENTER
-                  text: "💡\nLight"
-                  text_font: font_small
-                  text_color: col_text
+                  y: 0
+                  text: "\U000F0335"
+                  text_font: font_mdi_large
+                  text_color: col_grey
             on_click:
               - switch.toggle: relay_light
               - lvgl.led.update:
@@ -3932,14 +3904,13 @@ lvgl:
 
         # Alarm button
         - button:
-            x: 8
-            y: 410
-            width: 80
-            height: 110
-            bg_color: col_panel
-            radius: 12
-            border_width: 2
-            border_color: col_red
+            x: 6
+            y: 436
+            width: 75
+            height: 75
+            bg_opa: TRANSP
+            radius: 38
+            border_width: 0
             widgets:
               - led:
                   id: led_alarm_hi
@@ -3950,34 +3921,62 @@ lvgl:
                   color: col_red
                   brightness: 0%
               - label:
+                  id: ui_alarm_icon
                   align: CENTER
-                  text: "🔔\nAlarm"
-                  text_font: font_small
-                  text_color: col_text
+                  y: 0
+                  text: "\U000F009A"
+                  text_font: font_mdi_large
+                  text_color: col_grey
+            on_click:
+              - lambda: |-
+                  id(ctl_alarm_high_active) = false;
+                  id(ctl_alarm_low_active) = false;
 
         # Center Arc Gauge Container - Horseshoe Meter Display
         - obj:
-            x: 100
+            x: 80
             y: 56
-            width: 912
+            width: 864
             height: 496
             bg_color: col_bg
             border_width: 0
             radius: 0
+            scrollable: false
+            scrollbar_mode: "OFF"
             widgets:
               # Outer decorative arc (light grey reference ring)
+              #
+              # Gauge geometry, tuned live against real hardware on
+              # 2026-07-30 across several operator feedback passes:
+              #   - Orientation: start_angle/end_angle 150/30 (not
+              #     330/210 as an earlier pass mislabeled -- LVGL angles
+              #     run clockwise from 0=3 o'clock, so 330/210 actually
+              #     centers the gap at the TOP, not the bottom; 150/30
+              #     centers it at 6 o'clock as intended. See
+              #     reference/DISPLAY_ARCHITECTURE_VISUAL.md for the full
+              #     writeup).
+              #   - Diameter: three shrink passes (~3.5mm, ~2mm, ~2mm)
+              #     brought all four rings down from their initial size,
+              #     then blue+cyan grew back +1mm each on request --
+              #     final values below aren't on a single clean formula,
+              #     they're the result of live iteration, not a
+              #     recomputed scheme.
+              #   - Spacing: each ring should have daylight between it and
+              #     its neighbor (no more touching/zero-gap bands, which
+              #     read as "too big" on-device) -- verify this holds
+              #     before changing any single ring in isolation.
               - arc:
                   align: CENTER
-                  y: 118
-                  width: 375
-                  height: 375
+                  y: 0
+                  width: 377
+                  height: 377
                   bg_opa: TRANSP
                   arc_color: col_subtext
                   arc_opa: 20%
-                  arc_width: 15
-                  rotation: 225
-                  start_angle: 0
-                  end_angle: 270
+                  arc_width: 12
+                  rotation: 0
+                  start_angle: 150
+                  end_angle: 30
                   value: 50
                   indicator:
                     arc_opa: TRANSP
@@ -3987,7 +3986,7 @@ lvgl:
               # Inner dark donut ring (visual separator)
               - obj:
                   align: CENTER
-                  y: 118
+                  y: 0
                   width: 357
                   height: 357
                   radius: 179
@@ -3999,15 +3998,15 @@ lvgl:
               - arc:
                   id: home_temp_arc
                   align: CENTER
-                  y: 118
-                  width: 372
-                  height: 372
+                  y: 0
+                  width: 350
+                  height: 350
                   bg_opa: TRANSP
                   arc_color: col_blue
-                  arc_width: 16
-                  rotation: 225
-                  start_angle: 0
-                  end_angle: 270
+                  arc_width: 12
+                  rotation: 0
+                  start_angle: 150
+                  end_angle: 30
                   value: 50
                   indicator:
                     arc_opa: TRANSP
@@ -4018,15 +4017,15 @@ lvgl:
               - arc:
                   id: home_setpoint_arc
                   align: CENTER
-                  y: 118
-                  width: 322
-                  height: 322
+                  y: 0
+                  width: 316
+                  height: 316
                   bg_opa: TRANSP
                   arc_color: col_cyan
                   arc_width: 12
-                  rotation: 225
-                  start_angle: 0
-                  end_angle: 270
+                  rotation: 0
+                  start_angle: 150
+                  end_angle: 30
                   value: 50
                   indicator:
                     arc_opa: TRANSP
@@ -4034,18 +4033,26 @@ lvgl:
                     bg_opa: TRANSP
 
               # Arc 3: Ambient Temperature (Inner, Pink)
+              # Innermost ring -- its inner edge (284-12=272) has to clear
+              # the inner cover below (a fixed 270px box; LVGL draws
+              # border_width inside the box, so 270 is its true outer
+              # edge too), currently leaving a slim ~2px gap. This ring
+              # can't shrink much further without also shrinking the
+              # inner cover (which holds the temp-readout text, so that's
+              # a layout change, not just a resize -- flag it rather than
+              # guess if more headroom is needed here).
               - arc:
                   id: home_ambient_arc
                   align: CENTER
-                  y: 118
-                  width: 272
-                  height: 272
+                  y: 0
+                  width: 284
+                  height: 284
                   bg_opa: TRANSP
                   arc_color: col_pink
-                  arc_width: 10
-                  rotation: 225
-                  start_angle: 0
-                  end_angle: 270
+                  arc_width: 12
+                  rotation: 0
+                  start_angle: 150
+                  end_angle: 30
                   value: 50
                   indicator:
                     arc_opa: TRANSP
@@ -4055,7 +4062,7 @@ lvgl:
               # Inner cover (hides arc hubs)
               - obj:
                   align: CENTER
-                  y: 118
+                  y: 0
                   width: 270
                   height: 270
                   radius: 135
@@ -4068,7 +4075,7 @@ lvgl:
                   id: lbl_coolroom_temp_large
                   text: "--°C"
                   align: CENTER
-                  y: 95
+                  y: -22
                   text_font: font_huge
                   text_color: col_blue
 
@@ -4077,7 +4084,7 @@ lvgl:
                   id: lbl_setpoint_status
                   text: "Set: --°C"
                   align: CENTER
-                  y: 170
+                  y: 44
                   text_font: font_medium
                   text_color: col_cyan
 
@@ -4086,72 +4093,9 @@ lvgl:
                   id: lbl_status_text
                   text: "Running"
                   align: CENTER
-                  y: 200
+                  y: 74
                   text_font: font_small
                   text_color: col_orange
-
-              # LEFT PANEL: Status Icons (vertically stacked outside ring)
-              # Compressor/Defrost icon
-              - label:
-                  id: ui_compressor_icon
-                  text: "❄️"
-                  align: CENTER
-                  x: 35
-                  y: 50
-                  text_font: font_medium
-                  text_color: col_grey
-
-              # Defrost/Fire icon
-              - label:
-                  id: ui_defrost_icon
-                  text: "🔥"
-                  align: CENTER
-                  x: 35
-                  y: 130
-                  text_font: font_medium
-                  text_color: col_grey
-
-              # Light icon (touchable to toggle light relay)
-              - button:
-                  x: 20
-                  y: 195
-                  width: 30
-                  height: 30
-                  bg_color: col_bg
-                  border_width: 0
-                  radius: 15
-                  bg_opa: TRANSP
-                  widgets:
-                    - label:
-                        id: ui_light_icon
-                        text: "💡"
-                        align: CENTER
-                        text_font: font_medium
-                        text_color: col_grey
-                  on_click:
-                    - switch.toggle: relay_light
-
-              # Alarm icon (touchable to reset/cancel alarm)
-              - button:
-                  x: 20
-                  y: 275
-                  width: 30
-                  height: 30
-                  bg_color: col_bg
-                  border_width: 0
-                  radius: 15
-                  bg_opa: TRANSP
-                  widgets:
-                    - label:
-                        id: ui_alarm_icon
-                        text: "🔔"
-                        align: CENTER
-                        text_font: font_medium
-                        text_color: col_grey
-                  on_click:
-                    - lambda: |-
-                        id(ctl_alarm_high_active) = false;
-                        id(ctl_alarm_low_active) = false;
 
               # RIGHT PANEL: Secondary Readings
               # 4 items — the old dedicated "Ambient" RTD reading is gone
@@ -4163,7 +4107,7 @@ lvgl:
                   id: lbl_evap_temp_large
                   text: "Evap\n--°C"
                   align: CENTER
-                  x: 850
+                  x: 310
                   y: 80
                   text_font: font_small
                   text_color: col_text
@@ -4172,16 +4116,16 @@ lvgl:
                   id: lbl_int_humidity_large
                   text: "Int --°C\n--%RH"
                   align: CENTER
-                  x: 850
+                  x: 310
                   y: 196
                   text_font: font_small
-                  text_color: col_cyan
+                  text_color: col_text
 
               - label:
                   id: lbl_ext_humidity_large
                   text: "Ext --°C\n--%RH"
                   align: CENTER
-                  x: 850
+                  x: 310
                   y: 312
                   text_font: font_small
                   text_color: col_pink
@@ -4190,20 +4134,21 @@ lvgl:
                   id: lbl_power_info
                   text: "Heap: ---"
                   align: CENTER
-                  x: 850
+                  x: 310
                   y: 428
                   text_font: font_small
                   text_color: col_subtext
 
         # Hidden LED indicators for status updates
         - obj:
-            x: -50
-            y: -50
+            x: 980
+            y: 0
             width: 40
             height: 40
             bg_color: col_bg
             border_width: 0
             radius: 0
+            hidden: true
             widgets:
               - led:
                   id: led_alarm_lo

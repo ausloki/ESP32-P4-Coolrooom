@@ -1,5 +1,83 @@
 # Progress Tracking
 
+## 2026-07-30 (Evening) Arc Orientation Bug Fixed, Live-Hardware Gauge Tuning
+
+- Resumed the interrupted afternoon session (below) — it never completed closeout, so this entry
+  also reconstructs/documents that work for the first time (see `reference/session_recaps.md` and
+  `HANDOVER_NOTES_2026-07-18.md` for full narrative).
+- Root-caused the horseshoe orientation bug the afternoon session kept flip-flopping on: LVGL
+  angles are clockwise from 0°=3 o'clock, so `330/210` (believed "bottom-opening") actually
+  centers the gap at 12 o'clock — mathematically wrong, not just a preference call. Fixed to
+  `150/30`, which also resolved a second latent bug: the tick marks had been correctly positioned
+  for bottom-opening the whole time, silently fighting the wrongly-oriented arcs. Ticks later
+  removed entirely per operator feedback.
+- Five live flash-and-observe rounds tuned gauge diameter/spacing directly against the physical
+  screen: zero-gap → real gaps → ~3.5mm smaller → ~2mm smaller (twice) → outer+middle grown back
+  +1mm. One round required holding the innermost ring back from a requested reduction to avoid
+  hiding it behind the fixed center circle (corrected a wrong assumption about how LVGL draws
+  `border_width` — inside the box, not outside).
+- Left icon rail resized twice (doubled, then reduced 25%) with even spacing recomputed each time.
+- Confirmed (not yet fixed) a real bug: zero app-level log output ever reaches the USB console
+  across three independent, properly-reset captures, despite the device reliably booting to a
+  working UI.
+- Fixed a structural bug in `HANDOVER_NOTES_2026-07-18.md` where the afternoon session's
+  insertions had severed a prior addendum's heading from its own body text.
+- Build stable throughout: RAM 22.1%, Flash 21.6%.
+
+## 2026-07-30 Emergency Recovery (No-UI Cyan Flash State)
+
+- User reported near-total UI loss with occasional cyan flashes.
+- Live serial logs captured and confirmed hosted Wi-Fi path assert/reset loop (`H_API link not yet up`, queue semaphore assert) as active failure mode.
+- Removed delayed boot action that re-enabled Wi-Fi after 30s, keeping hosted stack disabled for runtime stability.
+- Recovery firmware flashed successfully (`config_hash=0xb6918970`; RAM 22.1%, Flash 21.6%).
+
+## 2026-07-30 UI Refinement Pass 4 (Bell Icon, Uniform Ring-Constrained Arcs, Dense Ticks)
+
+- Increased left icon size again and preserved uniform vertical spacing.
+- Switched alarm icon to bell glyph (not alarm-ringer variant).
+- Rebuilt arc geometry to uniform 12px widths and evenly spaced diameters within grey donut bounds.
+- Restored bottom-open orientation (`330 -> 210`) and replaced sparse ticks with dense incremental radial ticks along horseshoe sweep.
+- Reinforced no-scroll behavior at page and center-container levels.
+- Added LVGL refresh tuning (`full_refresh`, `update_when_display_idle`) targeting intermittent cyan flashing.
+- Build/flash successful (`config_hash=0x4a9b2d6a`; RAM 22.1%, Flash 21.6%).
+
+## 2026-07-30 UI Regression Recovery Hotfix (after Pass 3)
+
+- User reported pass-3 regressions: no visible MDI icons, upside-down horseshoe, right slider still present.
+- Root cause: center arc container footprint overlapped left icon rail after full-width expansion.
+- Hotfix: constrained center container (`x:80`, `width:864`), disabled center container scroll/scrollbar, restored arc direction (`150 -> 30`), and moved right-side labels inward.
+- Build/flash successful (`config_hash=0xf2bbfb49`; RAM 22.1%, Flash 21.6%).
+
+## 2026-07-30 UI Correction Pass 3 (Icon-Only, Centered Equal-Width Arcs, Ticks, No-Scroll)
+
+- Left rail converted to icon-only touch controls: removed visible boxes and removed text labels.
+- Increased left icon size (`font_mdi_large` set to 42).
+- Centered the arc zone on full width (`x:0`, `width:1024`) and aligned right panel labels for this geometry.
+- Set all three reading arcs to equal width (`12`) and restored bottom-opening horseshoe (`330 -> 210`).
+- Added perimeter clock-style tick marks around the horseshoe.
+- Forced `page_home` scrollbar off and retained in-bounds layout to eliminate right-side slider.
+- Disabled background motion FX updates to reduce intermittent cyan flashing.
+- Build/flash successful (`config_hash=0xaff3307d`; RAM 22.1%, Flash 21.6%).
+
+## 2026-07-30 UI Correction Pass 2 (Duplicate MDI Icons Removed, Arc Direction Fixed)
+
+- Removed the duplicated inner MDI icon set from the center gauge area.
+- Kept single left icon rail and increased icon size via new `font_mdi_large`.
+- Moved `ui_*_icon` IDs to the left rail so existing runtime color-state updates target the visible icons.
+- Updated left rail border colors (compressor blue, defrost orange, light grey, alarm red).
+- Flipped horseshoe arc geometry to `start_angle: 150` / `end_angle: 30`.
+- Changed `Int` reading color from cyan to white to reduce cyan emphasis/flicker perception.
+- Validated, compiled, and flashed successfully (`config_hash=0x2b5e9132`; RAM 22.1%, Flash 21.6%).
+
+## 2026-07-30 Home Screen Full-Screen Fit (No Scroll) + Screenshot Alignment
+
+- Followed hardware feedback and adjusted the LVGL home screen to be fixed-view, no-scroll on the 1024x600 panel while keeping bottom `Home / Settings / Info` tabs unchanged.
+- Found and corrected layout extents likely causing scroll: right-column labels and hidden status object were out-of-bounds; left status icon offsets were tightened in-bounds.
+- Set explicit `page_home` dimensions (`width: 1024`, `height: 600`).
+- Preserved previous visual fixes (MDI icon font, compressor/defrost order swap, bottom-opening centered horseshoe arcs).
+- Config validated and firmware flashed successfully.
+- Build stats after pass: RAM 22.1%, Flash 21.6%, config hash `0x7935bd9d`.
+
 ## 2026-07-30 Hosted-Link Isolation And Boot-Loop Boundary
 
 - Ran controlled hosted-link sweeps: SDIO frequency (40/20/10 MHz), SDIO bus width (4-bit vs
