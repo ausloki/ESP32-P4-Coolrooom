@@ -282,6 +282,11 @@ esphome:
     - priority: -100
       then:
         - lambda: id(status_text).publish_state("Booting...");
+    - priority: -90
+      then:
+        - delay: 30s
+        - logger.log: "Diagnostic: enabling Wi-Fi after boot delay"
+        - wifi.enable:
 
 esp32:
   variant: esp32p4
@@ -356,6 +361,9 @@ esp32_hosted:
   use_psram: true
 
 wifi:
+  # Diagnostic isolation mode: keep hosted config present but do not start
+  # Wi-Fi automatically at boot.
+  enable_on_boot: false
   networks:
     - ssid: !secret wifi_ssid
       password: !secret wifi_password

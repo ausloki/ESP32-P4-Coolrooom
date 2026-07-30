@@ -4,6 +4,29 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-30 — Hosted-Link Isolation Results + Diagnostic Boot Mode
+
+**Session scope**: Determine whether boot-loop resets are caused by hosted Wi-Fi bring-up and capture controlled comparison data.
+
+### What Changed
+
+- Ran controlled hosted-link sweeps on `esp32_hosted` settings with identical monitor counters:
+  - SDIO frequency `40MHz`, `20MHz`, `10MHz`
+  - SDIO bus width `4-bit` vs `1-bit`
+  - C6 wake pulse sequencing experiment
+- Confirmed all above variants still entered the same early reset pattern before safe mode (no material improvement).
+- Added a diagnostic isolation mode in `esp32-p4-coolroom.yaml`:
+  - `wifi.enable_on_boot: false`
+  - delayed runtime Wi-Fi enable action (`delay: 30s` then `wifi.enable`) for trigger-point validation.
+
+### Outcome
+
+- Key isolation result: with Wi-Fi held off at boot, resets dropped to zero during the observation window (`resets=0`, `safe=0`), strongly isolating the reboot loop to hosted/Wi-Fi startup path rather than LVGL/core control logic.
+- Network observation: host ARP and ICMP confirmed `192.168.37.237` mapped to `dc:1e:d5:96:3e:d8` and replied to ping, while service ports (`80`, `6053`) were refused at test time.
+- Baseline app stability issue remains unresolved; diagnostic mode is now staged to verify whether resets begin exactly when delayed `wifi.enable` executes.
+
+---
+
 ## 2026-07-29 — RTC Wording Correction + Verification Kickoff
 
 **Session scope**: Commit an accuracy-only RTC comment correction and begin hardware verification loop.

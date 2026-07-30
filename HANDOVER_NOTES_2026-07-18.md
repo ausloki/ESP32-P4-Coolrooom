@@ -12,6 +12,36 @@
 
 ## 2026-07-26 Addendum — Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed
 
+## 2026-07-30 Addendum — Hosted-Link Isolation: Resets Track Wi-Fi Bring-Up
+
+Ran a controlled hosted-link experiment set to determine whether reboot loops are caused by
+display/control logic or by hosted Wi-Fi startup.
+
+What was tested:
+- SDIO frequency sweeps (`40MHz`, `20MHz`, `10MHz`)
+- SDIO bus width (`4-bit` vs `1-bit`)
+- C6 wake pulse timing variant before hosted init
+
+Result:
+- none of the above improved the reset pattern materially; repeated `SW_CPU_RESET` + safe-mode
+  fallback still occurred during normal boot attempts.
+
+Isolation result:
+- setting `wifi.enable_on_boot: false` removed the reset loop during the observation window
+  (`resets=0`, no safe-mode entry), which strongly implicates hosted/Wi-Fi bring-up path as the
+  trigger rather than LVGL or core control-loop logic.
+
+Current diagnostic config in YAML:
+- `wifi.enable_on_boot: false`
+- delayed runtime Wi-Fi enable (`delay 30s` then `wifi.enable`) to confirm whether resets start
+  exactly at Wi-Fi activation time.
+
+Additional host-side observation:
+- ARP and ICMP confirmed `192.168.37.237 -> dc:1e:d5:96:3e:d8` was reachable at network level;
+  ports 80 and 6053 were refused at test time.
+
+This addendum records the current best root-cause boundary: hosted link startup path.
+
 ## 2026-07-29 Addendum — RTC Identity Wording Corrected (No Logic Change)
 
 Made an accuracy-only source comment correction in `p4_helpers.h`:

@@ -1,5 +1,19 @@
 # Progress Tracking
 
+## 2026-07-30 Hosted-Link Isolation And Boot-Loop Boundary
+
+- Ran controlled hosted-link sweeps: SDIO frequency (40/20/10 MHz), SDIO bus width (4-bit vs
+  1-bit), and wake pulse sequencing. No variant removed the reboot loop.
+- Consistent pattern remained: early `H_API` link-not-up events followed by `SW_CPU_RESET` and
+  safe-mode fallback.
+- Critical isolation test: `wifi.enable_on_boot: false` produced zero resets and no safe-mode
+  entry in the same observation class, isolating failures to hosted/Wi-Fi startup path rather
+  than LVGL/control logic.
+- Added diagnostic delayed Wi-Fi enable (30s post-boot) to pinpoint whether resets begin exactly
+  at runtime Wi-Fi activation.
+- Host-side network check: `192.168.37.237` resolved to `dc:1e:d5:96:3e:d8` and responded to
+  ping, while ports 80 and 6053 were refused at test time.
+
 ## 2026-07-26 Door Light Feature, All-Alarm ntfy, Entity Rename, 2 Items Closed by Decision
 
 - Resolved 5 outstanding items in one pass: 2 closed by user decision (no code), 3 implemented.
