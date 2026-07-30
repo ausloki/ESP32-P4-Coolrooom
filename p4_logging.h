@@ -5,7 +5,10 @@
 // PRINCIPLE: All SD card, backup/restore, and notification helpers live here.
 // YAML lambdas call these; they never contain business logic.
 //
-// SD card uses SDMMC host slot 1 (GPIO 39-44) — separate from WiFi SDIO slot 0.
+// SD card uses SDMMC host slot 0 (GPIO 39-44, IO-MUX / UHS pins).
+// ESP-Hosted WiFi (ESP32-C6) uses SDMMC host slot 1 (GPIO 14-19).
+// Matching Waveshare BSP esp32_p4_wifi6_touch_lcd_7b + Espressif
+// host_sdcard_with_hosted: both peripherals must use different slots.
 // Mount point: /sdcard
 //
 // Log layout on SD card:
@@ -59,7 +62,7 @@ static bool          p4_sd_vfs_registered = false;
 
 // ─── Mount / unmount ───────────────────────────────────────────────────────
 
-/// Mount the TF card on SDMMC slot 1 (GPIO 39-44).
+/// Mount the TF card on SDMMC slot 0 (GPIO 39-44 IO-MUX).
 /// Returns true on success. Safe to call repeatedly — a no-op if already
 /// mounted and healthy, and cleans up a stale (failed-but-still-registered)
 /// mount before retrying, so this also serves as the auto-remount entry
@@ -81,7 +84,10 @@ inline bool p4_sd_mount() {
     };
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.slot         = SDMMC_HOST_SLOT_1;
+    // Slot 0 = TF card (IO-MUX pins 39-44). Slot 1 = ESP-Hosted C6 WiFi
+    // (GPIO matrix 14-19). Waveshare BSP + Espressif host_sdcard_with_hosted
+    // both use this split — sharing slot 1 broke the hosted link.
+    host.slot         = SDMMC_HOST_SLOT_0;
     host.max_freq_khz = SDMMC_FREQ_DEFAULT;  // 20 MHz
 
 #if SOC_SDMMC_IO_POWER_EXTERNAL
@@ -97,6 +103,9 @@ inline bool p4_sd_mount() {
     host.pwr_ctrl_handle = p4_sd_pwr_ctrl_handle;
 #endif
 
+    // Slot 0 on ESP32-P4 is IO-MUX (fixed pins). Waveshare BSP leaves the
+    // pin fields unset; we still set them explicitly for clarity — they
+    // must match the board's TF wiring (39-44).
     sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = 4;
     slot.clk   = GPIO_NUM_43;

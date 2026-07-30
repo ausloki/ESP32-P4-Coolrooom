@@ -89,8 +89,10 @@ Download schematic for further verification: https://files.waveshare.com/wiki/ES
 Source: Waveshare `examples/ESP-IDF/13_RS485_Test/main/uart_echo_example_main.c` (ECHO_TEST_TXD=27, ECHO_TEST_RXD=26).
 
 ### WiFi Co-processor (ESP32-C6 via SDIO — item 2)
-The C6 module connects to SDMMC host slot 0 on the ESP32-P4.  
-The TF card uses slot 1 (GPIO 39-44). Slot 0 uses a separate pin set.
+The C6 module connects to SDMMC host **slot 1** on the ESP32-P4 (GPIO matrix pins below).
+The TF card uses **slot 0** (GPIO 39-44, IO-MUX). Confirmed against Waveshare BSP
+`esp32_p4_wifi6_touch_lcd_7b` (`bsp_sdcard_mount` → `SDMMC_HOST_SLOT_0`) and Espressif
+`host_sdcard_with_hosted`. Do not put both on the same slot.
 
 | Signal        | GPIO  | Status                |
 |---------------|-------|-----------------------|
@@ -228,7 +230,7 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 | 27         | RS485 UART TX                      |
 | 32         | Display backlight BL_CTRL          |
 | 33         | LCD + touch RST (shared)           |
-| 39–44      | TF card SDMMC (slot 1)             |
+| 39–44      | TF card SDMMC (slot 0)             |
 | 53         | Audio amplifier enable             |
 | 54         | ESP32-C6 reset                     |
 
@@ -264,7 +266,12 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 
 4. **Mandatory: Verify RS485 UART pins before RS485 devices work.** The relay board and RTD sensor require the correct UART TX/RX pin assignments.
 
-5. **Hosted SDIO reference behavior (critical).** On this board, the ESP32-C6 hosted link is wired to GPIO 14-19 with reset on GPIO 54 and wake on GPIO 6 (Waveshare FIB board header). In ESPHome's `esp32_hosted` component for this project, leaving `slot` at its default generated the correct pin map in `sdkconfig.h` (`CONFIG_ESP_HOSTED_SDIO_SLOT_1` + CMD/CLK/D0..D3 = 19/18/14/15/16/17). Forcing `slot: 0` remapped hosted SDIO pins to 39-44 in generated config, colliding with TF-card pins and breaking hosted link bring-up. Do not set `slot: 0` in this repo unless upstream component behavior changes and is re-verified in generated `sdkconfig.h`.
+5. **Hosted SDIO + TF card slots (critical).** ESP-Hosted C6 must stay on SDMMC **slot 1**
+   with GPIO 14-19 (`CONFIG_ESP_HOSTED_SDIO_SLOT_1`). The TF card must use SDMMC **slot 0**
+   (GPIO 39-44). Putting the TF mount on slot 1 (as an earlier revision of `p4_logging.h`
+   did) collides with hosted and produces `H_API: ESP-Hosted link not yet up` / reset loops
+   when Wi-Fi starts. Forcing `esp32_hosted.slot: 0` in ESPHome remaps hosted pins to 39-44
+   in generated `sdkconfig.h` and is wrong for this board — leave hosted at default slot 1.
 
 6. **Waveshare ESP-IDF hosted baseline (11_esp_brookesia_phone).** Example `sdkconfig` sets: reset active high, reset GPIO 54, 4-bit SDIO, 40MHz clock, CMD/CLK/D0..D3 = 19/18/14/15/16/17. Use this as the first-pass reference before changing hosted settings.
 
