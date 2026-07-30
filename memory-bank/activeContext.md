@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-30 (late night)
 **Branch:** `cursor/wifi-sdmmc-slot-fix`
-**Status:** WiFi/SDMMC slot fix already on branch (`dd53feb`). Follow-on web/LVGL work compiled +
-flashed (see latest config hash in handover). **Commit this session’s tree before leaving.**
+**Status:** WiFi/SDMMC slot fix already on branch (`dd53feb`). Follow-on web/LVGL work
+committed as **`b39a64e`**, flashed config hash **`0x9b1da7d5`**.
 
 ## Working well
 
