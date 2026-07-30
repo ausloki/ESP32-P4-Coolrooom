@@ -3,7 +3,7 @@
 **Date**: 2026-07-18  
 **Resume State Updated**: 2026-07-30  
 **Status**: In Progress, on real hardware — first physical device connected 2026-07-29 (full factory backup taken first). Device boots and runs a working LVGL touchscreen UI; the home-screen gauge (orientation, spacing, sizing) and left icon rail have been iteratively tuned live against the real screen and confirmed good. Latest pass fixed two more real bugs found by cross-referencing Espressif's official BSP source: the SD card was never actually powered (missing on-chip LDO init), and the touchscreen was missing its own address-strapping reset pulse. Also added procedural animations to the 4 status icons. **None of this latest pass has been visually confirmed on hardware yet** — flashed but untested as of this entry. WiFi is **deliberately disabled** (`wifi.enable_on_boot: false`) pending a real fix for a hosted-link reset loop found 2026-07-30 — not a regression, a known tradeoff. A real, separate, unresolved bug: the device produces zero application-level log output on the USB console at any point after boot. See the addenda below for full detail — several from 2026-07-29/07-30 were previously undocumented/uncommitted work from an interrupted session, reconstructed rather than lost.  
-**Last Commit**: (pending — this entry's work not yet committed)
+**Last Commit**: `79758c6` (fix(hardware): power the SD card, fix touch reset, add icon animations)
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
