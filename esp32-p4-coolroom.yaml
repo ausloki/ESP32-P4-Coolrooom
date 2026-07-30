@@ -92,6 +92,7 @@ substitutions:
   # ── Phase 4: Display & Touch GPIO (✅ confirmed from board schematic PDF) ─
   # INT_TP  → NLGPIO23, RESET_TP → NLGPIO33, BL_CTRL → NLGPIO32
   touch_int_pin:  GPIO23
+  touch_int_pin_num: "23"
   touch_rst_pin:  GPIO33   # shared with LCD reset — ESPHome model handles LCD side
   display_bl_pin: GPIO32
 
@@ -282,6 +283,14 @@ esphome:
     - priority: -100
       then:
         - lambda: id(status_text).publish_state("Booting...");
+    - priority: -150
+      then:
+        # Settle after mipi_dsi's shared LCD/touch reset (GPIO33) before GT911
+        # I2C bring-up. Confirmed needed on Waveshare ESP32-P4 GT911 boards
+        # (ESPHome #15019 / vendor BSP): without a wall-clock gap, touch can
+        # appear to init (I2C ACK) but never deliver usable touch events.
+        - delay: 300ms
+
     - priority: -90
       then:
         - logger.log: "Diagnostic: Wi-Fi kept disabled to avoid hosted-link reset loop"
@@ -506,7 +515,8 @@ i2c:
     sda: ${i2c_sda_pin}
     scl: ${i2c_scl_pin}
     scan: true
-    frequency: 100kHz
+    # Waveshare official BSP (esp32_p4_wifi6_touch_lcd_7b) defaults to 400 kHz.
+    frequency: 400kHz
 
 ##############################################################################
 # RS485 / Modbus
@@ -580,11 +590,17 @@ switch:
       - lvgl.led.update:
           id: led_defrost
           brightness: 100%
+      - lvgl.label.update:
+          id: ui_defrost_icon
+          text_color: col_red
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Defrost OFF");
       - lvgl.led.update:
           id: led_defrost
           brightness: 0%
+      - lvgl.label.update:
+          id: ui_defrost_icon
+          text_color: col_grey
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -607,7 +623,7 @@ switch:
           brightness: 100%
       - lvgl.label.update:
           id: ui_compressor_icon
-          text_color: col_green
+          text_color: col_blue
     on_turn_off:
       - lambda: ESP_LOGI("relay", "Compressor OFF");
       - lvgl.led.update:
@@ -1685,17 +1701,15 @@ binary_sensor:
       sorting_weight: 3
     lambda: 'return id(ctl_defrost_dripping);'
 
-  # ── Defrost control logic mode indicator (for LVGL icon color) ─────────────
+  # ── Defrost control logic mode indicator ───────────────────────────────────
+  # Icon color is driven by relay_defrost on_turn_on/off (matches the flame
+  # animation gate), not this diagnostic — keeps active-red tied to the relay.
   - platform: template
     id: defrost_mode_active
     name: "Defrost Mode Active"
     device_class: running
     entity_category: diagnostic
     lambda: 'return id(ctl_defrost_on_since_ms) > 0;'
-    on_state:
-      - lvgl.label.update:
-          id: ui_defrost_icon
-          text_color: !lambda 'return x ? id(col_orange) : id(col_grey);'
 
   # ── Phase 9: LVGL page navigation states ───────────────────────────────────
   - platform: template
@@ -3046,7 +3060,7 @@ interval:
           };
 
           // Snowflake (compressor): slow continuous spin + gentle flicker,
-          // only while the compressor relay is actually on.
+          // blue while the compressor relay is on (idle = grey).
           {
               lv_obj_t *o = id(ui_compressor_icon);
               if (id(relay_compressor).state) {
@@ -3062,7 +3076,7 @@ interval:
 
           // Flame (defrost): irregular flicker (two combined sine waves,
           // not a single smooth pulse, so it doesn't read as metronomic),
-          // only while the defrost relay is actually on.
+          // red while the defrost relay is on (idle = grey).
           {
               lv_obj_t *o = id(ui_defrost_icon);
               if (id(relay_defrost).state) {
@@ -3653,16 +3667,6 @@ display:
     model: WAVESHARE-ESP32-P4-WIFI6-TOUCH-LCD-7B
     update_interval: never
     auto_clear_enabled: false
-    # Explicit override of the model's own built-in reset_pin=33 default
-    # (esphome/components/mipi_dsi/models/waveshare.py) -- same physical
-    # pin, just declared here so allow_other_uses can be set: this pin is
-    # genuinely shared with the GT911 touch controller's reset line (see
-    # the touchscreen: block below), which needs to pulse it a second time
-    # after display init to strap its I2C address correctly, per
-    # Espressif's own esp32_p4_function_ev_board BSP reference.
-    reset_pin:
-      number: ${touch_rst_pin}
-      allow_other_uses: true
     on_page_change:
       - lambda: 'ESP_LOGD("lvgl", "display page changed");'
 
@@ -3676,30 +3680,33 @@ touchscreen:
     id: touch_panel
     i2c_id: i2c_bus
     address: 0x5D
-    interrupt_pin:
-      number: ${touch_int_pin}
-      mode:
-        input: true
-    # reset_pin re-added 2026-07-30 after cross-checking Espressif's official
-    # esp32_p4_function_ev_board BSP (espressif/esp-bsp) -- its bsp_touch_new()
-    # explicitly passes rst_gpio_num (shared with the LCD reset line) into
-    # esp_lcd_touch_new_i2c_gt911(), i.e. the touch driver does its OWN reset
-    # pulse after the display's own reset/init, specifically to strap the
-    # GT911's I2C address (drives the INT pin as output during that pulse --
-    # see gt911_touchscreen.cpp's setup()). Previously omitted here on the
-    # assumption that only one thing could safely drive this shared pin; the
-    # official reference does exactly this, so that assumption was wrong.
-    # Declaration order already has display: before touchscreen: in this
-    # file, matching the BSP's own init order (LCD reset/config first, touch
-    # reset second).
-    reset_pin:
-      number: ${touch_rst_pin}
-      allow_other_uses: true
-    # Also matches the BSP's tp_cfg.flags (mirror_x/mirror_y both 1) for
-    # this exact panel/touch orientation.
+    # Run after the on_boot priority -150 settle delay (shared LCD/touch reset
+    # on GPIO33 is pulsed during mipi_dsi setup at HARDWARE priority ~50).
+    setup_priority: -200
+    # Force polling. With interrupt_pin set, ESPHome attaches an IRQ and
+    # stops polling ("Touch Polling Stopped"). On this board the GT911 often
+    # ACKs I2C after the shared reset but does not reliably fire INT without
+    # its own reset pulse — which we cannot safely do on GPIO33 after the
+    # panel is live (hard-resets LCD → black screen). Polling reads touch
+    # state over I2C and avoids depending on INT.
+    update_interval: 50ms
+    # Waveshare/Espressif BSP tp_cfg.flags for this panel orientation.
     transform:
       mirror_x: true
       mirror_y: true
+    # Skip GT911 max-value I2C probe; use panel native resolution.
+    calibration:
+      x_min: 0
+      x_max: 1024
+      y_min: 0
+      y_max: 600
+    # reset_pin omitted: GPIO33 shared with LCD — post-display pulse = black screen.
+    # interrupt_pin omitted: see update_interval note above.
+    on_touch:
+      - logger.log:
+          level: INFO
+          format: "Touch at x=%d y=%d"
+          args: ['touch.x', 'touch.y']
 
 ##############################################################################
 # Phase 4: Backlight output
@@ -3763,9 +3770,9 @@ color:
     hex: "1C1C1E"
   - id: col_panel      # Card surface
     hex: "2C2C2E"
-  - id: col_green      # Compressor ON / good status
+  - id: col_green      # Good / enabled status (settings toggles, etc.)
     hex: "30D158"
-  - id: col_blue       # Defrost / Coolroom temp arc (snowflake blue)
+  - id: col_blue       # Snowflake (compressor ON) / coolroom temp arc
     hex: "0A84FF"
   - id: col_cyan       # Setpoint arc
     hex: "00BCD4"
@@ -3773,7 +3780,7 @@ color:
     hex: "FF1493"
   - id: col_grey       # Status icons (inactive)
     hex: "888888"
-  - id: col_red        # Alarm
+  - id: col_red        # Alarm / flame (defrost ON)
     hex: "FF453A"
   - id: col_orange     # Probe fault / warning
     hex: "FF9F0A"
@@ -3793,7 +3800,13 @@ lvgl:
   log_level: WARN
   default_font: font_small
   full_refresh: true
-  update_when_display_idle: true
+  # MUST stay false with mipi_dsi update_interval: never.
+  # When true, ESPHome pauses LVGL's refresh timer to 5 minutes whenever
+  # display->is_idle() is false — and with update_interval: never the display
+  # component never reaches LOOP_DONE, so is_idle() stays false forever.
+  # Result: blank/glow screen for ~5–6 minutes until that timer fires
+  # (confirmed against ESPHome lvgl_esphome.cpp + this board's symptoms).
+  update_when_display_idle: false
 
   bottom_layer:
     bg_opa: TRANSP
@@ -3945,7 +3958,7 @@ lvgl:
                   y: -20
                   width: 8
                   height: 8
-                  color: col_green
+                  color: col_blue
                   brightness: 0%
               - label:
                   id: ui_compressor_icon
@@ -3960,6 +3973,10 @@ lvgl:
                   id: led_compressor
                   brightness: !lambda |-
                     return id(relay_compressor).state ? 100 : 0;
+              - lvgl.label.update:
+                  id: ui_compressor_icon
+                  text_color: !lambda |-
+                    return id(relay_compressor).state ? id(col_blue) : id(col_grey);
 
         # Defrost button
         - button:
@@ -3977,7 +3994,7 @@ lvgl:
                   y: -20
                   width: 8
                   height: 8
-                  color: col_blue
+                  color: col_red
                   brightness: 0%
               - label:
                   id: ui_defrost_icon
@@ -3992,6 +4009,10 @@ lvgl:
                   id: led_defrost
                   brightness: !lambda |-
                     return id(relay_defrost).state ? 100 : 0;
+              - lvgl.label.update:
+                  id: ui_defrost_icon
+                  text_color: !lambda |-
+                    return id(relay_defrost).state ? id(col_red) : id(col_grey);
 
         # Light button
         - button:
@@ -4066,6 +4087,10 @@ lvgl:
             radius: 0
             scrollable: false
             scrollbar_mode: "OFF"
+            # Let empty gauge chrome pass hits through; child buttons/labels
+            # remain clickable. Without this the 864×496 box eats taps that
+            # should reach the left icon rail near x≈80.
+            clickable: false
             widgets:
               # Outer decorative arc (light grey reference ring)
               #

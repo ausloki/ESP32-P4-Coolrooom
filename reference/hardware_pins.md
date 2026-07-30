@@ -178,14 +178,31 @@ Without a common ground, RS485 transceiver common-mode can drift and produce int
 Source: `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` — net labels NLGPIO23/33/32 confirmed adjacent to GT911 and backlight driver.
 
 ### Touch Controller (GT911 — item 7)
-Shares I2C bus with external header (GPIO 7/8). GT911 default I2C address: 0x5D.
+Shares I2C bus with external header (GPIO 7/8). GT911 default I2C address: 0x5D
+(alternate 0x14 — Waveshare BSP probes both).
 
 | Signal | GPIO | Status |
 |--------|------|--------|
 | SDA    | 7    | ✅ Shared with I2C bus |
 | SCL    | 8    | ✅ Shared with I2C bus |
-| INT    | 23   | ✅ CONFIRMED (NLGPIO23 → INT_TP) |
-| RST    | 33   | ✅ CONFIRMED (NLGPIO33 → RESET_TP, shared with LCD reset) |
+| INT    | 23   | Schematic net NLGPIO23 → INT_TP exists |
+| RST    | 33   | Schematic net NLGPIO33 → RESET_TP, **shared with LCD reset** |
+
+**Official Waveshare BSP (`waveshare/esp32_p4_wifi6_touch_lcd_7b`, used by
+[ESP32-P4-WIFI6-Touch-LCD-7B examples](https://github.com/waveshareteam/ESP32-P4-WIFI6-Touch-LCD-7B)):**
+
+```c
+#define BSP_LCD_RST           (GPIO_NUM_33)
+#define BSP_LCD_TOUCH_RST     (GPIO_NUM_NC)   // do NOT drive touch reset separately
+#define BSP_LCD_TOUCH_INT     (GPIO_NUM_NC)   // do NOT use INT — I2C poll only
+```
+
+So even though the schematic has INT_TP / RESET_TP nets, **vendor firmware treats
+touch RST and INT as not connected**. LCD reset on GPIO33 alone resets the GT911;
+a second post-init pulse on that shared line hard-resets the panel without re-init
+(black screen in ESPHome). Touch is brought up by probing I2C `0x5D` then `0x14`,
+with `mirror_x`/`mirror_y` both set. Match that in ESPHome: **no** `reset_pin`,
+**no** `interrupt_pin`, poll via `update_interval`, keep mirrors.
 
 ### MIPI-DSI Display (7" 1024×600, JD9365 — items 6/7)
 | Signal        | GPIO | Status |

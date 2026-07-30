@@ -2836,3 +2836,26 @@ triggered to observe). The missing-app-log bug and the hosted-WiFi reset loop bo
 and untouched by this entry.
 
 ---
+
+## 2026-07-30 (Night) — Black/Delayed Display Recovery After Shared RST Regression
+
+**Session scope**: Operator reported blank display (up to ~6 minutes) and dead touch after
+`79758c6`. Recover display without re-enabling WiFi.
+
+### What Changed
+
+- Root-caused blank panel: ESPHome GT911 `reset_pin` pulses shared GPIO33 *after* mipi_dsi
+  init → hard-reset LCD with no re-init.
+- Fix: remove shared `reset_pin`; strap GT911 0x5D via INT held low before LCD reset
+  (`p4_gt911_prepare_for_lcd_reset`, `on_boot` priority 950). Keep mirror transforms.
+- Compiled (`0x698d1304`) and flashed on `/dev/cu.usbmodem5B7B0287481`; monitored
+  `/dev/cu.usbmodem213401`. Device reaches main loop (Modbus WARN + hosted "link not yet up").
+- Documented 6-minute delay hypotheses (no intentional 6 min wait; shared-RST +/or hosted
+  reboot churn). WiFi left `enable_on_boot: false`.
+
+### Outcome
+
+- Flash OK. Visual display/touch confirm still needed from operator.
+- No USER_MANUAL / QUICK_START changes (internal only). Working tree uncommitted.
+
+---

@@ -18,6 +18,23 @@
 #include <esp_sntp.h>
 #include <esp_log.h>
 #include <esp_heap_caps.h>
+#include <driver/gpio.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+// ─── GT911 touch — shared LCD/touch reset (GPIO33) ─────────────────────────
+
+/// Hold GT911 INT low before the mipi_dsi display driver pulses the shared
+/// RST line (GPIO33). That straps address 0x5D during the LCD reset sequence
+/// without a second post-init reset — pulsing RST after esp_lcd_panel_init()
+/// would hard-reset the panel and leave a black screen (no re-init in ESPHome).
+/// Matches Espressif BSP intent; see gt911_touchscreen.cpp address-strap flow.
+inline void p4_gt911_prepare_for_lcd_reset(gpio_num_t int_pin) {
+    gpio_reset_pin(int_pin);
+    gpio_set_direction(int_pin, GPIO_MODE_OUTPUT);
+    gpio_set_level(int_pin, 0);
+    ESP_LOGI("p4", "GT911 INT held low for shared LCD/touch reset (addr 0x5D)");
+}
 
 // ─── Boot diagnostics ──────────────────────────────────────────────────────
 

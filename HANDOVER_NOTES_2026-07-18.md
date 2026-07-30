@@ -1,12 +1,46 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-30  
-**Status**: In Progress, on real hardware — first physical device connected 2026-07-29 (full factory backup taken first). Device boots and runs a working LVGL touchscreen UI; the home-screen gauge (orientation, spacing, sizing) and left icon rail have been iteratively tuned live against the real screen and confirmed good. Latest pass fixed two more real bugs found by cross-referencing Espressif's official BSP source: the SD card was never actually powered (missing on-chip LDO init), and the touchscreen was missing its own address-strapping reset pulse. Also added procedural animations to the 4 status icons. **None of this latest pass has been visually confirmed on hardware yet** — flashed but untested as of this entry. WiFi is **deliberately disabled** (`wifi.enable_on_boot: false`) pending a real fix for a hosted-link reset loop found 2026-07-30 — not a regression, a known tradeoff. A real, separate, unresolved bug: the device produces zero application-level log output on the USB console at any point after boot. See the addenda below for full detail — several from 2026-07-29/07-30 were previously undocumented/uncommitted work from an interrupted session, reconstructed rather than lost.  
-**Last Commit**: `79758c6` (fix(hardware): power the SD card, fix touch reset, add icon animations)
+**Resume State Updated**: 2026-07-30 (night)  
+**Status**: In Progress, on real hardware. Commit `79758c6`'s GT911 `reset_pin` on shared GPIO33 caused a black/delayed display regression (post-init hard-reset of the LCD with no re-init). **Recovery firmware is compiled + flashed** (config hash `0x698d1304`, uncommitted): removes touch/display shared `reset_pin` override and straps GT911 addr 0x5D by holding INT (GPIO23) low *before* the mipi_dsi reset pulse (`on_boot` priority 950 / `p4_gt911_prepare_for_lcd_reset()`). Post-flash serial shows steady main-loop activity (Modbus timeouts expected without RS485 gear; hosted still logs `ESP-Hosted link not yet up` ~60s). **Needs operator visual confirm**: display up promptly, touch works. WiFi remains `enable_on_boot: false`.  
+**Last Commit**: `79758c6` (broken touch-reset approach) — working tree has display recovery fix not yet committed.
 
 > Resume note: this file now reflects the current repository state at `HEAD`.
 > Some detailed historical sections below still preserve earlier phase labels and session wording from when they were written; treat them as implementation history, not as the current project-status summary.
+
+---
+
+## 2026-07-30 Addendum (Night) — Black/Delayed Display Recovery
+
+**Symptom (operator):** after flashing `79758c6`, display stayed blank for up to ~6 minutes
+(not always permanently black); touch also dead during that window.
+
+**Root cause (code):** ESPHome's `gt911` `setup()` pulses `reset_pin` *after* `mipi_dsi`
+has already finished panel init. On this board GPIO33 is shared LCD+touch RST. That second
+pulse hard-resets the JD9365 without re-running the MIPI init sequence → blank panel.
+Touch fails in the same window because address-strap / INT handling races the shared reset.
+Espressif BSP *does* reset touch after LCD, but only because its LCD stack can tolerate that
+ordering; ESPHome's mipi_dsi path does not re-init after a later RST.
+
+**Fix (working tree, flashed `0x698d1304`):**
+- Removed `reset_pin` / `allow_other_uses` from both `display:` and `touchscreen:`
+- `p4_gt911_prepare_for_lcd_reset(GPIO23)` at `on_boot` priority 950 holds INT low so the
+  display driver's own GPIO33 reset straps GT911 to 0x5D
+- Kept `transform: mirror_x/mirror_y: true`
+
+**6-minute delay notes:** no intentional ~6 min display wait in firmware. Best explanations:
+(1) shared-RST left the panel dead until an unnoticed reboot/power event restored a boot
+where timing differed; (2) earlier hosted Wi-Fi reset-loop boots repeatedly interrupting
+UI bring-up (minutes of resets before a stable boot). Modbus/SD are not in the display
+setup path (`modbus_controller` priority −10; SD mount at −200). Hosted still probes while
+WiFi is disabled (`H_API: ESP-Hosted link not yet up` ~61s) — keep `enable_on_boot: false`
+until display/touch are confirmed.
+
+**WiFi next step (do not enable yet):** after visual OK, try a *one-shot delayed*
+`wifi.enable` with serial reset counting (prior 30s delay experiment reintroduced the loop).
+Hosted pins already match Waveshare FIB baseline (40 MHz, active-high reset, 4-bit).
+
+**Manuals:** no USER_MANUAL / QUICK_START update — internal bring-up fix only.
 
 ---
 
