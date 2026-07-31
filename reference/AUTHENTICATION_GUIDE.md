@@ -37,8 +37,8 @@ events (mobile). Any of these resets the timer.
 1. User logs in and is elevated to operator.
 2. Timer starts counting down from 2:00, shown in the header as `⏱️ Logout in 1:45`.
 3. Any tracked activity resets the timer back to 2:00.
-4. If the timer reaches 0:00, a warning alert appears ("Session expired due to inactivity.
-   Logging out...") and the dashboard automatically logs out (returns to guest) after 2 seconds.
+4. If the timer reaches 0:00, the dashboard logs out silently (returns to guest) — no
+   banner. The header role badge flips back to guest.
 
 Guest sessions are exempt — there is nothing to time out, since guest has no elevated access to
 begin with.

@@ -623,7 +623,7 @@ There are **two completely separate locks** on this system — don't confuse the
 | **What it protects** | Every web-dashboard setting + admin function | Only the 7 touchscreen settings pages |
 | **Credential** | The device's one HTTP username/password (`secrets.yaml`, set at build time) | 4-digit PIN, factory default `0000`, changeable on-device |
 | **How to change it** | Not changeable from the dashboard — requires re-flashing firmware with new `secrets.yaml` values (re-run `scripts/embed_dashboard.py` before compile) | Touchscreen: Settings 1/7 → Change PIN |
-| **Session behavior** | Logs out automatically after 2 minutes of inactivity; never persisted across a page reload | Stays unlocked until you navigate back to Home |
+| **Session behavior** | Logs out silently after 2 minutes of inactivity (no banner); never persisted across a page reload | Stays unlocked until you navigate back to Home |
 
 **Web dashboard has exactly two states** — there is no third "admin" or "superadmin" tier
 (an earlier version of this documentation described one; it never actually existed

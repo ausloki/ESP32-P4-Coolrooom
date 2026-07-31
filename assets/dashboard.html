@@ -1330,13 +1330,7 @@
             try {
                 const states = statesArrayFromLive();
                 if (!states.length) {
-                    if (sseStatus === 'error' || sseStatus === 'reconnecting') {
-                        const now = Date.now();
-                        if (now - lastFetchErrorAt > 15000) {
-                            lastFetchErrorAt = now;
-                            showAlert('error', 'Waiting for device event stream (/events)…');
-                        }
-                    }
+                    // SSE not ready yet — footer already shows stream status; no banner.
                     return;
                 }
 
@@ -1462,12 +1456,9 @@
             // Update warning display
             updateInactivityDisplay();
             
-            // Set new timeout
+            // Set new timeout — silent logout; no banner (page is already busy enough).
             inactivityTimer = setTimeout(() => {
-                showAlert('warning', 'Session expired due to inactivity. Logging out...');
-                setTimeout(() => {
-                    logout();
-                }, 2000);
+                logout();
             }, SESSION_TIMEOUT);
         }
 
@@ -1598,7 +1589,6 @@
             initializeRole();
             fetchStatus();
             document.getElementById('logFileSelect').innerHTML = '<option value="">Login to view log files</option>';
-            showAlert('info', 'Returned to guest mode.');
         }
 
         function openLoginModal() {
@@ -2171,11 +2161,18 @@
         }
 
         function showAlert(type, message) {
-            const alertClass = `alert-${type}`;
-            const alertHtml = `<div class="alert ${alertClass}">${message}</div>`;
+            // Single replaceable strip — never stack banners (they were permanent
+            // and made the already-slow first paint feel worse). Auto-clear after
+            // a few seconds so the Coolroom Status gauge stays the focus.
             const alertsDiv = document.getElementById('alerts');
             if (!alertsDiv) return;
-            alertsDiv.insertAdjacentHTML('beforeend', alertHtml);
+            const alertClass = `alert-${type}`;
+            alertsDiv.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
+            if (showAlert._clearTimer) clearTimeout(showAlert._clearTimer);
+            showAlert._clearTimer = setTimeout(() => {
+                alertsDiv.innerHTML = '';
+                showAlert._clearTimer = null;
+            }, 4000);
         }
 
         // Setting help balloons — click the small "i" icon next to a setting

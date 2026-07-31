@@ -4,6 +4,17 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Morning) — Drop Web Session/Load Toast Banners
+
+Removed the yellow/blue `#alerts` strips for inactivity logout ("Session expired…") and
+"Returned to guest mode." Logout is silent. Also stopped the load-time "Waiting for device
+event stream" banner. Remaining action feedback still uses one replaceable strip that
+auto-clears in 4s (no permanent stacking).
+
+Closeout: embed `20260801-0729` → compile → NVS-safe flash.
+
+---
+
 ## 2026-08-01 (Morning) — Door Light Requires Door Sensor
 
 **Session scope**: Couple Door-Triggered Light to Door Sensor Enabled — light without
