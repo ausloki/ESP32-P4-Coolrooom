@@ -4,6 +4,33 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 — Web Dashboard SSE + ESPHome 2026.7 Entity IDs
+
+**Session scope**: After Login worked, dashboard showed stacked fetch errors and empty
+gauge/health — fix live data path.
+
+### Root cause
+
+- Dashboard polled Home Assistant-style `/api/states` (empty reply on ESPHome web_server).
+- Entity matching used yaml/HA ids (`sensor.probe1_temp`); ESPHome 2026.7 SSE uses
+  name-slug ids (`sensor-coolroom_temperature__primary_control_`) and POSTs match
+  **friendly names** (`/switch/Light Relay/toggle`), not object ids.
+
+### What changed
+
+- Live updates via EventSource `/events`; map name-slug ids; POST by entity name.
+- WiFi link inferred from SSID/RSSI (not `controller_online`, which stays OFF).
+- Null-safe DOM updates; throttled alerts. Flashed build `20260731-0716`.
+
+### Outcome / notes
+
+- Setpoint, WiFi dBm, timers, heap/PSRAM, health badges populate from SSE.
+- Remaining `--` temps / RS485✗ / SHT✗ / probe-fault banner match live device state
+  (probes/NA), not a parse miss.
+- No USER_MANUAL / QUICK_START update — internal web client fix only.
+
+---
+
 ## 2026-07-30 — Web Login HTTP Fix + LVGL Settings/Header Pause Point
 
 **Session scope**: Fix web Login on device IP; LVGL settings blue controls + home header;

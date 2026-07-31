@@ -883,7 +883,8 @@
         </div>
 
         <footer>
-            <p>Coolroom Controller — guest view is status only. Auto-refresh: <span id="autoRefresh">enabled (10s)</span></p>
+            <p>Coolroom Controller — guest view is status only. Auto-refresh: <span id="autoRefresh">enabled (10s)</span>
+            · build <span id="dashBuildId">-</span></p>
         </footer>
     </div>
 
@@ -900,7 +901,7 @@
                 <input type="password" id="loginPassword" placeholder="device web_server_password" autocomplete="current-password">
             </div>
             <div class="modal-button-group">
-                <button class="primary" onclick="handleLogin()">Login</button>
+                <button id="loginSubmitBtn" class="primary" onclick="handleLogin()">Login</button>
                 <button class="secondary" onclick="closeLoginModal()">Cancel</button>
             </div>
             <div class="modal-info">
@@ -919,7 +920,7 @@
         
         // There is exactly one real credential (web_server_username / web_server_password
         // from secrets.yaml). ESPHome cannot do "guest read / operator write" on the
-        // API, so HTTP Basic Auth is off: GET/POST /api/states is open on the LAN.
+        // API, so HTTP Basic Auth is off: SSE /events and entity POSTs are open on the LAN.
         // Login only elevates this UI (settings/admin). The expected SHA-256 of
         // "username:password" is baked in at firmware build (embed_dashboard.py).
         const ROLE_PERMISSIONS = {
@@ -937,21 +938,31 @@
             }
         };
 
-        // Replaced at embed time with SHA-256 hex of username:password from secrets.yaml
+        // Replaced at embed time from secrets.yaml (password never stored plaintext in page).
+        const DASHBOARD_AUTH_USER = '__DASHBOARD_AUTH_USER__';
         const DASHBOARD_AUTH_TOKEN = '__DASHBOARD_AUTH_TOKEN__';
+        const DASHBOARD_BUILD_ID = '__DASHBOARD_BUILD_ID__';
 
         let currentRole = 'guest';
         let currentUser = 'guest';
         let authHeader = null; // unused for API (open LAN); kept for future hardening
-        const API_PATH = '/api/states';
+        // ESPHome web_server has no Home Assistant-style /api/states. Live entity
+        // JSON arrives on SSE /events (event: state / state_detail_all). Hitting
+        // /api/states yields an empty reply and left the gauge stuck on "--".
+        const EVENTS_PATH = '/events';
         let activeApiUrl = null;
-        
+        const liveEntities = new Map(); // ESPHome id ("sensor-…") → latest payload
+        let eventSource = null;
+        let dashboardRefreshTimer = null;
+        let lastFetchErrorAt = 0;
+        let sseStatus = 'connecting';
+
         // Session timeout tracking
         const SESSION_TIMEOUT = 2 * 60 * 1000; // 2 minutes in milliseconds
         let inactivityTimer = null;
         let lastActivityTime = Date.now();
 
-        function buildApiCandidates(path = API_PATH) {
+        function buildApiCandidates(path = EVENTS_PATH) {
             const candidates = [];
             const host = window.location.hostname;
             const protocol = window.location.protocol || 'http:';
@@ -974,6 +985,13 @@
             }
 
             return [...new Set(candidates)];
+        }
+
+        // ESPHome 2026.7 matches control URLs by friendly entity *name*, not yaml id.
+        function entityActionPath(domain, name, action, query) {
+            let path = `/${domain}/${encodeURIComponent(name)}/${action}`;
+            if (query) path += (query.startsWith('?') ? query : `?${query}`);
+            return path;
         }
 
         // SHA-256 that works on plain HTTP (device IP). crypto.subtle is only
@@ -1035,15 +1053,8 @@
         }
 
         async function sha256Hex(text) {
-            try {
-                if (window.crypto && window.crypto.subtle) {
-                    const data = new TextEncoder().encode(text);
-                    const digest = await crypto.subtle.digest('SHA-256', data);
-                    return Array.from(new Uint8Array(digest))
-                        .map((b) => b.toString(16).padStart(2, '0'))
-                        .join('');
-                }
-            } catch (e) { /* fall through */ }
+            // Always use the pure-JS path on the device dashboard. crypto.subtle is
+            // missing on http://<device-ip> and some browsers throw if you touch it.
             return sha256HexSync(text);
         }
 
@@ -1078,25 +1089,146 @@
             }
         }
 
-        async function fetchStatesWithFallback() {
-            const candidates = buildApiCandidates();
-            let lastError = null;
+        function ingestEntityPayload(raw) {
+            let entity;
+            try {
+                entity = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            } catch (e) {
+                return;
+            }
+            const id = entity && (entity.id || entity.entity_id || entity.name_id);
+            if (!id) return;
+            // Prefer hyphen id as map key when both present
+            const key = entity.id || id;
+            liveEntities.set(key, entity);
+            if (entity.name) {
+                liveEntities.set(`name:${entity.name}`, entity);
+            }
+        }
 
-            for (const url of candidates) {
-                try {
-                    const response = await fetchWithTimeout(url);
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
+        function scheduleDashboardRefresh() {
+            // Coalesce bursts of SSE events into one render after the stream settles.
+            if (dashboardRefreshTimer) clearTimeout(dashboardRefreshTimer);
+            dashboardRefreshTimer = setTimeout(() => {
+                dashboardRefreshTimer = null;
+                fetchStatus();
+            }, 250);
+        }
+
+        async function fetchStatus() {
+            try {
+                const states = statesArrayFromLive();
+                if (!states.length) {
+                    if (sseStatus === 'error' || sseStatus === 'reconnecting') {
+                        const now = Date.now();
+                        if (now - lastFetchErrorAt > 15000) {
+                            lastFetchErrorAt = now;
+                            showAlert('error', 'Waiting for device event stream (/events)…');
+                        }
                     }
-                    const states = await response.json();
-                    activeApiUrl = url;
-                    return states;
-                } catch (error) {
-                    lastError = error;
+                    return;
+                }
+
+                const data = parseStates(states);
+                updateDashboard(data);
+                setText('lastUpdate', new Date().toLocaleTimeString());
+
+                const autoRefresh = document.getElementById('autoRefresh');
+                if (autoRefresh) {
+                    autoRefresh.textContent = `enabled (SSE) - ${sseStatus} · ${activeApiUrl || EVENTS_PATH}`;
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+                const now = Date.now();
+                if (now - lastFetchErrorAt > 15000) {
+                    lastFetchErrorAt = now;
+                    showAlert('error', `Failed to update status: ${error.message}`);
                 }
             }
+        }
 
-            throw new Error(lastError ? lastError.message : 'No API endpoints reachable');
+        function startEventStream() {
+            if (eventSource) {
+                try { eventSource.close(); } catch (e) { /* ignore */ }
+                eventSource = null;
+            }
+            const candidates = buildApiCandidates(EVENTS_PATH);
+            const url = candidates[0];
+            activeApiUrl = url;
+            sseStatus = 'connecting';
+            try {
+                eventSource = new EventSource(url);
+            } catch (e) {
+                sseStatus = 'error';
+                return;
+            }
+            const onState = (ev) => {
+                ingestEntityPayload(ev.data);
+                sseStatus = 'live';
+                scheduleDashboardRefresh();
+            };
+            eventSource.addEventListener('state', onState);
+            eventSource.addEventListener('state_detail_all', onState);
+            eventSource.addEventListener('ping', () => {
+                sseStatus = 'live';
+                activeApiUrl = url;
+            });
+            eventSource.onopen = () => {
+                sseStatus = 'live';
+                activeApiUrl = url;
+            };
+            eventSource.onerror = () => {
+                sseStatus = liveEntities.size ? 'reconnecting' : 'error';
+            };
+        }
+
+        function statesArrayFromLive() {
+            const out = [];
+            const seen = new Set();
+            liveEntities.forEach((entity, key) => {
+                if (String(key).startsWith('name:')) return;
+                if (!entity || !entity.id || seen.has(entity.id)) return;
+                seen.add(entity.id);
+                out.push(entity);
+            });
+            return out;
+        }
+
+        function entityIsOn(entity) {
+            if (!entity) return false;
+            if (typeof entity.value === 'boolean') return entity.value;
+            const s = String(entity.state == null ? '' : entity.state).trim().toLowerCase();
+            return s === 'on' || s === 'true' || s === '1';
+        }
+
+        function entityNumber(entity) {
+            if (!entity) return undefined;
+            if (typeof entity.value === 'number' && !isNaN(entity.value)) return entity.value;
+            if (typeof entity.value === 'string' && entity.value.trim() !== '' && entity.value.toUpperCase() !== 'NA') {
+                const n = parseFloat(entity.value);
+                if (!isNaN(n)) return n;
+            }
+            const s = String(entity.state == null ? '' : entity.state).trim();
+            if (!s || s.toUpperCase() === 'NA') return undefined;
+            const n = parseFloat(s);
+            return isNaN(n) ? undefined : n;
+        }
+
+        function entityText(entity) {
+            if (!entity) return undefined;
+            if (entity.value != null && entity.value !== '') return String(entity.value);
+            if (entity.state != null && entity.state !== '') return String(entity.state);
+            return undefined;
+        }
+
+        function setText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+
+        function setHtml(id, html) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════
@@ -1189,18 +1321,27 @@
                 return;
             }
 
-            const loginButton = document.querySelector('#loginModal button.primary');
-            loginButton.disabled = true;
-            loginButton.textContent = 'Checking...';
+            const loginButton = document.getElementById('loginSubmitBtn');
+            if (loginButton) {
+                loginButton.disabled = true;
+                loginButton.textContent = 'Checking...';
+            }
 
             try {
-                if (!DASHBOARD_AUTH_TOKEN || DASHBOARD_AUTH_TOKEN.includes('__DASHBOARD')) {
-                    alert('Firmware missing login token — rebuild with scripts/embed_dashboard.py');
+                if (!DASHBOARD_AUTH_TOKEN || DASHBOARD_AUTH_TOKEN.indexOf('__DASHBOARD') === 0) {
+                    alert('Firmware missing login token — rebuild with scripts/embed_dashboard.py and reflash');
                     return;
                 }
-                const hash = await sha256Hex(`${username}:${password}`);
-                if (hash !== DASHBOARD_AUTH_TOKEN) {
+                if (DASHBOARD_AUTH_USER && DASHBOARD_AUTH_USER.indexOf('__DASHBOARD') !== 0
+                    && username !== DASHBOARD_AUTH_USER) {
                     alert('Invalid username or password');
+                    return;
+                }
+
+                // Exact match against secrets baked at embed time (UTF-8).
+                const hash = sha256HexSync(username + ':' + password);
+                if (hash !== DASHBOARD_AUTH_TOKEN) {
+                    alert('Invalid username or password\n(build ' + DASHBOARD_BUILD_ID + ')');
                     return;
                 }
 
@@ -1214,9 +1355,13 @@
                 refreshLogFileList();
                 setupActivityListeners();
                 resetInactivityTimer();
+            } catch (err) {
+                alert('Login error: ' + (err && err.message ? err.message : String(err)));
             } finally {
-                loginButton.disabled = false;
-                loginButton.textContent = 'Login';
+                if (loginButton) {
+                    loginButton.disabled = false;
+                    loginButton.textContent = 'Login';
+                }
             }
         }
 
@@ -1249,6 +1394,7 @@
             document.getElementById('loginUsername').value = '';
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginModal').classList.add('show');
+            setTimeout(() => document.getElementById('loginUsername').focus(), 50);
         }
 
         function closeLoginModal() {
@@ -1287,18 +1433,22 @@
             const userDisplay = document.getElementById('currentUser');
             const loginButton = document.getElementById('loginButton');
             const logoutButton = document.querySelector('.logout-button');
-            
-            roleBadge.className = `role-badge ${currentRole}`;
-            roleBadge.textContent = `🔑 ${roleInfo.name}`;
-            roleLabel.textContent = roleInfo.name;
-            userDisplay.textContent = currentUser;
 
-            if (currentRole === 'guest') {
-                loginButton.classList.remove('hidden');
-                logoutButton.classList.add('hidden');
-            } else {
-                loginButton.classList.add('hidden');
-                logoutButton.classList.remove('hidden');
+            if (roleBadge) {
+                roleBadge.className = `role-badge ${currentRole}`;
+                roleBadge.textContent = `🔑 ${roleInfo.name}`;
+            }
+            if (roleLabel) roleLabel.textContent = roleInfo.name;
+            if (userDisplay) userDisplay.textContent = currentUser;
+
+            if (loginButton && logoutButton) {
+                if (currentRole === 'guest') {
+                    loginButton.classList.remove('hidden');
+                    logoutButton.classList.add('hidden');
+                } else {
+                    loginButton.classList.add('hidden');
+                    logoutButton.classList.remove('hidden');
+                }
             }
         }
 
@@ -1325,84 +1475,100 @@
             return roleInfo.canModify.includes(action) || roleInfo.canModify.includes('all');
         }
 
-        async function fetchStatus() {
-            try {
-                const states = await fetchStatesWithFallback();
-                
-                const data = parseStates(states);
-                updateDashboard(data);
-                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        // Maps ESPHome web id (domain-slug_from_friendly_name) → dashboard fields.
+        // Slugs come from entity names, not yaml C++ ids (ESPHome 2026.7).
+        const STATE_FIELD_BY_ID = {
+            'sensor-coolroom_temperature__primary_control_': 'temperature',
+            'sensor-evaporator_temperature__secondary_control_': 'evap_temp',
+            'number-setpoint____c_': 'setpoint',
+            'switch-compressor_relay': 'compressor_on',
+            'switch-defrost_relay': 'defrost_phase',
+            'binary_sensor-high_temperature_alarm': 'alarm_high_active',
+            'binary_sensor-low_temperature_alarm': 'alarm_low_active',
+            'binary_sensor-ice_detect_alarm': 'alarm_ice_active',
+            'binary_sensor-door_open_alarm': 'alarm_door_active',
+            'binary_sensor-no-cool_alarm': 'alarm_nocool_active',
+            'binary_sensor-rs485_relay_board_online': 'rs485_relay_ok',
+            'binary_sensor-rs485_rtd_board_1_online': 'rs485_rtd_ok',
+            'binary_sensor-rtc__pcf8563__online': 'rtc_ok',
+            'binary_sensor-sht31__internal_humidity__online': 'sht31_ok',
+            'binary_sensor-sht20__external_humidity__online': 'sht20_ok',
+            'binary_sensor-controller_online': 'controller_online',
+            'sensor-wifi_signal_strength': 'wifi_rssi',
+            'text_sensor-wifi_ssid': 'wifi_ssid',
+            'binary_sensor-probe_fault_-_stale_or_invalid': 'probe_fault',
+            'switch-light_relay': 'light_on',
+            'sensor-internal_temperature__sht31_': 'int_temp',
+            'sensor-internal_humidity__sht31_': 'int_humidity',
+            'sensor-external_temperature__sht20_': 'ext_temp',
+            'sensor-external_humidity__sht20_': 'ext_humidity',
+            'sensor-free_heap__kb_': 'heap_free_kb',
+            'number-high_temp_alarm_delta____c_': 'alarm_high',
+            'number-low_temp_alarm_delta____c_': 'alarm_low',
+            'number-compressor_differential____c_': 'comp_diff',
+            'binary_sensor-sd_card_mounted': 'sd_card_ok',
+            'sensor-chip_temperature': 'chip_temp',
+            'sensor-free_psram__kb_': 'psram_free_kb',
+            'text_sensor-ip_address': 'ip_address',
+            'sensor-compressor_lockout_remaining__s_': 'comp_lockout_remaining_sec',
+            'sensor-next_defrost_in__s_': 'defrost_countdown_sec',
+            'sensor-defrost_duration_remaining__s_': 'defrost_duration_remaining_sec',
+            'sensor-defrost_drip_remaining__s_': 'defrost_drip_remaining_sec',
+            'sensor-system_uptime': 'uptime_seconds',
+            'text_sensor-system_psram': 'psram_status_text',
+        };
 
-                const autoRefresh = document.getElementById('autoRefresh');
-                if (autoRefresh) {
-                    autoRefresh.textContent = `enabled (10s) - source: ${activeApiUrl || 'unknown'}`;
-                }
-            } catch (error) {
-                console.error('Error fetching status:', error);
-                showAlert('error', `Failed to fetch status: ${error.message}`);
-            }
-        }
+        const BOOL_FIELDS = new Set([
+            'compressor_on', 'defrost_phase', 'alarm_high_active', 'alarm_low_active',
+            'alarm_ice_active', 'alarm_door_active', 'alarm_nocool_active',
+            'rs485_relay_ok', 'rs485_rtd_ok', 'rtc_ok', 'sht31_ok', 'sht20_ok',
+            'wifi_connected', 'probe_fault', 'light_on', 'sd_card_ok', 'controller_online',
+        ]);
+
+        const TEXT_FIELDS = new Set(['wifi_ssid', 'ip_address', 'psram_status_text']);
 
         function parseStates(states) {
             const data = {};
-            states.forEach(entity => {
-                const id = entity.entity_id;
-                const state = entity.state;
-                
-                if (id === 'sensor.probe1_temp') data.temperature = parseFloat(state);
-                if (id === 'sensor.probe2_temp') data.evap_temp = parseFloat(state);
-                if (id === 'number.setpoint') data.setpoint = parseFloat(state);
-                if (id === 'switch.relay_compressor') data.compressor_on = state === 'on';
-                if (id === 'switch.relay_defrost') data.defrost_phase = state === 'on';
-                if (id === 'binary_sensor.alarm_high_active') data.alarm_high_active = state === 'on';
-                if (id === 'binary_sensor.alarm_low_active') data.alarm_low_active = state === 'on';
-                if (id === 'binary_sensor.ice_alarm_sensor') data.alarm_ice_active = state === 'on';
-                if (id === 'binary_sensor.door_alarm_active') data.alarm_door_active = state === 'on';
-                if (id === 'binary_sensor.no_cool_alarm_sensor') data.alarm_nocool_active = state === 'on';
-                if (id === 'binary_sensor.rs485_relay_online') data.rs485_relay_ok = state === 'on';
-                if (id === 'binary_sensor.rs485_rtd1_online') data.rs485_rtd_ok = state === 'on';
-                if (id === 'binary_sensor.rtc_online') data.rtc_ok = state === 'on';
-                if (id === 'binary_sensor.sht31_online') data.sht31_ok = state === 'on';
-                if (id === 'binary_sensor.sht20_online') data.sht20_ok = state === 'on';
-                if (id === 'binary_sensor.controller_online') data.wifi_connected = state === 'on';
-                if (id === 'sensor.wifi_rssi') data.wifi_rssi = parseInt(state);
-                if (id === 'text_sensor.wifi_ssid_text') data.wifi_ssid = state;
-                if (id === 'binary_sensor.probe_fault_active') data.probe_fault = state === 'on';
-                if (id === 'switch.relay_light') data.light_on = state === 'on';
-                if (id === 'sensor.probe_internal_temp') data.int_temp = parseFloat(state);
-                if (id === 'sensor.probe_internal_humidity') data.int_humidity = parseFloat(state);
-                if (id === 'sensor.probe_external_temp') data.ext_temp = parseFloat(state);
-                if (id === 'sensor.probe_external_humidity') data.ext_humidity = parseFloat(state);
-                if (id === 'sensor.free_heap_kb') data.heap_free_kb = parseInt(state);
-                if (id === 'number.alarm_high_delta') data.alarm_high = parseFloat(state);
-                if (id === 'number.alarm_low_delta') data.alarm_low = parseFloat(state);
-                if (id === 'number.compressor_differential') data.comp_diff = parseFloat(state);
-                if (id === 'binary_sensor.sd_card_online') data.sd_card_ok = state === 'on';
-                if (id === 'sensor.chip_temp') data.chip_temp = parseFloat(state);
-                if (id === 'sensor.free_psram_kb') data.psram_free_kb = parseInt(state);
-                if (id === 'text_sensor.ip_address') data.ip_address = state;
-                if (id === 'sensor.comp_lockout_remaining_sec') data.comp_lockout_remaining_sec = parseFloat(state);
-                if (id === 'sensor.defrost_countdown_sec') data.defrost_countdown_sec = parseFloat(state);
-                if (id === 'sensor.defrost_duration_remaining_sec') data.defrost_duration_remaining_sec = parseFloat(state);
-                if (id === 'sensor.defrost_drip_remaining_sec') data.defrost_drip_remaining_sec = parseFloat(state);
+            states.forEach((entity) => {
+                const id = entity.id || entity.entity_id || '';
+                const field = STATE_FIELD_BY_ID[id];
+                if (field) {
+                    if (BOOL_FIELDS.has(field)) data[field] = entityIsOn(entity);
+                    else if (TEXT_FIELDS.has(field)) data[field] = entityText(entity);
+                    else data[field] = entityNumber(entity);
+                }
 
-                // Every Advanced Settings field, matched generically by entity ID
-                // rather than one if-line per field (see ADVANCED_SETTINGS_GROUPS).
-                if (id.startsWith('number.') || id.startsWith('switch.')) {
-                    const entity = id.split('.')[1];
-                    for (const group of ADVANCED_SETTINGS_GROUPS) {
-                        const field = group.fields.find((f) => f.entity === entity);
-                        if (!field) continue;
-                        data.adv = data.adv || {};
-                        data.adv[entity] = field.type === 'number' ? parseFloat(state) : state === 'on';
-                        break;
+                // Advanced Settings: match on web object_id (after domain-)
+                const dash = id.indexOf('-');
+                if (dash > 0) {
+                    const domain = id.slice(0, dash);
+                    const objectId = id.slice(dash + 1);
+                    if (domain === 'number' || domain === 'switch') {
+                        for (const group of ADVANCED_SETTINGS_GROUPS) {
+                            const fieldDef = group.fields.find((f) => f.entity === objectId);
+                            if (!fieldDef) continue;
+                            data.adv = data.adv || {};
+                            data.adv[objectId] = fieldDef.type === 'number'
+                                ? entityNumber(entity)
+                                : entityIsOn(entity);
+                            break;
+                        }
                     }
                 }
             });
 
-            if (!data.uptime_seconds) data.uptime_seconds = Math.floor(Date.now() / 1000);
-            if (data.psram_ok === undefined) data.psram_ok = true;
-            
+            if (typeof data.uptime_seconds !== 'number') data.uptime_seconds = 0;
+            // controller_online is a separate diagnostic — WiFi link is implied by
+            // SSID/RSSI from the wifi text/sensor entities (controller_online stays OFF
+            // on this build even while the dashboard is served over WiFi).
+            if (data.wifi_connected === undefined) {
+                data.wifi_connected = !!data.wifi_ssid || typeof data.wifi_rssi === 'number';
+            }
+            if (data.psram_ok === undefined) {
+                const t = (data.psram_status_text || '').toLowerCase();
+                data.psram_ok = !t || t.includes('functional') || t.includes('ok');
+            }
+
             return data;
         }
 
@@ -1440,8 +1606,10 @@
         }
 
         function setGaugeArc(id, radius, percent) {
+            const el = document.getElementById(id);
+            if (!el) return;
             const endAngle = GAUGE_START_ANGLE + (GAUGE_SWEEP * percent) / 100;
-            document.getElementById(id).setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
+            el.setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
         }
 
         // Short tick marks around the outer ring plus small ring labels tucked
@@ -1473,9 +1641,14 @@
 
         function initGaugeTracks() {
             const fullEnd = GAUGE_START_ANGLE + GAUGE_SWEEP;
-            document.getElementById('gaugeTrackOuter').setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
-            document.getElementById('gaugeTrackMiddle').setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
-            document.getElementById('gaugeTrackInner').setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
+            setGaugeArc('gaugeTrackOuter', GAUGE_RADII.outer, 100);
+            // tracks use full sweep via setAttribute on path with full end — keep explicit:
+            const outer = document.getElementById('gaugeTrackOuter');
+            const middle = document.getElementById('gaugeTrackMiddle');
+            const inner = document.getElementById('gaugeTrackInner');
+            if (outer) outer.setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
+            if (middle) middle.setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
+            if (inner) inner.setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
             buildGaugeTicks();
         }
 
@@ -1498,6 +1671,7 @@
             setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(data.ext_temp));
 
             const tempEl = document.getElementById('gaugeTemp');
+            if (!tempEl) return;
             const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
             tempEl.textContent = hasTemp ? `${data.temperature.toFixed(1)}°C` : '--°C';
 
@@ -1505,12 +1679,14 @@
             // center label — matches the LVGL center label's states either way.
             const stateColor = temperatureStateColor(data);
             tempEl.style.color = stateColor;
-            document.getElementById('gaugeArcOuter').style.stroke = stateColor;
+            const arcOuter = document.getElementById('gaugeArcOuter');
+            if (arcOuter) arcOuter.style.stroke = stateColor;
 
-            document.getElementById('gaugeSetpoint').textContent =
-                typeof data.setpoint === 'number' && !isNaN(data.setpoint) ? `Set: ${data.setpoint.toFixed(1)}°C` : 'Set: --°C';
+            setText('gaugeSetpoint',
+                typeof data.setpoint === 'number' && !isNaN(data.setpoint) ? `Set: ${data.setpoint.toFixed(1)}°C` : 'Set: --°C');
 
             const statusEl = document.getElementById('gaugeStatus');
+            if (!statusEl) return;
             if (data.probe_fault) {
                 statusEl.textContent = '⚠ Probe Fault';
                 statusEl.style.color = '#FF453A';
@@ -1531,6 +1707,7 @@
         // problem convention HA uses for its own tile icon coloring.
         function setTileIconState(id, state) {
             const el = document.getElementById(id);
+            if (!el) return;
             el.classList.remove('is-on', 'is-warn', 'is-alert');
             if (state) el.classList.add(state);
         }
@@ -1545,9 +1722,11 @@
 
             const lightEl = document.getElementById('iconLight');
             setTileIconState('iconLight', data.light_on ? 'is-warn' : null);
-            lightEl.title = currentRole === 'operator'
-                ? (data.light_on ? 'Turn light off' : 'Turn light on')
-                : 'Toggle light (login required)';
+            if (lightEl) {
+                lightEl.title = currentRole === 'operator'
+                    ? (data.light_on ? 'Turn light off' : 'Turn light on')
+                    : 'Toggle light (login required)';
+            }
 
             const activeAlarms = [];
             if (data.alarm_high_active) activeAlarms.push('High Temp');
@@ -1556,39 +1735,41 @@
             if (data.alarm_nocool_active) activeAlarms.push('No Cooling');
             if (data.alarm_ice_active) activeAlarms.push('Ice');
             setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : null);
-            document.getElementById('iconAlarms').title = activeAlarms.length ? activeAlarms.join(', ') : 'No active alarms';
+            const alarmsEl = document.getElementById('iconAlarms');
+            if (alarmsEl) alarmsEl.title = activeAlarms.length ? activeAlarms.join(', ') : 'No active alarms';
 
             // Top-right secondary readings, same corner the LVGL screen uses.
-            document.getElementById('gaugeWifi').textContent = data.wifi_connected === false
+            setText('gaugeWifi', data.wifi_connected === false
                 ? '📶 Disconnected'
-                : `📶 ${data.wifi_rssi ?? '--'} dBm`;
-            document.getElementById('gaugeWifi').title = data.wifi_ssid || '';
+                : `📶 ${data.wifi_rssi ?? '--'} dBm`);
+            const wifiEl = document.getElementById('gaugeWifi');
+            if (wifiEl) wifiEl.title = data.wifi_ssid || '';
 
             const uptime = data.uptime_seconds || 0;
             const days = Math.floor(uptime / 86400);
             const hours = Math.floor((uptime % 86400) / 3600);
-            document.getElementById('gaugeUptime').textContent = `⏱ ${days}d ${hours}h`;
+            setText('gaugeUptime', `⏱ ${days}d ${hours}h`);
 
             const fmtReading = (temp, rh) =>
                 (typeof temp === 'number' && !isNaN(temp) && typeof rh === 'number' && !isNaN(rh))
                     ? `${temp.toFixed(1)}°C · ${rh.toFixed(0)}%RH`
                     : '--°C · --%RH';
-            document.getElementById('readingInternal').textContent = fmtReading(data.int_temp, data.int_humidity);
-            document.getElementById('readingExternal').textContent = fmtReading(data.ext_temp, data.ext_humidity);
-            document.getElementById('readingEvaporator').textContent =
-                typeof data.evap_temp === 'number' && !isNaN(data.evap_temp) ? `${data.evap_temp.toFixed(1)}°C` : '--°C';
+            setText('readingInternal', fmtReading(data.int_temp, data.int_humidity));
+            setText('readingExternal', fmtReading(data.ext_temp, data.ext_humidity));
+            setText('readingEvaporator',
+                typeof data.evap_temp === 'number' && !isNaN(data.evap_temp) ? `${data.evap_temp.toFixed(1)}°C` : '--°C');
 
             let rs485Html = '';
             rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;
             rs485Html += `RTD: <span class="status-badge ${data.rs485_rtd_ok ? 'status-ok' : 'status-error'}">${data.rs485_rtd_ok ? '✓' : '✗'}</span>`;
             rs485Html += `RTC: <span class="status-badge ${data.rtc_ok ? 'status-ok' : 'status-error'}">${data.rtc_ok ? '✓' : '✗'}</span>`;
-            document.getElementById('rs485Status').innerHTML = rs485Html;
+            setHtml('rs485Status', rs485Html);
 
             const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
-            document.getElementById('memoryStatus').innerHTML = memHtml;
+            setHtml('memoryStatus', memHtml);
 
             const probeHtml = `SHT31: <span class="status-badge ${data.sht31_ok ? 'status-ok' : 'status-error'}">${data.sht31_ok ? '✓' : '✗'}</span>SHT20: <span class="status-badge ${data.sht20_ok ? 'status-ok' : 'status-error'}">${data.sht20_ok ? '✓' : '✗'}</span>`;
-            document.getElementById('probeStatus').innerHTML = probeHtml;
+            setHtml('probeStatus', probeHtml);
 
             updateHardwarePanel(data);
             updateWifiPanel(data);
@@ -1596,18 +1777,16 @@
             updateAdvancedSettings(data);
 
             // Update settings inputs
-            if (document.getElementById('setpointInput').value === '') {
-                document.getElementById('setpointInput').value = (data.setpoint || 15).toFixed(1);
-            }
-            if (document.getElementById('alarmHighInput').value === '') {
-                document.getElementById('alarmHighInput').value = (data.alarm_high || 3).toFixed(1);
-            }
-            if (document.getElementById('alarmLowInput').value === '') {
-                document.getElementById('alarmLowInput').value = (data.alarm_low || 3).toFixed(1);
-            }
-            if (document.getElementById('compDiffInput').value === '') {
-                document.getElementById('compDiffInput').value = (data.comp_diff || 1).toFixed(1);
-            }
+            const fillIfEmpty = (id, value, fallback) => {
+                const el = document.getElementById(id);
+                if (!el || el.value !== '') return;
+                const n = typeof value === 'number' && !isNaN(value) ? value : fallback;
+                el.value = n.toFixed(1);
+            };
+            fillIfEmpty('setpointInput', data.setpoint, 15);
+            fillIfEmpty('alarmHighInput', data.alarm_high, 3);
+            fillIfEmpty('alarmLowInput', data.alarm_low, 3);
+            fillIfEmpty('compDiffInput', data.comp_diff, 1);
 
             const namedAlarms = [];
             if (data.alarm_high_active) namedAlarms.push('HIGH TEMPERATURE');
@@ -1622,7 +1801,16 @@
             }
             if (data.probe_fault) alertsHtml += '<div class="alert alert-danger">⚠️ Probe fault detected. Fallback mode active.</div>';
             if (data.wifi_connected === false) alertsHtml += '<div class="alert alert-warning">⚠️ WiFi disconnected.</div>';
-            document.getElementById('alerts').innerHTML = alertsHtml || '';
+            const alertsDiv = document.getElementById('alerts');
+            if (alertsDiv) {
+                let statusSlot = document.getElementById('statusAlerts');
+                if (!statusSlot) {
+                    statusSlot = document.createElement('div');
+                    statusSlot.id = 'statusAlerts';
+                    alertsDiv.prepend(statusSlot);
+                }
+                statusSlot.innerHTML = alertsHtml || '';
+            }
         }
 
         // Hardware Config panel — unlike the static help balloons, this one shows
@@ -1630,28 +1818,28 @@
         // exist and are already published (no new firmware work needed).
         function updateHardwarePanel(data) {
             const okBadge = (ok) => `<span class="status-badge ${ok ? 'status-ok' : 'status-error'}">${ok ? '✓ online' : '✗ offline'}</span>`;
-            document.getElementById('hwController').innerHTML = okBadge(data.wifi_connected !== false);
-            document.getElementById('hwWifi').textContent = data.wifi_ssid
+            setHtml('hwController', okBadge(data.wifi_connected !== false));
+            setText('hwWifi', data.wifi_ssid
                 ? `${data.wifi_ssid} · ${data.wifi_rssi ?? '--'} dBm`
-                : '--';
-            document.getElementById('hwIp').textContent = data.ip_address || '--';
-            document.getElementById('hwRs485Relay').innerHTML = okBadge(data.rs485_relay_ok);
-            document.getElementById('hwRs485Rtd').innerHTML = okBadge(data.rs485_rtd_ok);
-            document.getElementById('hwRtc').innerHTML = okBadge(data.rtc_ok);
-            document.getElementById('hwSht31').innerHTML = okBadge(data.sht31_ok);
-            document.getElementById('hwSht20').innerHTML = okBadge(data.sht20_ok);
-            document.getElementById('hwSdCard').innerHTML = okBadge(data.sd_card_ok);
-            document.getElementById('hwChipTemp').textContent =
-                typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--';
-            document.getElementById('hwHeap').textContent = data.heap_free_kb ? `${data.heap_free_kb} KB` : '--';
-            document.getElementById('hwPsram').textContent = data.psram_free_kb ? `${data.psram_free_kb} KB` : '--';
+                : '--');
+            setText('hwIp', data.ip_address || '--');
+            setHtml('hwRs485Relay', okBadge(data.rs485_relay_ok));
+            setHtml('hwRs485Rtd', okBadge(data.rs485_rtd_ok));
+            setHtml('hwRtc', okBadge(data.rtc_ok));
+            setHtml('hwSht31', okBadge(data.sht31_ok));
+            setHtml('hwSht20', okBadge(data.sht20_ok));
+            setHtml('hwSdCard', okBadge(data.sd_card_ok));
+            setText('hwChipTemp',
+                typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--');
+            setText('hwHeap', data.heap_free_kb ? `${data.heap_free_kb} KB` : '--');
+            setText('hwPsram', data.psram_free_kb ? `${data.psram_free_kb} KB` : '--');
         }
 
         function updateWifiPanel(data) {
-            document.getElementById('wifiCurrentSsid').textContent = data.wifi_ssid || '--';
-            document.getElementById('wifiCurrentRssi').textContent =
-                typeof data.wifi_rssi === 'number' ? `${data.wifi_rssi} dBm` : '--';
-            document.getElementById('wifiCurrentIp').textContent = data.ip_address || '--';
+            setText('wifiCurrentSsid', data.wifi_ssid || '--');
+            setText('wifiCurrentRssi',
+                typeof data.wifi_rssi === 'number' ? `${data.wifi_rssi} dBm` : '--');
+            setText('wifiCurrentIp', data.ip_address || '--');
         }
 
         function formatCountdown(seconds) {
@@ -1663,10 +1851,11 @@
 
         function updateTimers(data) {
             const lockout = data.comp_lockout_remaining_sec;
-            document.getElementById('lockoutTimer').textContent =
-                typeof lockout === 'number' && lockout > 0 ? formatCountdown(lockout) : 'Ready';
+            setText('lockoutTimer',
+                typeof lockout === 'number' && lockout > 0 ? formatCountdown(lockout) : 'Ready');
 
             const defrostEl = document.getElementById('defrostTimer');
+            if (!defrostEl) return;
             if (typeof data.defrost_duration_remaining_sec === 'number' && data.defrost_duration_remaining_sec > 0) {
                 defrostEl.textContent = `Defrosting — ${formatCountdown(data.defrost_duration_remaining_sec)} left`;
             } else if (typeof data.defrost_drip_remaining_sec === 'number' && data.defrost_drip_remaining_sec > 0) {
@@ -1682,7 +1871,8 @@
             const alertClass = `alert-${type}`;
             const alertHtml = `<div class="alert ${alertClass}">${message}</div>`;
             const alertsDiv = document.getElementById('alerts');
-            alertsDiv.innerHTML = alertHtml + alertsDiv.innerHTML;
+            if (!alertsDiv) return;
+            alertsDiv.insertAdjacentHTML('beforeend', alertHtml);
         }
 
         // Setting help balloons — click the small "i" icon next to a setting
@@ -1705,19 +1895,16 @@
             }
         });
 
-        // Light toggle — the one control on this page wired to a real endpoint.
-        // ESPHome's web_server exposes POST /switch/<id>/toggle for switch entities,
-        // which relay_light already is (unlike setpoint/alarms/backup below, which
-        // have no exposed endpoint yet and stay as placeholders).
+        // Light toggle — ESPHome 2026.7 matches POST /switch/<friendly name>/toggle
         async function toggleLight() {
             if (currentRole !== 'operator') {
                 showAlert('warning', 'Login required to toggle the light');
                 return;
             }
             const btn = document.getElementById('iconLight');
-            btn.disabled = true;
-            const ok = await postWithFallback('/switch/relay_light/toggle');
-            btn.disabled = false;
+            if (btn) btn.disabled = true;
+            const ok = await postWithFallback(entityActionPath('switch', 'Light Relay', 'toggle'));
+            if (btn) btn.disabled = false;
             if (!ok) {
                 showAlert('error', 'Could not reach the device to toggle the light');
                 return;
@@ -1741,8 +1928,10 @@
                 showAlert('warning', 'PIN must be exactly 4 digits');
                 return;
             }
-            const ok = await postWithFallback(`/text/input_change_pin_web/set?value=${encodeURIComponent(pin)}`);
-            input.value = '';
+            const ok = await postWithFallback(
+                entityActionPath('text', 'Change Touchscreen Access PIN', 'set', `value=${encodeURIComponent(pin)}`)
+            );
+            if (input) input.value = '';
             if (!ok) {
                 showAlert('error', 'Could not reach the device to change the PIN');
                 return;
@@ -1750,17 +1939,18 @@
             showAlert('success', 'Touchscreen PIN updated');
         }
 
-        // Settings update functions (role-protected)
-        // Applies one Operational Settings field via ESPHome's standard
-        // POST /number/<id>/set?value=X, shared by all four Update buttons.
-        async function submitNumberSetting(entityId, inputId, label) {
-            const raw = document.getElementById(inputId).value;
+        // Settings update — ESPHome matches /number/<friendly name>/set
+        async function submitNumberSetting(entityName, inputId, label) {
+            const input = document.getElementById(inputId);
+            const raw = input ? input.value : '';
             const value = parseFloat(raw);
             if (isNaN(value)) {
                 showAlert('warning', `Enter a valid number for ${label}`);
                 return;
             }
-            const ok = await postWithFallback(`/number/${entityId}/set?value=${value}`);
+            const ok = await postWithFallback(
+                entityActionPath('number', entityName, 'set', `value=${value}`)
+            );
             if (!ok) {
                 showAlert('error', `Could not reach the device to update ${label}`);
                 return;
@@ -1770,97 +1960,94 @@
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════
-        // ADVANCED SETTINGS — every remaining tunable/enable parameter, rendered from this
-        // config rather than hand-authored (30 near-identical fields otherwise). Each entry
-        // is either a number: entity (min/max/step + Set button) or a switch: entity
-        // (ON/OFF toggle button). Help text is grounded in the actual control logic in
-        // p4_control.h / esp32-p4-coolroom.yaml, not generic descriptions.
+        // ADVANCED SETTINGS — entity = ESPHome web object_id (after domain-);
+        // name = friendly entity name used in POST URLs (ESPHome 2026.7).
         // ═══════════════════════════════════════════════════════════════════════════════
         const ADVANCED_SETTINGS_GROUPS = [
             {
                 title: 'Compressor & Fallback',
                 fields: [
-                    { type: 'number', entity: 'comp_lockout_min', label: 'Compressor Off-Delay (min)', min: 0, max: 10, step: 1,
+                    { type: 'number', entity: 'compressor_off-delay__min_', name: 'Compressor Off-Delay (min)', label: 'Compressor Off-Delay (min)', min: 0, max: 10, step: 1,
                       help: 'Minimum time the compressor must stay off after switching off before it\u2019s allowed to run again \u2014 protects the compressor motor from rapid on/off cycling ("short cycling").' },
-                    { type: 'switch', entity: 'sw_fallback_enabled', label: 'Sensor Fallback Enabled',
+                    { type: 'switch', entity: 'sensor_fallback_duty-cycle_enabled', name: 'Sensor Fallback Duty-Cycle Enabled', label: 'Sensor Fallback Enabled',
                       help: 'When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle (the two settings below) so cooling continues, degraded, until the probe recovers.' },
-                    { type: 'number', entity: 'fallback_on_min', label: 'Fallback Compressor ON Time (min)', min: 1, max: 30, step: 1,
+                    { type: 'number', entity: 'sensor_fallback_compressor_on_time__min_', name: 'Sensor Fallback Compressor ON Time (min)', label: 'Fallback Compressor ON Time (min)', min: 1, max: 30, step: 1,
                       help: 'While the sensor fallback duty cycle is active, how long the compressor runs during each ON phase.' },
-                    { type: 'number', entity: 'fallback_off_min', label: 'Fallback Compressor OFF Time (min)', min: 1, max: 60, step: 1,
+                    { type: 'number', entity: 'sensor_fallback_compressor_off_time__min_', name: 'Sensor Fallback Compressor OFF Time (min)', label: 'Fallback Compressor OFF Time (min)', min: 1, max: 60, step: 1,
                       help: 'While the sensor fallback duty cycle is active, how long the compressor rests during each OFF phase.' },
                 ],
             },
             {
                 title: 'Defrost',
                 fields: [
-                    { type: 'switch', entity: 'sw_defrost_enabled', label: 'Defrost System Enabled',
+                    { type: 'switch', entity: 'defrost_system_enabled', name: 'Defrost System Enabled', label: 'Defrost System Enabled',
                       help: 'Master switch for the whole defrost system. Turning this off disables scheduled, smart-delta, and dew-point defrost cycles entirely \u2014 only a manual defrost request would still run.' },
-                    { type: 'number', entity: 'defrost_interval_num', label: 'Defrost Interval (min)', min: 60, max: 1440, step: 30,
+                    { type: 'number', entity: 'defrost_interval__min_', name: 'Defrost Interval (min)', label: 'Defrost Interval (min)', min: 60, max: 1440, step: 30,
                       help: 'How often a scheduled defrost cycle runs, measured from the end of the last defrost. The triggers below (smart delta, dew point) can start one earlier if conditions call for it.' },
-                    { type: 'number', entity: 'defrost_duration_num', label: 'Defrost Max Duration (min)', min: 5, max: 60, step: 5,
+                    { type: 'number', entity: 'defrost_max_duration__min_', name: 'Defrost Max Duration (min)', label: 'Defrost Max Duration (min)', min: 5, max: 60, step: 5,
                       help: 'The hard time limit on a defrost cycle \u2014 it always ends by this point even if the evaporator hasn\u2019t reached the termination temperature yet.' },
-                    { type: 'switch', entity: 'sw_defrost_term_temp', label: 'Defrost Early Termination by Temperature',
+                    { type: 'switch', entity: 'defrost_early_termination_by_temperature', name: 'Defrost Early Termination by Temperature', label: 'Defrost Early Termination by Temperature',
                       help: 'When enabled, a defrost cycle can end early once the evaporator (Probe 2) reaches the termination temperature below, instead of always running the full max duration.' },
-                    { type: 'number', entity: 'defrost_end_temp', label: 'Defrost Termination Temp (\u00b0C)', min: 0.0, max: 15.0, step: 0.5,
+                    { type: 'number', entity: 'defrost_termination_temp____c_', name: 'Defrost Termination Temp (°C)', label: 'Defrost Termination Temp (\u00b0C)', min: 0.0, max: 15.0, step: 0.5,
                       help: 'The evaporator temperature that ends a defrost cycle early \u2014 only takes effect if "Defrost Early Termination by Temperature" above is enabled.' },
-                    { type: 'switch', entity: 'sw_defrost_drip', label: 'Defrost Drip-Drain Phase',
+                    { type: 'switch', entity: 'defrost_drip-drain_phase', name: 'Defrost Drip-Drain Phase', label: 'Defrost Drip-Drain Phase',
                       help: 'When enabled, the compressor stays off for a hold period after defrost ends (the time below) to let meltwater drain before cooling resumes.' },
-                    { type: 'number', entity: 'defrost_drip_num', label: 'Defrost Drip Time (min)', min: 0, max: 30, step: 1,
+                    { type: 'number', entity: 'defrost_drip_time__min_', name: 'Defrost Drip Time (min)', label: 'Defrost Drip Time (min)', min: 0, max: 30, step: 1,
                       help: 'How long the compressor is held off after a defrost cycle ends, if the drip/drain phase above is enabled.' },
-                    { type: 'switch', entity: 'sw_smart_defrost', label: 'Smart Defrost (Delta-Triggered)',
+                    { type: 'switch', entity: 'smart_defrost__delta-triggered_', name: 'Smart Defrost (Delta-Triggered)', label: 'Smart Defrost (Delta-Triggered)',
                       help: 'When enabled, a growing temperature gap between the coolroom and evaporator probes (ice build-up narrows heat transfer) can trigger an early defrost, on top of the fixed interval.' },
-                    { type: 'number', entity: 'smart_delta_c', label: 'Smart Defrost Delta Threshold (\u00b0C)', min: 1.0, max: 20.0, step: 0.5,
+                    { type: 'number', entity: 'smart_defrost_delta_threshold____c_', name: 'Smart Defrost Delta Threshold (°C)', label: 'Smart Defrost Delta Threshold (\u00b0C)', min: 1.0, max: 20.0, step: 0.5,
                       help: 'How large the coolroom-to-evaporator temperature gap must get, while the compressor runs, before it counts toward triggering smart defrost.' },
-                    { type: 'number', entity: 'smart_dwell_min', label: 'Smart Defrost Dwell Time (min)', min: 1, max: 120, step: 1,
+                    { type: 'number', entity: 'smart_defrost_dwell_time__min_', name: 'Smart Defrost Dwell Time (min)', label: 'Smart Defrost Dwell Time (min)', min: 1, max: 120, step: 1,
                       help: 'How long that temperature gap must hold above the threshold continuously before smart defrost actually triggers \u2014 avoids reacting to a brief spike.' },
-                    { type: 'switch', entity: 'sw_dew_point_trigger', label: 'Dew Point Early Defrost Trigger',
+                    { type: 'switch', entity: 'dew_point_early_defrost_trigger', name: 'Dew Point Early Defrost Trigger', label: 'Dew Point Early Defrost Trigger',
                       help: 'When enabled, defrost can also start early if the evaporator drops below both freezing and the surrounding air\u2019s dew point (calculated from the internal SHT31) \u2014 the actual physical condition under which frost forms on the coil.' },
                 ],
             },
             {
                 title: 'Alarms',
                 fields: [
-                    { type: 'number', entity: 'alarm_persist_num', label: 'Alarm Persist Time (min)', min: 0, max: 30, step: 1,
+                    { type: 'number', entity: 'alarm_persist_time__min_', name: 'Alarm Persist Time (min)', label: 'Alarm Persist Time (min)', min: 0, max: 30, step: 1,
                       help: 'How long a high or low temperature condition must hold continuously before the alarm actually fires \u2014 filters out brief spikes (e.g. a door opening) from triggering a false alarm.' },
-                    { type: 'number', entity: 'alarm_hysteresis_c', label: 'Alarm Recovery Hysteresis (\u00b0C)', min: 0.1, max: 5.0, step: 0.1,
+                    { type: 'number', entity: 'alarm_recovery_hysteresis____c_', name: 'Alarm Recovery Hysteresis (°C)', label: 'Alarm Recovery Hysteresis (\u00b0C)', min: 0.1, max: 5.0, step: 0.1,
                       help: 'Once a high/low temperature alarm is active, the room must recover back past Setpoint by this many extra degrees before the alarm clears \u2014 prevents the alarm flickering on and off right at the threshold.' },
-                    { type: 'number', entity: 'ice_delta_num', label: 'Ice Alarm Delta (\u00b0C)', min: 0.5, max: 10.0, step: 0.5,
+                    { type: 'number', entity: 'ice_alarm_delta____c_', name: 'Ice Alarm Delta (°C)', label: 'Ice Alarm Delta (\u00b0C)', min: 0.5, max: 10.0, step: 0.5,
                       help: 'If the gap between the coolroom and evaporator probes shrinks below this, it likely means ice is blocking the coil (reduced airflow makes the two probes read closer together) \u2014 triggers the Ice alarm.' },
-                    { type: 'number', entity: 'no_cool_alarm_num', label: 'No-Cool Alarm Timeout (min)', min: 15, max: 240, step: 15,
+                    { type: 'number', entity: 'no-cool_alarm_timeout__min_', name: 'No-Cool Alarm Timeout (min)', label: 'No-Cool Alarm Timeout (min)', min: 15, max: 240, step: 15,
                       help: 'If the compressor has been running continuously for this long but the room still hasn\u2019t cooled below Setpoint + half the Compressor Hysteresis, it likely means the refrigeration system has failed \u2014 triggers the No-Cooling alarm.' },
-                    { type: 'switch', entity: 'sw_siren_enabled', label: 'Alarm Siren Enabled',
+                    { type: 'switch', entity: 'alarm_siren_enabled', name: 'Alarm Siren Enabled', label: 'Alarm Siren Enabled',
                       help: 'Whether the physical siren relay sounds when any alarm is active. Alarms and the dashboard/touchscreen banners still work either way \u2014 this only controls the audible siren.' },
-                    { type: 'number', entity: 'startup_grace_min', label: 'Startup Alarm Grace Floor (min)', min: 0, max: 60, step: 1,
+                    { type: 'number', entity: 'startup_alarm_grace_floor__min_', name: 'Startup Alarm Grace Floor (min)', label: 'Startup Alarm Grace Floor (min)', min: 0, max: 60, step: 1,
                       help: 'Alarms are always suppressed for at least this long after boot, to give sensors and the control loop time to settle. If the room hasn\u2019t reached Setpoint by then, the grace period actually extends further (up to a fixed 4-hour safety ceiling) rather than false-alarming mid-pulldown.' },
-                    { type: 'number', entity: 'defrost_grace_min', label: 'Post-Defrost Alarm Grace (min)', min: 0, max: 60, step: 1,
+                    { type: 'number', entity: 'post-defrost_alarm_grace__min_', name: 'Post-Defrost Alarm Grace (min)', label: 'Post-Defrost Alarm Grace (min)', min: 0, max: 60, step: 1,
                       help: 'Alarms are suppressed for this long after each defrost cycle ends, since the room is briefly warmer than usual while it re-cools \u2014 avoids a false High Temperature alarm every defrost cycle.' },
                 ],
             },
             {
                 title: 'Door',
                 fields: [
-                    { type: 'switch', entity: 'sw_door_sensor_enabled', label: 'Door Sensor Enabled',
+                    { type: 'switch', entity: 'door_sensor_enabled', name: 'Door Sensor Enabled', label: 'Door Sensor Enabled',
                       help: 'Whether the door reed switch is monitored for the Door Open alarm. Disable only if the sensor is disconnected or faulty \u2014 this does not affect the door-triggered light, which has its own enable switch below.' },
-                    { type: 'switch', entity: 'door_sensor_mode_nc_no', label: 'Door Sensor Mode: NC (on) / NO (off)',
+                    { type: 'switch', entity: 'door_sensor_mode__nc_or_no_', name: 'Door Sensor Mode (NC or NO)', label: 'Door Sensor Mode: NC (on) / NO (off)',
                       help: 'Matches the reed switch\u2019s wiring: Normally Closed (reads closed when the door is shut) or Normally Open (opposite). Set this wrong and open/closed will read backwards.' },
-                    { type: 'switch', entity: 'sw_door_light_enabled', label: 'Door-Triggered Light Enabled',
+                    { type: 'switch', entity: 'door-triggered_light_enabled', name: 'Door-Triggered Light Enabled', label: 'Door-Triggered Light Enabled',
                       help: 'When enabled, opening the door turns the cabinet light on and closing it turns the light off \u2014 independent of the Door Sensor Enabled alarm switch above.' },
-                    { type: 'number', entity: 'door_alarm_delay_num', label: 'Door Alarm Delay (s)', min: 0, max: 300, step: 10,
+                    { type: 'number', entity: 'door_alarm_delay__s_', name: 'Door Alarm Delay (s)', label: 'Door Alarm Delay (s)', min: 0, max: 300, step: 10,
                       help: 'How long the door can stay open before the Door Open alarm fires \u2014 a short grace window for normal staff access.' },
                 ],
             },
             {
                 title: 'Probe Calibration & Enable',
                 fields: [
-                    { type: 'number', entity: 'probe1_offset_c', label: 'Probe 1 (Coolroom) Calibration Offset (\u00b0C)', min: -10, max: 10, step: 0.1,
+                    { type: 'number', entity: 'probe_1__coolroom__calibration_offset____c_', name: 'Probe 1 (Coolroom) Calibration Offset (°C)', label: 'Probe 1 (Coolroom) Calibration Offset (\u00b0C)', min: -10, max: 10, step: 0.1,
                       help: 'Manual fine-tuning offset added to the Coolroom Temperature (Primary Control) reading, for correcting against a reference thermometer. Affects every downstream use of that reading \u2014 control, alarms, logs, display.' },
-                    { type: 'number', entity: 'probe2_offset_c', label: 'Probe 2 (Evaporator) Calibration Offset (\u00b0C)', min: -10, max: 10, step: 0.1,
+                    { type: 'number', entity: 'probe_2__evaporator__calibration_offset____c_', name: 'Probe 2 (Evaporator) Calibration Offset (°C)', label: 'Probe 2 (Evaporator) Calibration Offset (\u00b0C)', min: -10, max: 10, step: 0.1,
                       help: 'Same idea as the Probe 1 offset, but for the Evaporator Temperature reading.' },
-                    { type: 'switch', entity: 'sw_probe2_enabled', label: 'Evaporator Probe (Probe 2) Enabled',
+                    { type: 'switch', entity: 'evaporator_probe__probe_2__enabled', name: 'Evaporator Probe (Probe 2) Enabled', label: 'Evaporator Probe (Probe 2) Enabled',
                       help: 'Whether the evaporator RTD probe is read at all. Several features depend on it \u2014 smart defrost, ice alarm, temperature-based defrost termination \u2014 and fall back to time-based behavior alone when this is off.' },
-                    { type: 'switch', entity: 'sw_humidity_internal_enabled', label: 'Internal SHT31 Sensor Enabled',
+                    { type: 'switch', entity: 'internal_sht31_sensor_enabled', name: 'Internal SHT31 Sensor Enabled', label: 'Internal SHT31 Sensor Enabled',
                       help: 'Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point defrost trigger needs this enabled to work.' },
-                    { type: 'switch', entity: 'sw_humidity_external_enabled', label: 'External SHT20 Sensor Enabled',
+                    { type: 'switch', entity: 'external_sht20_sensor_enabled', name: 'External SHT20 Sensor Enabled', label: 'External SHT20 Sensor Enabled',
                       help: 'Whether the external (ambient) SHT20 temperature/humidity sensor is read.' },
                 ],
             },
@@ -1868,11 +2055,14 @@
 
         function renderAdvancedSettings() {
             const container = document.getElementById('advancedSettingsContent');
+            if (!container) return;
             container.innerHTML = ADVANCED_SETTINGS_GROUPS.map((group) => {
                 const fieldsHtml = group.fields.map((f) => {
                     const helpId = `help-adv-${f.entity}`;
                     const helpIcon = `<button type="button" class="help-icon" onclick="toggleHelp(event, '${helpId}')" aria-label="What does ${f.label} do?">i</button>`;
                     const helpPopover = `<div id="${helpId}" class="help-popover hidden">${f.help}</div>`;
+                    const nameEsc = (f.name || f.label).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const labelEsc = f.label.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                     if (f.type === 'number') {
                         const inputId = `adv_${f.entity}`;
                         return `
@@ -1882,7 +2072,7 @@
                                     ${helpIcon}
                                 </div>
                                 <input type="number" id="${inputId}" min="${f.min}" max="${f.max}" step="${f.step}">
-                                <button onclick="submitNumberSetting('${f.entity}', '${inputId}', '${f.label.replace(/'/g, "\\'")}')">Set</button>
+                                <button onclick="submitNumberSetting('${nameEsc}', '${inputId}', '${labelEsc}')">Set</button>
                                 ${helpPopover}
                             </div>`;
                     }
@@ -1893,7 +2083,7 @@
                                 <label>${f.label}</label>
                                 ${helpIcon}
                             </div>
-                            <button id="${btnId}" class="adv-switch-btn" onclick="toggleAdvancedSwitch('${f.entity}', '${f.label.replace(/'/g, "\\'")}')">--</button>
+                            <button id="${btnId}" class="adv-switch-btn" onclick="toggleAdvancedSwitch('${nameEsc}', '${labelEsc}')">--</button>
                             ${helpPopover}
                         </div>`;
                 }).join('');
@@ -1901,12 +2091,12 @@
             }).join('');
         }
 
-        async function toggleAdvancedSwitch(entityId, label) {
+        async function toggleAdvancedSwitch(entityName, label) {
             if (currentRole !== 'operator') {
                 showAlert('warning', `Login required to change ${label}`);
                 return;
             }
-            const ok = await postWithFallback(`/switch/${entityId}/toggle`);
+            const ok = await postWithFallback(entityActionPath('switch', entityName, 'toggle'));
             if (!ok) {
                 showAlert('error', `Could not reach the device to change ${label}`);
                 return;
@@ -1944,7 +2134,7 @@
                 showAlert('warning', 'Insufficient permissions to change setpoint');
                 return;
             }
-            submitNumberSetting('setpoint', 'setpointInput', 'Setpoint');
+            submitNumberSetting('Setpoint (°C)', 'setpointInput', 'Setpoint');
         }
 
         async function updateAlarmHigh() {
@@ -1952,7 +2142,7 @@
                 showAlert('warning', 'Insufficient permissions to change alarms');
                 return;
             }
-            submitNumberSetting('alarm_high_delta', 'alarmHighInput', 'Alarm High Delta');
+            submitNumberSetting('High Temp Alarm Delta (°C)', 'alarmHighInput', 'Alarm High Delta');
         }
 
         async function updateAlarmLow() {
@@ -1960,7 +2150,7 @@
                 showAlert('warning', 'Insufficient permissions to change alarms');
                 return;
             }
-            submitNumberSetting('alarm_low_delta', 'alarmLowInput', 'Alarm Low Delta');
+            submitNumberSetting('Low Temp Alarm Delta (°C)', 'alarmLowInput', 'Alarm Low Delta');
         }
 
         async function updateCompDiff() {
@@ -1968,7 +2158,7 @@
                 showAlert('warning', 'Insufficient permissions to change hysteresis');
                 return;
             }
-            submitNumberSetting('compressor_differential', 'compDiffInput', 'Compressor Hysteresis');
+            submitNumberSetting('Compressor Differential (°C)', 'compDiffInput', 'Compressor Hysteresis');
         }
 
         // Admin functions (operator-only). These remain placeholders — no backing
@@ -1979,7 +2169,7 @@
                 showAlert('danger', 'Login required to backup settings');
                 return;
             }
-            const ok = await postWithFallback('/button/btn_sd_backup/press');
+            const ok = await postWithFallback(entityActionPath('button', 'Backup All Settings to SD', 'press'));
             if (!ok) {
                 showAlert('error', 'Could not reach the device to back up settings');
                 return;
@@ -1998,7 +2188,7 @@
             if (!confirm('Restore settings from the SD card backup? This overwrites every current control parameter with whatever was last backed up.')) {
                 return;
             }
-            const ok = await postWithFallback('/button/btn_sd_restore/press');
+            const ok = await postWithFallback(entityActionPath('button', 'Restore All Settings from SD', 'press'));
             if (!ok) {
                 showAlert('error', 'Could not reach the device to restore settings');
                 return;
@@ -2115,8 +2305,12 @@
             if (!confirm(`Reconnect to "${ssid}"? This drops the current WiFi connection immediately — if the new credentials don't work, the device falls back to its own "CoolroomP4-Setup" access point.`)) {
                 return;
             }
-            const ok1 = await postWithFallback(`/text/input_wifi_new_ssid/set?value=${encodeURIComponent(ssid)}`);
-            const ok2 = await postWithFallback(`/text/input_wifi_new_password/set?value=${encodeURIComponent(password)}`);
+            const ok1 = await postWithFallback(
+                entityActionPath('text', 'New WiFi SSID', 'set', `value=${encodeURIComponent(ssid)}`)
+            );
+            const ok2 = await postWithFallback(
+                entityActionPath('text', 'New WiFi Password (submit after SSID)', 'set', `value=${encodeURIComponent(password)}`)
+            );
             if (!ok1 || !ok2) {
                 showAlert('error', 'Could not reach the device to submit the new WiFi network');
                 return;
@@ -2133,7 +2327,32 @@
         // Initialize and start auto-refresh (no Chart.js CDN — was slowing first load)
         initGaugeTracks();
         initializeRole();
-        setInterval(fetchStatus, 10000);
+        const buildEl = document.getElementById('dashBuildId');
+        if (buildEl) buildEl.textContent = DASHBOARD_BUILD_ID;
+        const loginPassword = document.getElementById('loginPassword');
+        if (loginPassword) {
+            loginPassword.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+        }
+        const loginUsername = document.getElementById('loginUsername');
+        if (loginUsername) {
+            loginUsername.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const pw = document.getElementById('loginPassword');
+                    if (pw) pw.focus();
+                }
+            });
+        }
+        startEventStream();
+        // SSE pushes updates; this interval only re-renders if the stream is quiet
+        // and retries the EventSource when it drops.
+        setInterval(() => {
+            if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
+                startEventStream();
+            }
+            fetchStatus();
+        }, 10000);
         fetchStatus();
     </script>
 </body>

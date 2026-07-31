@@ -3959,8 +3959,7 @@ lvgl:
       scrollable: true
       scrollbar_mode: "AUTO"
       widgets:
-        # Header fits 1024 width: time | date | wifi icon (cyan when linked).
-        # scrollable so a long date string never permanently clips.
+        # Header: time left; date same size/colour just left of WiFi icon.
         - obj:
             x: 0
             y: 0
@@ -3970,27 +3969,27 @@ lvgl:
             border_width: 0
             radius: 0
             pad_all: 0
-            scrollable: true
-            scrollbar_mode: "AUTO"
+            scrollable: false
+            scrollbar_mode: "OFF"
             widgets:
               - label:
                   id: lbl_clock
                   x: 12
                   y: 8
-                  width: 160
+                  width: 180
                   height: 40
                   text: "--:--"
                   text_font: font_large
                   text_color: col_text
               - label:
                   id: lbl_date
-                  x: 180
-                  y: 14
-                  width: 720
-                  height: 28
+                  x: 700
+                  y: 8
+                  width: 200
+                  height: 40
                   text: "--/--/----"
-                  text_font: font_medium
-                  text_color: col_subtext
+                  text_font: font_large
+                  text_color: col_text
               - label:
                   id: lbl_wifi_hdr
                   x: 920
@@ -4007,6 +4006,7 @@ lvgl:
         # evenly distributed across the full content height (below the
         # 48px header, above the 552px tab bar -- 504px of usable height)
         # with equal ~41px gaps above, between, and below all 4.
+        # radius 0 + no shadow — no circular chrome around icons.
         # Compressor button
         - button:
             x: 6
@@ -4014,8 +4014,10 @@ lvgl:
             width: 75
             height: 75
             bg_opa: TRANSP
-            radius: 38
+            radius: 0
             border_width: 0
+            shadow_width: 0
+            pad_all: 0
             widgets:
               - led:
                   id: led_compressor
@@ -4050,8 +4052,10 @@ lvgl:
             width: 75
             height: 75
             bg_opa: TRANSP
-            radius: 38
+            radius: 0
             border_width: 0
+            shadow_width: 0
+            pad_all: 0
             widgets:
               - led:
                   id: led_defrost
@@ -4086,8 +4090,10 @@ lvgl:
             width: 75
             height: 75
             bg_opa: TRANSP
-            radius: 38
+            radius: 0
             border_width: 0
+            shadow_width: 0
+            pad_all: 0
             widgets:
               - led:
                   id: led_light
@@ -4118,8 +4124,10 @@ lvgl:
             width: 75
             height: 75
             bg_opa: TRANSP
-            radius: 38
+            radius: 0
             border_width: 0
+            shadow_width: 0
+            pad_all: 0
             widgets:
               - led:
                   id: led_alarm_hi
