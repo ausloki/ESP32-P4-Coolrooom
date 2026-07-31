@@ -184,6 +184,13 @@ On the completion of ANY task, sub-task, or feature, you MUST execute the follow
 
 This workflow is mandatory after every code or documentation change, no exceptions.
 
+0. **Compile + NVS-safe flash** (firmware/dashboard changes):
+  - Embed dashboard if HTML changed: `python3 scripts/embed_dashboard.py`
+  - Coverage check: `.venv/bin/python tools/check_dashboard_coverage.py`
+  - Compile: `./tools/esphome_compile.sh esp32-p4-coolroom.yaml`
+  - Flash with `./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX` (or OTA to IP).
+    **Do not** use plain `esphome upload` over USB — it erases NVS settings.
+  - Optional live reboot-survival smoke: `.venv/bin/python tools/test_settings_persistence.py --host <ip>`
 1. Update code-review graph:
   - `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph update --repo .`
   - `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph status`
@@ -198,8 +205,10 @@ This workflow is mandatory after every code or documentation change, no exceptio
 
 If any step fails, task closeout is blocked until fixed.
 
-### 1. Compilation & Code Review
-* Compile firmware and verify zero errors/warnings: `esphome compile esp32-p4-coolroom.yaml`
+### 1. Compilation, Flash & Code Review
+* Compile firmware and verify zero errors/warnings: `./tools/esphome_compile.sh esp32-p4-coolroom.yaml`
+* Flash with `./tools/esphome_flash.sh` (NVS-preserving) or OTA — never plain USB `esphome upload`
+* Run `.venv/bin/python tools/check_dashboard_coverage.py` when entities/globals change
 * Review RAM/Flash metrics — ensure RAM remains under 25% and the app image remains comfortably below the 7 MB OTA-slot ceiling (soft target < 6.0 MB)
 * Generate code-review graph: Create a mermaid.js architecture graph detailing the updated logic, state changes, or data flow
   - Run: `tools/code_review_graph_cli.sh` (or equivalent tool)
@@ -241,6 +250,8 @@ If any step fails, task closeout is blocked until fixed.
 
 Before marking a task complete, verify ALL of the following:
 - [ ] Code compiles with zero errors/warnings
+- [ ] Device flashed with NVS-preserving method (`tools/esphome_flash.sh` or OTA)
+- [ ] `tools/check_dashboard_coverage.py` clean when entities/globals changed
 - [ ] RAM usage reported (should be ≤ 25%)
 - [ ] Flash usage reported (should be ≤ 20%)
 - [ ] All relevant reference files updated

@@ -81,6 +81,14 @@ When firmware changes, **always update in the same commit**:
 
 This workflow is mandatory after every code or documentation change, no exceptions.
 
+0. **Compile + NVS-safe flash** (firmware/dashboard changes):
+	- Embed dashboard if HTML changed: `python3 scripts/embed_dashboard.py`
+	- Coverage check: `.venv/bin/python tools/check_dashboard_coverage.py`
+	- Compile: `./tools/esphome_compile.sh esp32-p4-coolroom.yaml`
+	- Flash with `./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX`
+	  (or OTA to the device IP). **Do not** use plain `esphome upload` over USB —
+	  that writes `firmware.factory.bin` from `0x0` and erases NVS settings.
+	- Optional live reboot-survival smoke: `.venv/bin/python tools/test_settings_persistence.py --host <ip>`
 1. Update code-review graph:
 	- `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph update --repo .`
 	- `/Volumes/Scratch/Documents/ESP32-P4-Coolroom/.venv/bin/python -m code_review_graph status`

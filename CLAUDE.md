@@ -64,6 +64,36 @@ factory image (needed after a partition-table change).
 When testing anything persistence-related, reboot the device rather than reflashing —
 otherwise a serial flash will look exactly like a persistence bug.
 
+## Closeout Addition: Compile + Flash (mandatory)
+
+Firmware/dashboard closeout is not complete until a **fresh compile and an NVS-safe
+flash** have both succeeded. Do not stop at "compiled OK" or "committed".
+
+```bash
+# 1) If assets/dashboard.html changed:
+python3 scripts/embed_dashboard.py
+
+# 2) Coverage / persistence contract (entities + NVS staging list):
+.venv/bin/python tools/check_dashboard_coverage.py
+
+# 3) Compile:
+./tools/esphome_compile.sh esp32-p4-coolroom.yaml
+
+# 4) Flash — NEVER plain `esphome upload` over USB (erases NVS):
+./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX
+# or OTA: .venv/bin/esphome upload esp32-p4-coolroom.yaml --device <ip>
+
+# 5) Optional live reboot-survival smoke (LAN, no secrets):
+.venv/bin/python tools/test_settings_persistence.py --host <device-ip>
+
+# 6) Graph + docs + compact commit (existing routine)
+./tools/code_review_graph_cli.sh update --repo .
+```
+
+Use `tools/test_settings_persistence.py` after any change that touches restoring globals,
+`persist_config_to_nvs`, or flash tooling. Prefer a **reboot** over a reflash when judging
+whether settings stick.
+
 ## Closeout Addition: Dashboard Coverage & Persistence Check
 
 The web settings UI is a **hand-maintained** JavaScript array

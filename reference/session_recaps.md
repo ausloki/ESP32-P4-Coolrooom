@@ -4,6 +4,45 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 (Night) — Live Persistence Proof + Closeout Now Requires Compile/Flash
+
+**Session scope**: Prove toggles/settings survive reboot on the live board, then make
+compile + NVS-safe flash a mandatory closeout step going forward.
+
+### Live proof
+
+`tools/test_settings_persistence.py` flips a representative set over the open LAN REST
+API, reboots via **Restart Controller**, then verifies. Result: **10/10 PASS** —
+
+- switches: ntfy, HA API, Door Sensor, Audio Alerts, Ice Detection
+- numbers: Setpoint, Compressor Off-Delay, Probe 1 offset
+- select: High Temp Alarm Priority
+- text: ntfy Topic
+
+So the firmware persistence path is sound. The earlier "ntfy won't stay off" report was
+the USB factory flash erasing NVS (previous recap), not a save bug.
+
+Note: template number/text web state can lag ~25s while `persist_config_to_nvs` is busy;
+globals update immediately. The smoke test waits for NVS settle, not publish lag.
+
+### Closeout policy change
+
+Compile + NVS-safe flash is now step 0 of the mandatory closeout in:
+
+- `CLAUDE.md` (new "Compile + Flash" section)
+- `.github/copilot-instructions.md`
+- `copilot-instructions.md` (checklist includes flash + coverage checker)
+
+Commands: `./tools/esphome_compile.sh` then `./tools/esphome_flash.sh` (or OTA). Plain
+USB `esphome upload` remains forbidden for routine flashes.
+
+### Artifacts
+
+- `tools/test_settings_persistence.py` — live reboot-survival smoke (no secrets)
+- Defaults restored after the test (ntfy off, topic `sacor-coolroom`, setpoint 2.0, etc.)
+
+---
+
 ## 2026-07-31 (Night) — Settings "Not Persisting" Was the Flash Method Erasing NVS
 
 **Session scope**: Cory reported ntfy re-enabling itself after repeatedly disabling it, and
