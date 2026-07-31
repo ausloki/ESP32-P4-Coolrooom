@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-31  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** Flashed config hash **`0xfa32a15e`** (dashboard build `20260731-2209`). Closeout
-graph updated; compact commit pending/complete in same pass.
+**Status:** Flashed config hash **`0xfa32a15e`** (dashboard build `20260731-2209`). Graph
+updated; compact commit **`a61542e`**.
 
 ## Working well
 
