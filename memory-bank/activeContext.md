@@ -1,26 +1,25 @@
 # Active Context — Current Session State
 
-**Date:** 2026-07-31  
+**Date:** 2026-08-01  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** Persistence live-verified (10/10 settings survived reboot). Closeout now
-requires compile + NVS-safe flash. Use `./tools/esphome_flash.sh`, never plain USB
-`esphome upload`.
+**Status:** Core hardware checks confirmed by Cory (HA entities, LVGL header, bell mute,
+door reed GPIO46). Persistence live-verified earlier. Closeout requires compile +
+NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome upload`).
 
 ## Working well
 
 - Display/touch, WiFi, dashboard at `/` with SSE live data
-- Soft-mute + HA opt-in; door reed on **GPIO46** (P1-7)
+- Soft-mute + HA opt-in; door reed on **GPIO46** (P1-7) — confirmed on glass
+- HA shows entities (after reload); LVGL date left / 12h time right — confirmed
 - Settings persistence across **reboot** confirmed live
 - Coverage checker + persist-script staging check green
 
-## Verify on hardware
+## Still to verify / open
 
-1. Header: date left, 12h AM/PM time right
-2. Bell mute: red + still; new alarm type re-jiggles
-3. Wireless → Home Assistant API Enabled (default OFF) — turn on before adding to HA
-4. Probes tab live Raw/Offset/Corrected (raw needs RTD)
-5. Door reed on GPIO46: wire across P1 pins 7–8
-6. After any USB flash: confirm settings still present (or re-apply + Backup to SD)
+1. Optional: second alarm type while muted → jiggle resumes
+2. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
+3. Web: no pink alarm strip above Coolroom Status (spot-check)
+4. After any USB flash: confirm settings still present (or re-apply + Backup to SD)
 
 ## Leave for later
 

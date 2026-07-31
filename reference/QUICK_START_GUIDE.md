@@ -66,10 +66,12 @@ not an oversight. Full explanation: User Manual §4.11. The web dashboard also c
 with no touchscreen equivalent: **Hardware**, **Wireless**, and **Events** (live alarm/fault
 log as it happens).
 
-**Door Sensor Enabled is the alarm only.** Cabinet light-on-open is **Door-Triggered Light
-Enabled** (§4.6). The home light icon animates only while the light relay is actually on —
-tap it to toggle the light manually (when Light Relay Enabled is on). Snowflake and flame
-are status-only; tap the bell to soft-mute the siren (bell stays red, stops jiggling;
+**Door Sensor Enabled is the master for the reed.** Door-open alarm and Door-Triggered
+Light both require it. Enabling Door-Triggered Light turns the sensor on if needed;
+turning the sensor off turns Door-Triggered Light off too. The home light icon animates
+only while the light relay is actually on — tap it to toggle the light manually (when
+Light Relay Enabled is on). Snowflake and flame are status-only; tap the bell to soft-mute
+the siren (bell stays red, stops jiggling;
 a new alarm type re-animates).
 
 **Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/7 — not the
@@ -113,8 +115,8 @@ suffer freeze damage a little below 0 °C.
 | **Ice Alarm Delta** | `15 °C` (default) | Large coolroom−evap gap while cooling = iced coil (Precision polarity). Raise toward 18–20 if you get false alarms during heavy pull-down; enable Ice Detection + leave Dwell at 10 min. |
 | **Ice Alarm Dwell** | `10 min` (default) | Condition must hold this long before the alarm fires. |
 | **No-Cool Alarm Timeout** | `45 min` (tighter than default 60) | Stone fruit is high-value enough to justify catching a refrigeration failure a bit faster. |
-| **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. |
-| **Door-Triggered Light Enabled** | `On` (default) | Convenient for staff picking/sorting fruit — light comes on automatically while the door's open. |
+| **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. Required if you want Door-Triggered Light. |
+| **Door-Triggered Light Enabled** | `On` | Convenient for staff picking/sorting fruit — light comes on automatically while the door's open. Turns Door Sensor Enabled on if it was off. |
 | **Door Alarm Delay** | `300 s` (default) | Fine for routine loading/unloading; shorten if the room should never be open long. |
 | **Internal/External Humidity Sensors** | `On` (default) | Monitor toward a target ~90–95% RH — remember this controller only *reports* humidity, it doesn't control it (User Manual §4.7). Pair with your own humidification setup if the room runs dry. |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |

@@ -2417,11 +2417,11 @@
                 title: 'Door',
                 fields: [
                     { type: 'switch', entity: 'door_sensor_enabled', name: 'Door Sensor Enabled', label: 'Door Sensor Enabled',
-                      help: 'Whether the door reed switch is monitored for the Door Open alarm. This does NOT control the cabinet light — use Door-Triggered Light Enabled below for that. Disable only if the sensor is disconnected or faulty.' },
+                      help: 'Master switch for the door reed. Enables the Door Open alarm (and is required for Door-Triggered Light). Turning this off also turns Door-Triggered Light off. Disable only if the sensor is disconnected or faulty.' },
                     { type: 'switch', entity: 'door_sensor_mode__nc_or_no_', name: 'Door Sensor Mode (NC or NO)', label: 'Door Sensor Mode: NC (on) / NO (off)',
                       help: 'Matches the reed switch\u2019s wiring: Normally Closed (reads closed when the door is shut) or Normally Open (opposite). Set this wrong and open/closed will read backwards.' },
                     { type: 'switch', entity: 'door-triggered_light_enabled', name: 'Door-Triggered Light Enabled', label: 'Door-Triggered Light Enabled',
-                      help: 'When enabled, opening the door turns the cabinet light on and closing it turns the light off — independent of Door Sensor Enabled above. The home-screen light icon only animates while the light relay is actually on.' },
+                      help: 'When enabled, opening the door turns the cabinet light on and closing it turns the light off. Requires Door Sensor Enabled — turning this on auto-enables the sensor; turning the sensor off turns this off.' },
                     { type: 'number', entity: 'door_alarm_delay__s_', name: 'Door Alarm Delay (s)', label: 'Door Alarm Delay (s)', min: 0, max: 300, step: 10,
                       help: 'How long the door can stay open before the Door Open alarm fires \u2014 a short grace window for normal staff access.' },
                 ],

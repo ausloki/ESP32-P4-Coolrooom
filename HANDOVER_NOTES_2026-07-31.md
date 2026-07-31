@@ -6,18 +6,17 @@ firmware closeout. Use `./tools/esphome_flash.sh`, never plain USB `esphome uplo
 
 ## Resume checklist
 
-1. Confirm after flash: LVGL header shows **date left**, **12h time right**.
-2. With an alarm active: bell jiggles red → tap → still red, no jiggle → clear condition →
-   grey; or fire a *second* alarm type while muted → jiggle resumes.
-3. Web: Coolroom Status shows alarms on the gauge; **no pink strip** above it.
-4. Wireless tab (after **Login**): **Home Assistant API Enabled** — far-right "Home
-   Assistant" panel (currently **ENABLED** on the live board). If HA shows the device with
-   **no entities**, that's an HA-side stale entry (added while the gate was off): Reload the
-   ESPHome integration, or delete + re-add by IP `192.168.37.237:6053`. The device serves
-   149 entities — verify with `tools/list_ha_entities.py --host <ip>`.
-5. Probes tab (operator): Raw / Offset / Corrected table (raw stays `--` until RTD online).
-6. **Door reed is now GPIO46 = header `P1` pin 7**, ground return on `P1` pin 8 (adjacent).
+Verified on hardware 2026-08-01:
+1. ✅ LVGL header: **date left**, **12h time** right.
+2. ✅ Alarm bell: tap stops jiggle, stays red while alarm active.
+3. ✅ Home Assistant entities populated (after reload / re-add).
+4. ✅ Door reed on **GPIO46 = P1 pin 7**, return on P1 pin 8.
+
+Still open:
+5. Web: Coolroom Status shows alarms on the gauge; **no pink strip** above it (spot-check).
+6. Probes tab (operator): Raw / Offset / Corrected table (raw stays `--` until RTD online).
 7. Settings survive **reboot** (live-tested). They do **not** survive a USB factory flash.
+8. Optional: fire a *second* alarm type while muted → confirm jiggle resumes.
 
 ## Bench (unchanged)
 

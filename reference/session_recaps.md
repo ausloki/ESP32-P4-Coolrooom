@@ -4,6 +4,44 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Morning) — Door Light Requires Door Sensor
+
+**Session scope**: Couple Door-Triggered Light to Door Sensor Enabled — light without
+the reed makes no sense.
+
+### Behavior
+
+- Door light only runs when **Door Sensor Enabled** is on (reed `on_state`, boot reconcile).
+- Enabling Door-Triggered Light **auto-enables** the sensor if it was off.
+- Disabling the sensor **forces Door-Triggered Light off** and drops the light relay if held.
+- Factory default for Door-Triggered Light flipped **On → Off** (matches sensor default Off).
+- Boot + SD-restore coerce clears stale NVS/backup combos (light on, sensor off).
+- Info voice door open/close now also gated on the sensor master (same reed path).
+
+### Docs / UI
+
+USER_MANUAL §4.6 table + structogram, QUICK_START, dashboard help, virtual preview updated.
+
+### Closeout
+
+Coverage OK → embed `20260801-0725` → compile `0x3431f0d3` → NVS-safe flash → graph.
+
+---
+
+## 2026-08-01 (Morning) — Hardware Confirmations
+
+Cory confirmed on the live board:
+
+- Home Assistant now shows entities (reload / re-add worked)
+- LVGL header: date left, 12h time right
+- Alarm bell: tap stops jiggle, stays red while condition active
+- Door reed on correct pins (GPIO46 / P1-7–8)
+
+Still open on the resume list: Probes raw table (needs RTD), optional second-alarm
+re-jiggle while muted, web pink-strip spot-check. Bench RS485 / external I2C unchanged.
+
+---
+
 ## 2026-08-01 (Midnight) — HA "No Entities" Was Home-Assistant-Side, Not the Device
 
 **Session scope**: Cory reported (a) still can't find the web HA enable/disable toggle,

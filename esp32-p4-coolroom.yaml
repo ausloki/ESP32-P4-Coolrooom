@@ -332,6 +332,11 @@ esphome:
         - lambda: |-
             ESP_LOGI("audio", "Speaker volume applied from NVS: %.0f%%",
                      id(ctl_audio_volume_pct));
+            // Coerce stale NVS: door light ON with sensor OFF is invalid.
+            if (id(input_door_light_enabled) && !id(input_door_sensor_enabled)) {
+              id(input_door_light_enabled) = false;
+              ESP_LOGW("config", "Door light cleared at boot (sensor was off)");
+            }
     - priority: -150
       then:
         # Settle after mipi_dsi's shared LCD/touch reset (GPIO33) before GT911
@@ -672,8 +677,10 @@ modbus_controller:
               // at boot, the reed sensor's only on_state fires before the board
               // negotiates, so an unconditional turn_off() would leave an open
               // door dark until someone closed it again.
+              // Door light requires Door Sensor Enabled — light alone is nonsense.
               bool light_should_be_on = false;
-              if (id(input_door_light_enabled) && id(ctl_relay_light_enabled)) {
+              if (id(input_door_sensor_enabled) && id(input_door_light_enabled) &&
+                  id(ctl_relay_light_enabled)) {
                   light_should_be_on = id(ctl_door_sensor_mode_is_nc)
                       ? id(door_reed_sensor).state
                       : !id(door_reed_sensor).state;
@@ -1010,11 +1017,10 @@ switch:
       - script.execute: persist_config_to_nvs
     lambda: 'return id(ctl_door_sensor_mode_is_nc);'
 
-  # ── Door-Triggered Light — separate feature: when enabled, opening the
-  # door turns relay_light on, closing it turns relay_light off. Gated
-  # independently of Door Sensor Enabled (§ below) since a site may want the
-  # light behavior without wanting door-open alarms, or vice versa. Defaults
-  # on to preserve this project's previous (unconditional) light behavior.
+  # ── Door-Triggered Light — requires Door Sensor Enabled. Opening the door
+  # turns relay_light on, closing it turns relay_light off. You cannot run the
+  # light feature with the door sensor off (the reed is what drives it). Default
+  # off to match Door Sensor Enabled; enabling light auto-enables the sensor.
   - platform: template
     id: sw_door_light_enabled
     name: "Door-Triggered Light Enabled"
@@ -1026,6 +1032,11 @@ switch:
       sorting_weight: 4
     turn_on_action:
       - lambda: |-
+          // Light without the sensor is nonsense — pull the master on too.
+          if (!id(input_door_sensor_enabled)) {
+            id(input_door_sensor_enabled) = true;
+            ESP_LOGI("config", "Door sensor auto-ENABLED (required for door light)");
+          }
           id(input_door_light_enabled) = true;
           // Apply immediately from the current reed state — otherwise the
           // operator has to open/close the door once before anything moves,
@@ -1566,6 +1577,12 @@ switch:
           // once re-enabled, off a stale timestamp.
           id(ctl_door_open_since_ms) = 0;
           id(ctl_door_alarm_active) = false;
+          // Door light cannot run without the sensor — force it off too.
+          if (id(input_door_light_enabled)) {
+            id(input_door_light_enabled) = false;
+            if (id(relay_light).state) id(relay_light).turn_off();
+            ESP_LOGI("config", "Door-triggered light auto-DISABLED (sensor off)");
+          }
           ESP_LOGI("config", "Door sensor DISABLED");
       - script.execute: persist_config_to_nvs
     lambda: 'return id(input_door_sensor_enabled);'
@@ -2542,24 +2559,21 @@ binary_sensor:
           // If mode is NO (false): x=false→open, x=true→closed
           bool door_is_open = id(ctl_door_sensor_mode_is_nc) ? x : !x;
 
-          // Door-triggered light: independent of the alarm-enable switch
-          // below — a site may want the light without the alarm feature.
-          // Also respects Light Relay Enabled (hardware tab): a disabled
-          // output stays open even when the door opens.
+          // Door features all require Door Sensor Enabled. Light is an
+          // optional add-on on top of that (cannot run with the sensor off).
+          // Also respects Light Relay Enabled (hardware tab).
+          if (!id(input_door_sensor_enabled)) return;
+
           if (id(input_door_light_enabled) && id(ctl_relay_light_enabled)) {
             if (door_is_open) id(relay_light).turn_on();
             else               id(relay_light).turn_off();
           }
 
-          // Info voice: door open/close (independent of door-alarm enable)
+          // Info voice: door open/close (only when door sensor is in use)
           if (door_is_open) id(speak_info_door_open).execute();
           else              id(speak_info_door_closed).execute();
 
-          // Door-open alarm timer: gated on Door Sensor Enabled. Previously
-          // this ran unconditionally regardless of that switch's state —
-          // fixed here so "disabled" genuinely means no alarm tracking.
-          if (!id(input_door_sensor_enabled)) return;
-
+          // Door-open alarm timer.
           if (door_is_open) {
             if (id(ctl_door_open_since_ms) == 0)
               id(ctl_door_open_since_ms) = millis();
@@ -3558,6 +3572,11 @@ button:
             id(ctl_probe2_offset_c) = p2_off;
             id(input_dew_point_trigger_enabled) = dew_trigger_en;
             id(ctl_startup_grace_min) = startup_grace;
+            // Coerce: light without sensor is invalid — drop the light flag.
+            if (door_light_en && !door_en) {
+              door_light_en = false;
+              ESP_LOGW("config", "Restore: door light cleared (sensor was off)");
+            }
             id(input_door_light_enabled) = door_light_en;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
@@ -5359,14 +5378,13 @@ globals:
     restore_value: yes
     initial_value: "false"
 
-  # Gates door_reed_sensor's light-on-open/light-off-close behavior,
-  # independent of input_door_sensor_enabled (which gates the door-open
-  # *alarm*, not the light). Defaults on to preserve this project's
-  # previous unconditional light behavior.
+  # Door light-on-open/off-close. Requires input_door_sensor_enabled — enabling
+  # this switch auto-enables the sensor; disabling the sensor forces this off.
+  # Default off to match Door Sensor Enabled (factory: no door features until fitted).
   - id: input_door_light_enabled
     type: bool
     restore_value: yes
-    initial_value: "true"
+    initial_value: "false"
 
   - id: input_siren_enabled
     type: bool

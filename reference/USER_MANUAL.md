@@ -385,27 +385,28 @@ place updates the other.
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
-| **Door Sensor Enabled** | Master switch for the door-open **alarm**. | On/Off | **Off** | The door alarm does nothing at all until you turn this on — if you have a door sensor fitted, enable it here. Does not affect the door-triggered light below, which has its own independent switch. |
+| **Door Sensor Enabled** | Master switch for the door reed: door-open **alarm**, and a prerequisite for Door-Triggered Light. Turning this **off** also turns Door-Triggered Light off. | On/Off | **Off** | Enable when a door sensor is fitted. Leave off if the reed is disconnected or faulty. |
 | **Door Sensor Mode (NC or NO)** | Tells the controller whether your physical door switch is Normally Closed or Normally Open wiring. | NC or NO | NC | Must match how the door switch is actually wired, or "open" and "closed" will read backwards. |
-| **Door-Triggered Light Enabled** | When on, opening the door turns the cabinet light on; closing it turns the light off — independent of the alarm switch above. Turning it on applies to the door's *current* state immediately. | On/Off | On | Turn off if you'd rather control the cabinet light manually (Home screen light button). The home-screen light icon only animates while the light relay is actually on — toggling Door Sensor Enabled alone will not move it. |
+| **Door-Triggered Light Enabled** | When on (and Door Sensor Enabled is on), opening the door turns the cabinet light on; closing it turns the light off. Turning light on while the sensor is off **auto-enables** the sensor. | On/Off | **Off** | Turn on for automatic cabinet lighting with staff traffic. Use the Home screen light button for manual control instead. |
 | **Door Alarm Delay** | How long the door can stay open before an alarm fires. | 0 – 300 s | 300 s (5 min) | Shorten for rooms where doors should only ever be open briefly; lengthen for rooms with routine long-duration loading. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: Door section**
 > 📷 **Screenshot placeholder — Touchscreen: Settings 6/7**
 
-**Door-triggered light:**
+**Door-triggered light** (requires Door Sensor Enabled):
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│                 Is Door-Triggered Light Enabled?                     │
+│                    Is Door Sensor Enabled?                           │
 ├─────────────────────────────────┬────────────────────────────────────┤
-│ NO — door state never touches    │ YES                                │
-│ the light relay                  │  Door opens → light ON             │
-│                                   │  Door closes → light OFF           │
+│ NO — door never drives the light │ YES                                │
+│ (Door-Triggered Light is forced  │  Is Door-Triggered Light Enabled?  │
+│  off when sensor is disabled)    │  NO → light untouched by door      │
+│                                  │  YES → open ON / close OFF         │
 └─────────────────────────────────┴────────────────────────────────────┘
 ```
 
-**Door alarm** (a separate feature — gated by Door Sensor Enabled, not the light switch above):
+**Door alarm** (also gated by Door Sensor Enabled):
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -710,16 +711,17 @@ bus, and the control logic takes it from there. Without that, a compressor left 
 through a controller restart would keep running — and be shown as running — through the
 off-delay that is supposed to be holding it off.
 
-The light is the one output that isn't simply forced open at startup: if Door-Triggered
-Light is on (§4.6) and the door is already open when the controller comes back, the light
-is switched on to match. Everything else — compressor, defrost, siren — starts open.
+The light is the one output that isn't simply forced open at startup: if Door Sensor and
+Door-Triggered Light are both on (§4.6) and the door is already open when the controller
+comes back, the light is switched on to match. Everything else — compressor, defrost, siren —
+starts open.
 
 > **If the light comes on by itself after a reboot, check the door input first.** With
-> Door-Triggered Light enabled, an open door is *supposed* to light the room. A door switch
-> that isn't fitted or is wired against the Door Sensor Mode setting reads as permanently
-> open, so the light comes on at every startup and stays on. Confirm the reading on the
-> **Door Reed Sensor** row before assuming a fault, and correct the NC/NO setting or the
-> wiring (§4.6).
+> Door Sensor and Door-Triggered Light both enabled, an open door is *supposed* to light the
+> room. A door switch that isn't fitted or is wired against the Door Sensor Mode setting
+> reads as permanently open, so the light comes on at every startup and stays on. Confirm
+> the reading on the **Door Reed Sensor** row before assuming a fault, and correct the NC/NO
+> setting or the wiring (§4.6).
 
 > 📷 **Screenshot placeholder — Web Dashboard: Hardware tab**
 
@@ -737,7 +739,7 @@ is switched on to match. Everything else — compressor, defrost, siren — star
 | Coil visibly frosting between scheduled defrosts | Enable Smart Defrost and/or Dew Point Trigger | §4.3 |
 | Room warms noticeably after every defrost | Turn on Early Termination by Temperature, or shorten Max Duration | §4.2 |
 | Door alarm never fires | Door Sensor Enabled is off by default — check §4.6 | §4.6 |
-| Light is on by itself after every reboot | Door-Triggered Light is doing its job on a door that reads open — an unfitted or miswired door switch reads open permanently. Check the Door Reed Sensor row, the NC/NO setting, or turn Door-Triggered Light off | §4.6, §4.11 |
+| Light is on by itself after every reboot | Door Sensor + Door-Triggered Light are both on and the door reads open — an unfitted or miswired reed reads open permanently. Check Door Reed Sensor, NC/NO, or turn Door-Triggered Light off | §4.6, §4.11 |
 | No push notifications arriving | Confirm ntfy topic subscription (§4.8); confirm WiFi is connected (§4.10) | §4.8, §4.10 |
 | SD card seems to have "given up" | Check for the SD Card Failure push — auto-remount retries every 60s once the card is working again, no reboot needed | §4.9 |
 | Repeated SD failure/recovery pushes for a card that is physically fine | Expected to be gone: this was a firmware fault where an unwritable filename was misread as a dead card. If it still happens, the card really is dropping writes — try a different card | §4.9 |
