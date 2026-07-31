@@ -38,8 +38,22 @@ media_player:
     # Volume maps straight onto the ES8311 volume register, where 0.75 is 0 dB
     # and 1.0 is +32 dB. 0.85 was measured as a good level on the on-board
     # speaker; cap below unity so the amp can't be driven into clipping.
+    # Floor at 0.50 so the web/HA control cannot silence alarm speech entirely.
     volume_initial: 0.85
-    volume_max: 0.9
+    volume_min: 0.50
+    volume_max: 0.90
+    # Keep the NVS-backed % number in sync when HA (or anything else) changes
+    # the media-player volume directly.
+    on_volume:
+      - lambda: |-
+          float pct = x * 100.0f;
+          if (pct < 50.0f) pct = 50.0f;
+          if (pct > 90.0f) pct = 90.0f;
+          if (id(ctl_audio_volume_pct) < pct - 0.5f || id(ctl_audio_volume_pct) > pct + 0.5f) {
+            id(ctl_audio_volume_pct) = pct;
+            ESP_LOGI("audio", "Speaker volume synced from media player: %.0f%%", pct);
+          }
+      - script.execute: persist_config_to_nvs
     announcement_pipeline:
       speaker: i2s_speaker
       format: WAV
@@ -87,6 +101,11 @@ script:
           then:
             - switch.turn_on: audio_pa_enable
             - delay: 60ms
+            # Re-apply the operator setting every play so a mid-session change
+            # (or a media-player restore that raced boot) is always honoured.
+            - media_player.volume_set:
+                id: coolroom_media
+                volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
 
   - id: speak_alarm_high
     mode: queued

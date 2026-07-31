@@ -4,6 +4,29 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 (Night) — Speaker Volume (%) on Web Audio Tab
+
+**Session scope**: Add an operator-facing speaker volume control (was HA-only).
+
+### What changed
+
+- **Speaker Volume (%)** number entity (50–90, step 5, default **85**): NVS global
+  `ctl_audio_volume_pct`, applied via `media_player.volume_set`, staged in
+  `persist_config_to_nvs`, re-applied on boot and before every announcement.
+- `p4_audio.yaml`: `volume_min: 0.50` / `volume_max: 0.90`; `on_volume` syncs HA changes
+  back into the % global so web and HA stay aligned.
+- Web Audio tab field + USER_MANUAL §4.5b / AUDIO_ALERTS.md updated (removed the old
+  “deliberately no web volume” note).
+
+Floor at 50% keeps alarm speech from being silenced by accident; ceiling matches the
+ES8311 clipping limit documented earlier.
+
+### Closeout
+
+Coverage OK → embed `20260731-2347` → compile `0x36f2e280` → NVS-safe flash → graph.
+
+---
+
 ## 2026-07-31 (Night) — Live Persistence Proof + Closeout Now Requires Compile/Flash
 
 **Session scope**: Prove toggles/settings survive reboot on the live board, then make

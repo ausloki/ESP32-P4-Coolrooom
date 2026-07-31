@@ -356,6 +356,7 @@ Spoken phrases use a pre-recorded female English voice on the on-board ES8311 sp
 | Setting | What it does | Default |
 |---|---|---|
 | **Audio Alerts Enabled** | Master on/off for every spoken phrase. | On |
+| **Speaker Volume (%)** | Loudness of spoken alerts (50–90%). Default **85%**. Floored so alarm speech cannot be silenced by accident; capped to avoid amp distortion. Use **Test Speaker** after changing it. | 85% |
 | **Test Audio Alert** *(button)* | Plays a short test line (ignores master off so you can verify hardware). | — |
 | **Speaker Amplifier (diagnostic)** | Raw power control for the amplifier itself. Playback switches it on and off automatically, so leave it alone in normal use — it is there to test the amplifier in isolation or force it quiet. Returns to off after every reboot. | Off |
 | **Speak High / Low Temp Alarm** | Alarm voice when that temperature alarm becomes active. | On |
@@ -370,12 +371,11 @@ The home-screen **bell** soft-mute also suppresses spoken phrases for the curren
 so speech and the jiggle can run again. Flip **Audio Alerts Enabled** off if you want the
 room quiet permanently.
 
-**Volume.** The speaker ships at a level measured as clear on the on-board speaker, and is
-capped so it cannot be driven into distortion. It is adjustable only from Home Assistant
-(the *Coolroom Speaker* media player entity) — there is deliberately no web or touchscreen
-volume control, since the alarm voice is a safety annunciation and should not be turned
-down to inaudible by mistake. Note that the level control is not a linear percentage: on
-this codec 75% is unity gain and anything above roughly 90% clips badly.
+**Volume.** Use **Speaker Volume (%)** on the web Audio tab (default 85%). The scale is
+not a linear percentage of loudness: on this codec ~75% is unity gain and anything above
+roughly 90% clips, so the control is deliberately limited to 50–90%. The same value is
+what Home Assistant sees on the *Coolroom Speaker* media player — changing it in either
+place updates the other.
 
 ---
 

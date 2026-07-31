@@ -164,6 +164,9 @@ substitutions:
   default_probe2_type:         "0"
   default_cal_samples_min:     "10"
   default_cal_samples_max:     "20"
+  # Speaker volume as percent of the ES8311 register scale (50–90). 85 matches
+  # the measured on-board level; the media player clamps to the same window.
+  default_audio_volume_pct:    "85"
   # ── Phase 3: Defrost scheduling & probe health ────────────────────
   defrost_interval_h:  "8"      # hours between defrost cycles
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
@@ -316,6 +319,17 @@ esphome:
     - priority: -100
       then:
         - lambda: id(status_text).publish_state("Booting...");
+    - priority: -95
+      then:
+        # Apply NVS-restored speaker volume after the media player is up. The
+        # speaker platform also restores its own volume; our % setting is the
+        # operator-facing source of truth (web Audio tab / HA sync).
+        - media_player.volume_set:
+            id: coolroom_media
+            volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+        - lambda: |-
+            ESP_LOGI("audio", "Speaker volume applied from NVS: %.0f%%",
+                     id(ctl_audio_volume_pct));
     - priority: -150
       then:
         # Settle after mipi_dsi's shared LCD/touch reset (GPIO33) before GT911
@@ -2977,6 +2991,30 @@ number:
 
       - script.execute: persist_config_to_nvs
   - platform: template
+    id: audio_volume_pct
+    name: "Speaker Volume (%)"
+    icon: "mdi:volume-high"
+    unit_of_measurement: "%"
+    min_value: 50
+    max_value: 90
+    step: 5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_audio
+      sorting_weight: 2
+    lambda: 'return id(ctl_audio_volume_pct);'
+    set_action:
+      - lambda: |-
+          float v = x;
+          if (v < 50.0f) v = 50.0f;
+          if (v > 90.0f) v = 90.0f;
+          id(ctl_audio_volume_pct) = v;
+          ESP_LOGI("audio", "Speaker volume set to %.0f%%", v);
+      - media_player.volume_set:
+          id: coolroom_media
+          volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+      - script.execute: persist_config_to_nvs
+  - platform: template
     id: probe2_offset_c
     name: "Probe 2 (Evaporator) Calibration Offset (°C)"
     icon: "mdi:plus-minus-variant"
@@ -5339,6 +5377,14 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+
+  # Speaker loudness as percent (50–90). Applied to coolroom_media on set, on
+  # boot, and again before every announcement. Floor stops alarm speech being
+  # silenced by accident; ceiling matches volume_max (avoids ES8311 clipping).
+  - id: ctl_audio_volume_pct
+    type: float
+    restore_value: yes
+    initial_value: ${default_audio_volume_pct}
 
   - id: input_audio_alarm_high
     type: bool
@@ -9008,6 +9054,7 @@ script:
           input_door_light_enabled->update();
           input_siren_enabled->update();
           input_audio_alerts_enabled->update();
+          ctl_audio_volume_pct->update();
           input_audio_alarm_high->update();
           input_audio_alarm_low->update();
           input_audio_alarm_door->update();
