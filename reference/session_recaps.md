@@ -4,6 +4,48 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Midnight) — HA "No Entities" Was Home-Assistant-Side, Not the Device
+
+**Session scope**: Cory reported (a) still can't find the web HA enable/disable toggle,
+then (b) Home Assistant shows the device with no entities. Diagnose both.
+
+### Toggle visibility (no code change)
+
+The `Home Assistant API Enabled` toggle **is** on the device (build `20260731-2347`). It
+renders in **Settings & Administration → Wireless tab**, far-right panel "Home Assistant".
+Two reasons it kept being missed: the whole Settings block is hidden in guest view (must
+log in as operator), and it's the last column of a 4-across grid so it wraps/scrolls off on
+narrow or wide windows. Confirmed live by forcing `currentRole='operator'` in the page — the
+`haApiToggleBtn` reads **ENABLED**. Offered to relocate it; **Cory chose to leave it as-is**.
+
+### "No entities" root cause
+
+The device is **not** at fault. Connected over the same encrypted native API HA uses
+(`esphome logs … --device 192.168.37.237`): handshake succeeds in ~0.25s, stays connected,
+entities publish. A new `tools/list_ha_entities.py` (aioesphomeapi, key read from
+`secrets.yaml`, never printed) lists **149 entities** served to a client:
+40 switch / 29 number / 21 binary / 20 sensor / 13 textsensor / 10 select / 9 button /
+5 text / 1 light / 1 media_player.
+
+So key ✔, gate ✔ (open/ENABLED), handshake ✔, entity list ✔ → the empty device page is a
+**stale HA config entry**: HA almost certainly added the device while the gate was still OFF
+(handshake accepted then client dropped), cached an empty list, and hasn't re-fetched.
+**Fix on HA side**: Settings → Devices & Services → ESPHome → ⋮ on `esp32-p4-coolroom` →
+**Reload**; if still empty, delete + re-add by IP `192.168.37.237:6053`. If HA is on another
+subnet (VPN-between-sites per the `api:` comment), mDNS won't cross it — add manually by IP.
+
+### New tool
+
+`tools/list_ha_entities.py --host <ip> [-v]` — one-shot "what does HA actually see?" check.
+Exits non-zero if zero entities are served (device-side fault) vs. non-empty (HA-side issue).
+
+### Closeout
+
+Host-side diagnostic + docs only — **no firmware/dashboard/entity/global change**, so no
+embed, compile, or reflash needed. Coverage guard re-run: OK. Graph updated.
+
+---
+
 ## 2026-07-31 (Night) — Speaker Volume (%) on Web Audio Tab
 
 **Session scope**: Add an operator-facing speaker volume control (was HA-only).
