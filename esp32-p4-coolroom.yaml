@@ -326,7 +326,9 @@ esphome:
         # operator-facing source of truth (web Audio tab / HA sync).
         - media_player.volume_set:
             id: coolroom_media
-            volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+            volume: !lambda |-
+              id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;
+              return id(ctl_audio_volume_pct) / 100.0f;
         - lambda: |-
             ESP_LOGI("audio", "Speaker volume applied from NVS: %.0f%%",
                      id(ctl_audio_volume_pct));
@@ -2999,6 +3001,7 @@ number:
     max_value: 90
     step: 5
     entity_category: config
+    update_interval: 2s
     web_server:
       sorting_group_id: group_audio
       sorting_weight: 2
@@ -3009,6 +3012,9 @@ number:
           if (v < 50.0f) v = 50.0f;
           if (v > 90.0f) v = 90.0f;
           id(ctl_audio_volume_pct) = v;
+          // Suppress on_volume echo for 2s so a lagged callback from a
+          // previous volume_set cannot overwrite this value.
+          id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;
           ESP_LOGI("audio", "Speaker volume set to %.0f%%", v);
       - media_player.volume_set:
           id: coolroom_media
@@ -5385,6 +5391,13 @@ globals:
     type: float
     restore_value: yes
     initial_value: ${default_audio_volume_pct}
+
+  # While set, on_volume must not write ctl_audio_volume_pct — lagged callbacks
+  # from an earlier media_player.volume_set would otherwise clobber a newer value.
+  - id: ctl_audio_volume_suppress_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
 
   - id: input_audio_alarm_high
     type: bool

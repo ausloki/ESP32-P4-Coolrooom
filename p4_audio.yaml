@@ -46,6 +46,9 @@ media_player:
     # the media-player volume directly.
     on_volume:
       - lambda: |-
+          // Ignore callbacks caused by our own volume_set (boot / web / play).
+          // Those can arrive out of order and would overwrite a newer setting.
+          if (millis() < id(ctl_audio_volume_suppress_until_ms)) return;
           float pct = x * 100.0f;
           if (pct < 50.0f) pct = 50.0f;
           if (pct > 90.0f) pct = 90.0f;
@@ -53,7 +56,11 @@ media_player:
             id(ctl_audio_volume_pct) = pct;
             ESP_LOGI("audio", "Speaker volume synced from media player: %.0f%%", pct);
           }
-      - script.execute: persist_config_to_nvs
+      - if:
+          condition:
+            lambda: 'return millis() >= id(ctl_audio_volume_suppress_until_ms);'
+          then:
+            - script.execute: persist_config_to_nvs
     announcement_pipeline:
       speaker: i2s_speaker
       format: WAV
@@ -103,6 +110,7 @@ script:
             - delay: 60ms
             # Re-apply the operator setting every play so a mid-session change
             # (or a media-player restore that raced boot) is always honoured.
+            - lambda: 'id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;'
             - media_player.volume_set:
                 id: coolroom_media
                 volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
