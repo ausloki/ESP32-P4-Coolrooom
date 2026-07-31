@@ -14,6 +14,10 @@ already in the working tree.
 4. Wireless tab: **Home Assistant API Enabled** off by default; turn on only to add ESPHome
    in HA (encryption key from `secrets.yaml`).
 5. Probes tab (operator): Raw / Offset / Corrected table (raw stays `--` until RTD online).
+6. **Door reed is now GPIO46 = header `P1` pin 7**, ground return on `P1` pin 8 (adjacent).
+   It was GPIO20, which is the board's battery-sense divider and is not on any header — the
+   old wiring instruction was impossible to follow. Wire a switch across P1 7–8 and check the
+   Door Reed Sensor entity toggles. Unwired, `INPUT_PULLUP` floats high = "open" in NC mode.
 
 ## Bench (unchanged)
 
@@ -27,6 +31,7 @@ RS485 relay/RTD and external I2C sensors **not connected** — Modbus offline ex
 | Bell mute mask | `p4_control.h` (`p4_ctl_alarm_mask`), yaml globals + 50 ms icon tick |
 | Probe raw | `probe1_temp_raw` / `probe2_temp_raw` + `assets/dashboard.html` |
 | Audio | `p4_audio.yaml`, `assets/audio/*.wav`, `reference/AUDIO_ALERTS.md` |
+| Door reed pin | `esp32-p4-coolroom.yaml` (`door_reed_pin_num`), `reference/hardware_pins.md` (P1/P3 map) |
 | Hardware refs | `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf`, `.cursor/rules/waveshare-hardware-check.mdc` |
 
 ## Commands

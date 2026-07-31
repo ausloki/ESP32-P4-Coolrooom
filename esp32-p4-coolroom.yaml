@@ -122,6 +122,14 @@ substitutions:
   touch_rst_pin:  GPIO33   # shared with LCD reset — ESPHome model handles LCD side
   display_bl_pin: GPIO32
 
+  # ── Field I/O on the PH2.0 12PIN headers (✅ confirmed from board schematic) ─
+  # P1 pin 7 = GPIO46, and P1 pin 8 = GND sits right beside it, so the reed
+  # switch is a two-wire tail onto adjacent pins of one connector.
+  # GPIO46 is a plain IO pad (datasheet pin 88, VDD_IO_5, no strapping/analog
+  # function). GPIO20 must NOT be used: on this board it is the battery-sense
+  # divider (BAT → R92 → GPIO20 → R93 → GND) and is not on either header.
+  door_reed_pin_num: "46"
+
   # ── Control defaults ──────────────────────────────────────────────────────
   default_setpoint_c:   "2.0"
   default_comp_diff_c:  "1.0"
@@ -2500,12 +2508,13 @@ binary_sensor:
       sorting_weight: 37
     lambda: 'return id(ctl_sensor_fallback_active);'
 
-  # ── GPIO 20: Door Reed Sensor (normally closed, opens when door opened) ────
+  # ── Door Reed Sensor — header P1 pin 7 (GPIO46), return on P1 pin 8 (GND) ──
+  # Normally closed: contact opens when the door is opened.
   - platform: gpio
     id: door_reed_sensor
     name: "Door Reed Sensor"
     pin:
-      number: 20
+      number: ${door_reed_pin_num}
       mode: INPUT_PULLUP
     device_class: door
     web_server:

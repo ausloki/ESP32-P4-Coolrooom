@@ -2,8 +2,9 @@
 
 **Date:** 2026-07-31  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** Flashed config hash **`0xfa32a15e`** (dashboard build `20260731-2209`). Graph
-updated; compact commit **`a61542e`**.
+**Status:** Flashed config hash **`0xb59981d8`**. Door reed moved off GPIO20 (battery sense)
+to **GPIO46** = header `P1` pin 7, ground return on `P1` pin 8. Previous closeout was
+compact commit **`a61542e`** (config hash `0xfa32a15e`); the pin fix is uncommitted on top.
 
 ## Working well
 
@@ -18,6 +19,8 @@ updated; compact commit **`a61542e`**.
 3. No pink alarm strip above web Coolroom Status
 4. Wireless → Home Assistant API Enabled (default OFF)
 5. Probes tab live Raw/Offset/Corrected (raw needs RTD)
+6. Door reed on GPIO46: wire the switch across `P1` pins 7–8 and confirm the Door Reed
+   Sensor entity follows it. Unwired it floats high = "open" in NC mode (expected).
 
 ## Leave for later
 

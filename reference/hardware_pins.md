@@ -152,16 +152,40 @@ The GT911 communicates via I2C. It may share GPIO7/8 with the external I2C heade
 
 The GPIO header exposes programmable GPIOs and power pins. Avoid all GPIOs in the reserved table.
 
-### PH2.0 12PIN Header Map (item 24)
+### PH2.0 12PIN Header Map — P1 and P3 (item 24)
 
-Source: board schematic PDF net labels (`reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf`) + project wiring validation.
+Source: board schematic PDF, connectors **P1** and **P3** (`PH2.0连接器12P`), pin-number
+designators `PIP101…PIP1012` / `PIP301…PIP3012`
+(`reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf`, page 1). This is the **actual per-pin order**,
+not a net-availability list. The 7 GPIOs on P1 plus the 10 on P3 are exactly the
+17 programmable GPIOs Waveshare advertises for this board.
 
-This is a **net availability map** for the 2x12 expansion header. Physical pin-number order on the connector should be verified against the board silk/schematic viewer during harness build.
+| Pin | P1 | P3 |
+| --- | --- | --- |
+| 1  | GPIO52 | GPIO36 ⚠️ strapping |
+| 2  | GPIO51 | GPIO34 ⚠️ strapping / JTAG select |
+| 3  | GPIO50 | GPIO31 |
+| 4  | GPIO49 | GPIO30 |
+| 5  | GPIO48 | GPIO29 |
+| 6  | GPIO47 | GPIO28 |
+| 7  | **GPIO46 — door reed** | GPIO5 |
+| 8  | **GND — door reed return** | GPIO4 |
+| 9  | ESP_LDO_VO4 | GPIO3 |
+| 10 | ESP_3V3 | GPIO2 |
+| 11 | GND | GND |
+| 12 | BAT | ESP_3V3 |
 
-| Group | Nets available on PH2.0 12PIN header |
-| --- | --- |
-| GPIO signals | GPIO2, GPIO3, GPIO4, GPIO5, GPIO20, GPIO28, GPIO29, GPIO30, GPIO31, GPIO34, GPIO49, GPIO50, GPIO51, GPIO52 |
-| Power rails | ESP_3V3, Core_5V, GND |
+⚠️ **GPIO34 / GPIO36 are ESP32-P4 strapping pins** (datasheet §3, p.36: GPIO35–GPIO38 set
+boot mode, GPIO34 selects the JTAG source and has *no internal pull resistors*). Do not use
+either for field I/O — pulling them at reset changes boot behaviour.
+
+**GPIO20 is not on either header.** It is the on-board battery-sense divider
+(`BAT → R92 → GPIO20 → R93 → GND`); see the reserved table below.
+
+**Neither 12-pin header carries 5V.** `Core_5V` is only on the 4-pin headers
+**H9** (pin 1 `Core_5V`, 2 `GND`, 3 `D_SDA`, 4 `D_SCL` — external I2C) and
+**H11** (pin 1 `Core_5V`, 2 `GND`, 3 `CANH`, 4 `CANL` — CAN). The RS485 header is
+**H10** (1 `VCC`, 2 `GND`, 3 `A`, 4 `B`).
 
 ### Supported Header Voltages
 
@@ -174,9 +198,9 @@ This is a **net availability map** for the 2x12 expansion header. Physical pin-n
 
 ### Wiring Guidance
 
-- Use `ESP_3V3` for 3.3V sensors/logic interfaces.
-- Use `Core_5V` only when the attached module requires 5V power and has 3.3V-compatible I/O (or proper level shifting).
-- For digital inputs (e.g. door reed on GPIO20), wire the switch between GPIO and GND when using `INPUT_PULLUP`.
+- Use `ESP_3V3` (P1 pin 10 / P3 pin 12) for 3.3V sensors/logic interfaces.
+- `Core_5V` is not on P1/P3 — take 5V from H9 pin 1 or H11 pin 1, and only when the attached module has 3.3V-compatible I/O (or proper level shifting).
+- For digital inputs (e.g. the door reed on GPIO46), wire the switch between GPIO and GND when using `INPUT_PULLUP`. On P1 that is pins 7 and 8, which are adjacent — a plain two-wire tail.
 
 ### Project Power Architecture (DIN PSU)
 
@@ -249,25 +273,38 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 | 7–8        | I2C bus (RTC, GT911, external hdr) |
 | 9–13       | On-board I2S audio (ES8311 / mics) |
 | 14–19      | ESP32-C6 SDIO co-processor         |
+| 20         | Battery voltage sense divider      |
 | 23         | GT911 touch INT                    |
 | 26         | RS485 UART RX                      |
 | 27         | RS485 UART TX                      |
 | 32         | Display backlight BL_CTRL          |
 | 33         | LCD + touch RST (shared)           |
+| 34–38      | ESP32-P4 strapping pins (boot/JTAG)|
 | 39–44      | TF card SDMMC (slot 0)             |
 | 53         | Audio amplifier enable             |
 | 54         | ESP32-C6 reset                     |
+
+**GPIO 20 — battery sense, not free I/O.** The schematic wires it as the mid-point of a
+resistor divider off the battery rail (`BAT → R92 → GPIO20 → R93 → GND`), so it is an ADC
+input for pack voltage. It is also not brought out to P1 or P3. Firmware used it for the
+door reed until 2026-07-31; that was a documentation error, corrected to GPIO46.
 
 ---
 
 ## ✅ USER GPIO — Field I/O Devices
 
-| GPIO | Function           | Device          | Status           |
-|------|--------------------|-----------------|------------------|
-| 20   | Door reed sensor   | Normally-closed | ✅ INPUT_PULLUP  |
+| GPIO | Function           | Device          | Header       | Status           |
+|------|--------------------|-----------------|--------------|------------------|
+| 46   | Door reed sensor   | Normally-closed | P1 pin 7     | ✅ INPUT_PULLUP  |
+| —    | Door reed return   | GND             | P1 pin 8     | ✅               |
 
-**GPIO 20 — Door Reed Sensor:**
-- Connected to external GPIO header (item 24, 2×12 connector)
+**GPIO 46 — Door Reed Sensor:**
+- Datasheet pin 88, plain `IO` pad in the `VDD_IO_5` domain, with no "At Reset"/"After
+  Reset" default function and no analog or LP-IO mux — so it is safe to hold low or open
+  through a reset. Its only alternate function is EMAC RMII group 2, which this board does
+  not populate (no Ethernet PHY).
+- Wired to P1 pin 7 with the reed return on the adjacent P1 pin 8 (`GND`)
+- Set in `esp32-p4-coolroom.yaml` via the `door_reed_pin_num` substitution
 - Reed switch can be configured as NC (Normally Closed) or NO (Normally Open)
 - INPUT_PULLUP mode pulls to 3.3V, reed pulls to GND when closed
 - **Web GUI Toggle:** "Door Sensor Mode + Light Relay" switch (Phase 5)

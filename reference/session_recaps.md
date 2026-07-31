@@ -4,6 +4,56 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 (Late) — Door Reed Moved Off GPIO20 (Battery Sense) to GPIO46
+
+**Session scope**: Correct a real pin conflict found by finally reading the schematic, and
+fix the header documentation that caused it.
+
+### The bug
+
+`door_reed_sensor` was configured on **GPIO20**. On this board GPIO20 is not free I/O — the
+schematic wires it as the battery-sense divider mid-point (`BAT → R92 → GPIO20 → R93 → GND`),
+and it is not brought out to either expansion header. Nothing an installer could connect a
+reed switch to. It was never caught because `reference/hardware_pins.md` carried a
+hand-written "net availability" list that wrongly included GPIO20 and omitted GPIO46–48.
+
+### What changed
+
+- **Door reed → GPIO46** (`P1` pin 7), return on the adjacent `P1` pin 8 (`GND`). Chosen
+  because it is a plain `IO` pad (datasheet pin 88, `VDD_IO_5`, no At-Reset/After-Reset
+  function, no analog or LP mux; only alt function is EMAC RMII, unpopulated here) and it
+  sits next to a ground pin, so the reed is a two-wire tail on one connector.
+- New `door_reed_pin_num` substitution in `esp32-p4-coolroom.yaml` so the pin lives with the
+  other documented pin assignments instead of being an inline literal.
+- `reference/hardware_pins.md`:
+  - Replaced the bogus net list with the **actual per-pin map of P1 and P3**, extracted from
+    the schematic's `PIP1nn` / `PIP3nn` designators. P1's 7 GPIOs + P3's 10 = exactly the 17
+    programmable GPIOs Waveshare advertises, which cross-checks the extraction.
+  - Flagged **GPIO34 / GPIO36 on P3 pins 1–2 as strapping pins** (datasheet §3 p.36 — GPIO35–38
+    set boot mode, GPIO34 selects JTAG source and has no internal pulls). Do not use for field I/O.
+  - Added GPIO20 (battery sense) and GPIO34–38 (strapping) to the reserved table.
+  - Corrected the power notes: **neither 12-pin header carries 5V.** `Core_5V` is on the 4-pin
+    headers **H9** (I2C: 5V/GND/D_SDA/D_SCL) and **H11** (CAN: 5V/GND/CANH/CANL); RS485 is
+    **H10** (VCC/GND/A/B). The old "power the controller from the 12PIN header via Core_5V"
+    guidance was wrong and would not have worked.
+
+### Verification
+
+- Compiled clean (2026.7.0, flash 34.3%, RAM 26.6%) and flashed over USB; device runs, only
+  the expected RS485/Modbus timeouts (relay + RTD boards not fitted per bench rule).
+- Reed itself unverified — no switch wired yet. With `INPUT_PULLUP` and nothing attached the
+  input floats high, which in NC mode reads as *door open*; that is expected on the bench.
+
+### Notes
+
+- No `USER_MANUAL` / `QUICK_START_GUIDE` change needed — neither document mentions GPIO
+  numbers or wiring terminals, only the NC/NO behaviour, which is unchanged.
+- Lesson recorded: this is exactly the failure the `waveshare-hardware-check` rule exists to
+  prevent. The digested pin map was trusted over the schematic; when they disagreed, the
+  schematic was right.
+
+---
+
 ## 2026-07-31 — HA Gate, Probe Live Readings, Header Clock, Bell Soft-Mute UX
 
 **Session scope**: Operator UX + Home Assistant visibility control; closeout compile/flash.

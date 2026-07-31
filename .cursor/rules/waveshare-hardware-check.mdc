@@ -49,6 +49,14 @@ Waveshare tables often name signals **from the peripheral's point of view**. ESP
 ESP-IDF usually name them **from the ESP's point of view**. Those invert for bidirectional
 buses.
 
+**Known trap (a GPIO number is not proof the pin is usable):** `hardware_pins.md` once listed
+GPIO20 as an available header net, and firmware ran the door reed on it for weeks. The
+schematic shows GPIO20 is the battery-sense divider (`BAT → R92 → GPIO20 → R93 → GND`) and is
+not routed to either expansion header. Before assigning a field-I/O pin, confirm on the
+schematic that (a) it appears on connector **P1** or **P3**, and (b) it has no other net
+attached. Also skip **GPIO34–GPIO38** — ESP32-P4 strapping pins (GPIO34 and GPIO36 are on P3
+pins 1–2). The confirmed per-pin P1/P3 map is in `reference/hardware_pins.md`.
+
 **Known trap (audio I2S / ES8311):** Waveshare `ASDOUT` = codec → bus = ESP **input**
 (`i2s_din`). Waveshare `DSDIN` = codec ← bus = ESP **output** (`i2s_dout`). Wiring
 playback to GPIO11 yields healthy clocks, PA clicks, media player `PLAYING`, and **no
