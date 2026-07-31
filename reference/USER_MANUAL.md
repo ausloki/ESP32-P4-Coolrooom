@@ -357,6 +357,7 @@ Spoken phrases use a pre-recorded female English voice on the on-board ES8311 sp
 |---|---|---|
 | **Audio Alerts Enabled** | Master on/off for every spoken phrase. | On |
 | **Test Audio Alert** *(button)* | Plays a short test line (ignores master off so you can verify hardware). | — |
+| **Speaker Amplifier (diagnostic)** | Raw power control for the amplifier itself. Playback switches it on and off automatically, so leave it alone in normal use — it is there to test the amplifier in isolation or force it quiet. Returns to off after every reboot. | Off |
 | **Speak High / Low Temp Alarm** | Alarm voice when that temperature alarm becomes active. | On |
 | **Speak Door Open Alarm** | Alarm voice when the *delayed* door alarm fires (§4.6). | On |
 | **Speak No-Cool / Ice / Probe Fault** | Alarm voice for those conditions. | On |
@@ -659,8 +660,8 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
 | RTC / SHT31 / SHT20 Online | Whether each optional peripheral is detected. RTC = battery-backed clock (PCF8563); if offline, install/check the CR2032 and expect log timestamps to wait for WiFi/NTP after every power cut. |
 | Sensor Fallback Active | Whether the compressor is currently running the fallback duty cycle from §4.1/§4.7 |
-| **Restart Controller** *(button)* | Reboots the device. Settings are preserved (stored in flash), in-progress defrost/alarm timers are not. |
-| **Factory Reset** *(button)* | Resets every setting in this manual back to its default value. Use Backup (§4.9) first if you want to restore afterward. |
+| **Restart Controller** *(button)* | Reboots the device. Settings are preserved (stored in flash), in-progress defrost/alarm timers are not. On the web dashboard this lives on the **Hardware** tab under *Controller*. |
+| **Factory Reset** *(button)* | Erases every setting in this manual back to its default value **and clears the saved WiFi credentials**, then reboots. The controller comes back on its own access point and has to be re-joined to your network (§4.10), so do not use it remotely. Take a Backup (§4.9) first if you want to restore afterward. On the web dashboard it is on the **Hardware** tab under *Controller*, behind a confirmation and a typed `RESET`. |
 | **Display Backlight** | Touchscreen brightness. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: System & Diagnostics sections**
@@ -674,7 +675,8 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 
 Shows what the controller can see of itself — controller/WiFi/IP, both RS485 boards, RTC,
 both humidity sensors, SD card, chip temperature, free memory and uptime — plus direct
-control over the four relay outputs.
+control over the four relay outputs, the touchscreen PIN, and a **Controller** section
+holding **Restart Controller** and **Factory Reset** (both described in §4.12).
 
 | Setting | What it does | Default | When to change it |
 |---|---|---|---|
@@ -737,6 +739,8 @@ is switched on to match. Everything else — compressor, defrost, siren — star
 | An output never energises, no matter what the logic does | Its relay enable is off — a disabled output is held open | §4.13 |
 | External siren sounds on alarms you'd rather it didn't | Turn off Siren Relay Enabled; alarms, pushes and logging continue | §4.13 |
 | Controller vanished after a WiFi change | It reverts by itself after 45 s, and falls back to the firmware's network after 5 min without a connection | §4.10 |
+| Home Assistant rejects the encryption key when adding the device | Almost always **Home Assistant API Enabled is still off** (its default). The controller drops the connection mid-handshake, which HA reports as a bad key rather than a refusal. Turn the toggle on first, then re-add with the same key | §4.10 |
+| A setting described here isn't on the web dashboard | The dashboard opens in guest mode and hides every settings tab until you press **🔐 Login** — check you are logged in before assuming a setting is missing | §4.11 |
 
 ---
 

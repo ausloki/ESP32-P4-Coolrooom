@@ -37,6 +37,26 @@ Live verification of compressor/defrost/sensor control waits until those are att
 On-board UI, Wi-Fi, web, and speaker path remain fair game. See
 `.cursor/rules/bench-hardware-status.mdc` — update that rule when hardware is fitted.
 
+## Closeout Addition: Dashboard Coverage & Persistence Check
+
+The web settings UI is a **hand-maintained** JavaScript array
+(`ADVANCED_SETTINGS_GROUPS` in `assets/dashboard.html`) — nothing generates it from the
+ESPHome config. A setting added to `esp32-p4-coolroom.yaml` will therefore be invisible in
+the web GUI unless the dashboard is edited too. Likewise, switches using
+`restore_mode: DISABLED` and all `number` entities only survive a reboot if they write a
+global with `restore_value: yes` **and** call `persist_config_to_nvs`.
+
+**At closeout, whenever an entity is added, removed, or renamed, run:**
+
+```bash
+.venv/bin/python tools/check_dashboard_coverage.py
+```
+
+It exits non-zero on any unexplained gap. If an entity is deliberately not on the custom
+dashboard, add it to `EXPECTED_ABSENT` in that script **with a reason** rather than
+suppressing the check. Remember the dashboard must be re-embedded (`scripts/embed_dashboard.py`)
+and reflashed for HTML edits to reach the device.
+
 ## Closeout Addition: Documentation Consistency Check
 
 This project maintains two end-user documents that describe device behavior in plain

@@ -971,6 +971,26 @@
                             Starts at <strong>0000</strong> until changed.
                         </div>
                     </div>
+                    <div>
+                        <div class="field-label-row">
+                            <h3>Controller</h3>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-system-controls')" aria-label="What do the controller buttons do?">i</button>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            <button onclick="restartController()">🔄 Restart Controller</button>
+                            <button class="danger" onclick="factoryResetController()">⚠️ Factory Reset</button>
+                        </div>
+                        <div id="help-system-controls" class="help-popover hidden">
+                            <strong>Restart</strong> reboots the controller. Settings are kept, relays drop
+                            for the few seconds it takes to come back, and the compressor off-delay starts
+                            again from zero on boot.<br><br>
+                            <strong>Factory Reset</strong> erases every stored setting — setpoint, alarm
+                            limits, defrost configuration, calibration offsets, ntfy server and topic, the
+                            touchscreen PIN, and the Home Assistant API toggle — then reboots to firmware
+                            defaults. Wi-Fi credentials are cleared too, so the controller comes back on its
+                            own access point and has to be re-joined to your network. There is no undo.
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -2312,6 +2332,8 @@
                       help: 'Master switch for spoken announcements over the on-board speaker. Off silences every phrase below. The home-screen bell also mutes speech for the current alarm event (same soft mute as the siren).' },
                     { type: 'button', entity: 'test_audio_alert', name: 'Test Audio Alert', label: 'Test Speaker',
                       help: 'Play a short test phrase. Ignores the master toggle so you can verify the speaker even when alerts are off. Requires the ES8311 codec on I2C.' },
+                    { type: 'switch', entity: 'speaker_amplifier', name: 'Speaker Amplifier', label: 'Speaker Amplifier (diagnostic)',
+                      help: 'Raw power control for the on-board amplifier. Playback normally switches this on and off by itself, so leave it alone during normal use \u2014 it is here to test the amplifier in isolation, or to force it quiet. It returns to off after every reboot.' },
                     { type: 'switch', entity: 'speak_high_temp_alarm', name: 'Speak High Temp Alarm', label: 'Speak High Temp Alarm',
                       help: 'Voice: “Attention. High temperature alarm.” when that alarm becomes active.' },
                     { type: 'switch', entity: 'speak_low_temp_alarm', name: 'Speak Low Temp Alarm', label: 'Speak Low Temp Alarm',
@@ -2780,6 +2802,45 @@
                 return;
             }
             showAlert('success', `${label} sent`);
+        }
+
+        async function restartController() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to restart the controller');
+                return;
+            }
+            if (!confirm('Restart the controller now?\n\nSettings are kept. Relays drop while it reboots and this page loses contact for a few seconds.')) {
+                return;
+            }
+            const ok = await postWithFallback(entityActionPath('button', 'Restart Controller', 'press'));
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to restart it');
+                return;
+            }
+            showAlert('info', 'Restarting — this page reconnects on its own once the controller is back.');
+        }
+
+        // Two-step on purpose: this wipes every stored setting and the WiFi
+        // credentials, so a stray click must not be enough to trigger it.
+        async function factoryResetController() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to factory reset');
+                return;
+            }
+            if (!confirm('FACTORY RESET\n\nThis erases every stored setting — setpoint, alarm limits, defrost configuration, calibration offsets, ntfy details, the touchscreen PIN and the Home Assistant toggle — and clears the WiFi credentials, then reboots to defaults.\n\nThe controller comes back on its own access point and must be re-joined to your network.\n\nThere is no undo. Continue?')) {
+                return;
+            }
+            const typed = prompt('Type RESET in capitals to confirm.');
+            if (typed !== 'RESET') {
+                showAlert('info', 'Factory reset cancelled.');
+                return;
+            }
+            const ok = await postWithFallback(entityActionPath('button', 'Factory Reset', 'press'));
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to factory reset it');
+                return;
+            }
+            showAlert('warning', 'Factory reset sent — the controller reboots to defaults and returns on its own access point.');
         }
 
         async function updateSetpoint() {

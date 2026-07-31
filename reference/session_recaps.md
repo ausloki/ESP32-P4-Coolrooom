@@ -4,6 +4,62 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 (Late) — HA "Bad Key" Was the Gate; Dashboard Coverage Audit
+
+**Session scope**: Diagnose Home Assistant rejecting the API encryption key, then audit
+whether other settings/sensors are missing from the web GUI or fail to survive a reboot.
+
+### The reported problem
+
+HA refused the encryption key when adding the device. The key was never at fault — verified
+44 base64 chars decoding to exactly 32 bytes. The cause is the **Home Assistant API Enabled**
+gate added earlier today: it defaults off, and `on_client_connected` plus a main-loop poll
+call `p4_ha_api_drop_clients()`, killing the connection during the handshake. HA surfaces a
+dropped encrypted handshake as an invalid key rather than a refusal, so the error is
+misleading. Fix is operator-side: log in, Wireless tab, turn the toggle on.
+
+### Why the toggle "wasn't there"
+
+It was — in the running build. Decompressed `P4_DASHBOARD_HTML_GZ` out of
+`p4_dashboard_html.h` and confirmed `haApiToggleBtn` / the Home Assistant section were
+present and identical to source. The dashboard simply **always opens in guest mode**
+(`checkAuth()` forces `currentRole = 'guest'`, no session restore) and `#settingsSection` is
+`operator-only hidden`, so every settings tab is absent until Login.
+
+### Audit results (the real question asked)
+
+- **Coverage**: 92 controllable entities; 87 were referenced by the dashboard. Genuinely
+  missing: **Restart Controller**, **Factory Reset**, **Speaker Amplifier** — reachable only
+  from the stock ESPHome UI. (`New WiFi SSID` / `Password` text entities are unused by
+  design; the dashboard posts to `/api/wifi/connect`.)
+- **Persistence**: clean. All 35 `restore_mode: DISABLED` switches and all 28 numbers write a
+  `restore_value: yes` global *and* call `persist_config_to_nvs`. Selects use native restore.
+  Of 5 text entities, the 3 that matter persist; the 2 WiFi-join fields are transient by design.
+  **Nothing silently resets on reboot.**
+
+### What changed
+
+- Added all three missing controls: **Speaker Amplifier** into the Audio Alerts group, and a
+  **Controller** section on the Hardware tab with **Restart** and **Factory Reset**. Factory
+  Reset is two-step (confirm dialog + typed `RESET`) because it also clears WiFi credentials.
+- New `tools/check_dashboard_coverage.py` — diffs YAML entities against the dashboard and
+  re-checks the NVS persistence contract; exits non-zero on unexplained gaps, with an
+  `EXPECTED_ABSENT` allowlist that requires a written reason. Negative-tested both detectors.
+- `CLAUDE.md`: new closeout section requiring that script whenever an entity changes, and
+  noting the dashboard settings list is hand-maintained (the root cause of drift).
+- `USER_MANUAL.md`: added Speaker Amplifier row (§4.5b); corrected **Factory Reset** — it was
+  documented as resetting settings only, but it also **clears WiFi credentials** and returns
+  the device to its own AP; pointed both buttons at the Hardware tab (§4.12, §4.13); added two
+  troubleshooting rows (HA "bad key" = gate off; "setting missing" = still in guest mode).
+
+### Verification
+
+- Coverage checker passes (90 exposed, 63 NVS-backed entities verified), and fails correctly
+  when a control or a persist call is removed.
+- Embedded, compiled and flashed — dashboard build `20260731-2249`.
+
+---
+
 ## 2026-07-31 (Late) — Door Reed Moved Off GPIO20 (Battery Sense) to GPIO46
 
 **Session scope**: Correct a real pin conflict found by finally reading the schematic, and
