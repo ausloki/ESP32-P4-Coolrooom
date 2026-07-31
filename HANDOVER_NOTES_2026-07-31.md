@@ -39,9 +39,16 @@ RS485 relay/RTD and external I2C sensors **not connected** — Modbus offline ex
 ```bash
 python3 scripts/embed_dashboard.py
 ./tools/esphome_compile.sh esp32-p4-coolroom.yaml
-.venv/bin/esphome upload esp32-p4-coolroom.yaml --device /dev/cu.usbmodem5B7B0287481
+./tools/esphome_flash.sh --device /dev/cu.usbmodem5B7B0287481   # preserves settings
+.venv/bin/python tools/check_dashboard_coverage.py
 ./tools/code_review_graph_cli.sh update --repo .
 ./tools/code_review_graph_cli.sh status
 ```
+
+> ⚠️ **Do not use `esphome upload` over USB unless you want defaults.** It writes
+> `firmware.factory.bin` from `0x0`, padding `0xFF` straight over the NVS partition at
+> `0x9000`–`0x15000`, so every saved setting is erased and globals fall back to their
+> `initial_value`. Use `tools/esphome_flash.sh` (serial) or OTA to an IP instead. Plain
+> reboots are safe — persistence itself works.
 
 See also: `reference/session_recaps.md` (2026-07-31 HA Gate entry), `memory-bank/activeContext.md`.

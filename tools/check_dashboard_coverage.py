@@ -154,6 +154,43 @@ def check_persistence(doc: dict, verbose: bool) -> list[str]:
     return problems
 
 
+def check_persist_script(doc: dict, verbose: bool) -> list[str]:
+    """Every restoring global must be staged by persist_config_to_nvs.
+
+    ESPHome's RestoringGlobalsComponent only writes its preference from its own
+    1 s poll, which runs *after* the action that changed the value returns. The
+    script forces each one to stage its current value and then flushes NVS, so a
+    global missing from that hand-maintained list can be lost if the controller
+    reboots inside the poll window.
+    """
+    restoring = [
+        g.get("id")
+        for g in (doc.get("globals") or [])
+        if isinstance(g, dict) and g.get("restore_value") in (True, "yes")
+    ]
+    scripts = [s for s in (doc.get("script") or []) if isinstance(s, dict)]
+    persist = next((s for s in scripts if s.get("id") == "persist_config_to_nvs"), None)
+    if persist is None:
+        return ["script persist_config_to_nvs not found — settings cannot be flushed to NVS"]
+
+    body = json.dumps(persist, default=str)
+    problems = [
+        f"[global] {gid!r} has restore_value: yes but is never staged by "
+        f"persist_config_to_nvs — a reboot soon after changing it can lose the value"
+        for gid in restoring
+        if gid and f"{gid}->update()" not in body
+    ]
+    if "global_preferences->sync()" not in body.replace("\\n", "\n"):
+        problems.append(
+            "persist_config_to_nvs never calls global_preferences->sync() — staged "
+            "values are not committed to NVS"
+        )
+    if verbose:
+        print(f"  {len(restoring)} restoring globals, "
+              f"{len(restoring) - len(problems)} staged by persist_config_to_nvs")
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--verbose", action="store_true", help="show per-entity detail")
@@ -170,8 +207,10 @@ def main() -> int:
     coverage = check_coverage(doc, html, args.verbose)
     print("Setting persistence:")
     persistence = check_persistence(doc, args.verbose)
+    print("NVS flush coverage:")
+    flush = check_persist_script(doc, args.verbose)
 
-    problems = coverage + persistence
+    problems = coverage + persistence + flush
     if not problems:
         print("\nOK — every control is reachable from the dashboard and every "
               "NVS-backed setting survives a reboot.")

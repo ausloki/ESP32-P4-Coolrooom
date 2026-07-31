@@ -526,6 +526,13 @@ The SD card is entirely **optional** — the controller runs normally without on
 is present at boot, or a card fails while running, logging and backup/restore simply become
 no-ops (silently skipped) rather than crashing or affecting cooling control.
 
+> ⚠️ **Take a Backup before any firmware update.** Settings live in flash and survive
+> reboots and over-the-air updates, but a USB firmware update using the full factory image
+> erases them — every setting returns to its factory default, which typically shows up as
+> switches you had turned off coming back on. Whoever performs the update should use the
+> settings-preserving flash method (`tools/esphome_flash.sh`) or update over the air; a
+> Backup makes recovery a single Restore press either way.
+
 | Feature | What it does |
 |---|---|
 | **Event Log** | Every alarm, defrost start/end, and compressor on/off is written to a daily CSV file on the SD card, with the sensor readings behind the decision — useful for troubleshooting after the fact. |
@@ -741,6 +748,7 @@ is switched on to match. Everything else — compressor, defrost, siren — star
 | Controller vanished after a WiFi change | It reverts by itself after 45 s, and falls back to the firmware's network after 5 min without a connection | §4.10 |
 | Home Assistant rejects the encryption key when adding the device | Almost always **Home Assistant API Enabled is still off** (its default). The controller drops the connection mid-handshake, which HA reports as a bad key rather than a refusal. Turn the toggle on first, then re-add with the same key | §4.10 |
 | A setting described here isn't on the web dashboard | The dashboard opens in guest mode and hides every settings tab until you press **🔐 Login** — check you are logged in before assuming a setting is missing | §4.11 |
+| Settings revert to defaults (e.g. ntfy switches itself back on) after a firmware update | Expected only when the controller was reflashed **over USB with the factory image**, which erases stored settings. Normal reboots and over-the-air updates keep them. Whoever flashes should use the settings-preserving method — see the note in §4.9 | §4.9 |
 
 ---
 

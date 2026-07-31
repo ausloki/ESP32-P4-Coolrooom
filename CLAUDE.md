@@ -37,6 +37,33 @@ Live verification of compressor/defrost/sensor control waits until those are att
 On-board UI, Wi-Fi, web, and speaker path remain fair game. See
 `.cursor/rules/bench-hardware-status.mdc` — update that rule when hardware is fitted.
 
+## Flashing: `esphome upload` over USB erases all saved settings
+
+`esphome upload` writes `firmware.factory.bin` from offset `0x0`. That merged image is
+padded with `0xFF` across everything it spans — **including the NVS partition at
+`0x9000`–`0x15000`** (see `.esphome/build/esp32-p4-coolroom/partitions.csv`). Every serial
+upload therefore wipes stored settings, and the next boot falls back to each global's
+`initial_value`. The tell-tale symptom is a setting "coming back on its own" after a
+flash — e.g. ntfy re-enabling (`initial_value: "true"`) or the Home Assistant API toggle
+reverting to off.
+
+A plain reboot is safe: `persist_config_to_nvs` stages every restoring global and calls
+`global_preferences->sync()`, so values are committed before power-down.
+
+**Use one of these instead when settings must survive:**
+
+```bash
+./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX   # serial, skips the NVS window
+.venv/bin/esphome upload esp32-p4-coolroom.yaml --device <device-ip>   # OTA, app only
+```
+
+`tools/esphome_flash.sh` reads offsets from the build's own `flasher_args.json` and refuses
+to write anything overlapping NVS. Pass `--erase-settings` to deliberately fall back to the
+factory image (needed after a partition-table change).
+
+When testing anything persistence-related, reboot the device rather than reflashing —
+otherwise a serial flash will look exactly like a persistence bug.
+
 ## Closeout Addition: Dashboard Coverage & Persistence Check
 
 The web settings UI is a **hand-maintained** JavaScript array
@@ -46,15 +73,20 @@ the web GUI unless the dashboard is edited too. Likewise, switches using
 `restore_mode: DISABLED` and all `number` entities only survive a reboot if they write a
 global with `restore_value: yes` **and** call `persist_config_to_nvs`.
 
-**At closeout, whenever an entity is added, removed, or renamed, run:**
+A third hand-maintained list matters here too: `persist_config_to_nvs` names every global it
+stages. A restoring global missing from it can be lost if the controller reboots within the
+1 s poll window after the change.
+
+**At closeout, whenever an entity or restoring global is added, removed, or renamed, run:**
 
 ```bash
 .venv/bin/python tools/check_dashboard_coverage.py
 ```
 
-It exits non-zero on any unexplained gap. If an entity is deliberately not on the custom
-dashboard, add it to `EXPECTED_ABSENT` in that script **with a reason** rather than
-suppressing the check. Remember the dashboard must be re-embedded (`scripts/embed_dashboard.py`)
+It checks all three lists — dashboard coverage, the per-entity persistence contract, and the
+`persist_config_to_nvs` staging list — and exits non-zero on any unexplained gap. If an
+entity is deliberately not on the custom dashboard, add it to `EXPECTED_ABSENT` in that
+script **with a reason** rather than suppressing the check. Remember the dashboard must be re-embedded (`scripts/embed_dashboard.py`)
 and reflashed for HTML edits to reach the device.
 
 ## Closeout Addition: Documentation Consistency Check

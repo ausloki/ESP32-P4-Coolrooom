@@ -34,7 +34,10 @@ compact commit **`a61542e`** (config hash `0xfa32a15e`); the pin fix is uncommit
 ```bash
 python3 scripts/embed_dashboard.py
 ./tools/esphome_compile.sh esp32-p4-coolroom.yaml
-.venv/bin/esphome upload esp32-p4-coolroom.yaml --device /dev/cu.usbmodem5B7B0287481
+# Settings-preserving flash. `esphome upload` over USB writes factory.bin from
+# 0x0 and ERASES NVS (0x9000-0x15000) — that is why settings "came back".
+./tools/esphome_flash.sh --device /dev/cu.usbmodem5B7B0287481
+.venv/bin/python tools/check_dashboard_coverage.py
 ./tools/code_review_graph_cli.sh update --repo .
 ```
 

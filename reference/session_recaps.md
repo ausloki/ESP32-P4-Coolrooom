@@ -4,6 +4,52 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 (Night) — Settings "Not Persisting" Was the Flash Method Erasing NVS
+
+**Session scope**: Cory reported ntfy re-enabling itself after repeatedly disabling it, and
+asked for every toggle/setting to be verified persistent across reboots.
+
+### Root cause — the firmware was never at fault
+
+`esphome upload` over USB writes `firmware.factory.bin` from offset `0x0`. That merged image
+is `0xFF`-padded across everything it spans, and this board's partition table puts **NVS at
+`0x9000`–`0x15000`** — inside that range. Verified directly: the factory image holds 49,152
+bytes of `0xFF` exactly over the NVS window. So **every serial upload erases all stored
+settings**, and the next boot falls back to each global's `initial_value`.
+`input_ntfy_enabled` has `initial_value: "true"`, so ntfy returned ON after each of the many
+reflashes done today. Nothing was wrong with the persistence code.
+
+Persistence itself checks out end to end: read ESPHome's `RestoringGlobalsComponent` source
+(`update()` → `store_value_()` → `rtc_.save()` on change), confirmed `persist_config_to_nvs`
+stages all **70** restoring globals and then calls `global_preferences->sync()`. Plain
+reboots keep everything.
+
+**Correction to the previous recap**: it claimed "reflashing won't clear it" for the HA API
+toggle. That is wrong for serial/factory flashes — only true for reboots and OTA.
+
+### What changed
+
+- **`tools/esphome_flash.sh`** — settings-preserving serial flash. Reads offsets from the
+  build's own `flasher_args.json` (bootloader `0x2000`, partition table `0x8000`, otadata
+  `0x16000`, app `0x20000`), skipping the NVS window entirely, and **refuses** to write any
+  image that would overlap it. `--erase-settings` opts back into the factory flash for when
+  defaults are actually wanted (or after a partition-table change). Written for bash 3.2
+  (macOS) — no `mapfile`/`readarray`. Verified: wrote the app at `0x20000` only.
+- **`tools/check_dashboard_coverage.py`** gained a third check: every `restore_value: yes`
+  global must be staged by `persist_config_to_nvs`, and that script must call
+  `sync()`. Currently 70/70. Negative-tested by deleting a staging line.
+- Docs: `CLAUDE.md` gains a "flashing erases settings" section with the correct commands;
+  `activeContext.md` and the handover note now use `esphome_flash.sh`; `USER_MANUAL.md`
+  gains a Backup-before-update warning (§4.9) and a troubleshooting row for the symptom.
+
+### Note for next session
+
+The device was reflashed with the NVS-preserving script, so settings now survive. Anyone
+testing persistence should **reboot**, not reflash — a factory flash looks identical to a
+persistence bug.
+
+---
+
 ## 2026-07-31 (Late) — HA "Bad Key" Was the Gate; Dashboard Coverage Audit
 
 **Session scope**: Diagnose Home Assistant rejecting the API encryption key, then audit
