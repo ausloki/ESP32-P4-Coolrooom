@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python3 -)",
+      "WebFetch(domain:docs.waveshare.com)",
+      "WebFetch(domain:esphome.io)"
+    ]
+  }
+}

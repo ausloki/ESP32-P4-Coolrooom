@@ -1,5 +1,15 @@
 # Progress Tracking
 
+## 2026-07-31 — HA Gate, Probe Live UI, Header Clock, Bell Soft-Mute
+
+- Opt-in **Home Assistant API Enabled** (default OFF) drops native API clients when off.
+- Probes tab live Raw/Offset/Corrected; `probe1/2_temp_raw` published.
+- LVGL header: date left, 12h time right; web pink alarm strip removed (gauge-only).
+- Bell soft-mute: stay red / stop jiggle; new alarm type re-animates (`ctl_alarm_silenced_mask`).
+- Local schematic/manual PDFs mandated in hardware cursor rule + CLAUDE.md.
+- Closeout: compile OK (`0xfa32a15e`), flashed USB, graph update, compact commit.
+- RAM ~26.6% DIRAM / Flash ~2.52 MB app — under OTA slot ceiling.
+
 ## 2026-07-30 (Late Evening) SD Power Fix, Touch Fix, Icon Animations
 
 - User installed a physical SD card and reported touch not registering input. Both root-caused

@@ -4,6 +4,54 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-07-31 — HA Gate, Probe Live Readings, Header Clock, Bell Soft-Mute UX
+
+**Session scope**: Operator UX + Home Assistant visibility control; closeout compile/flash.
+
+### What changed
+
+- **Home Assistant API Enabled** (default OFF): soft-drop native API clients when off;
+  Wireless tab toggle; NVS-backed; manuals §4.10 / Quick Start.
+- **Probes tab**: live Raw / Offset / Corrected table; published `probe1/2_temp_raw`
+  diagnostic sensors.
+- **LVGL header**: date left, 12h time (`HH:MM:SS AM/PM`) right by Wi‑Fi icon.
+- **Web GUI**: removed pink alarm/fault strip above Coolroom Status (gauge already shows it).
+- **Bell soft-mute**: stop jiggle, stay red while conditions remain; clear mute when all
+  clear or a *new* alarm type appears (`ctl_alarm_silenced_mask` + helpers in `p4_control.h`).
+- **Hardware rules**: always prefer local `reference/` schematic/manual PDFs before pin work
+  (`.cursor/rules/waveshare-hardware-check.mdc`, `CLAUDE.md`, `hardware_pins.md`).
+
+### Also in tree (this compact)
+
+- Audio alerts / WAV clips (`p4_audio.yaml`, `assets/audio/`), Wi‑Fi helper (`p4_wifi.h`),
+  Precision-ported control settings, logging/dashboard updates from the same working set.
+
+### Outcome / notes
+
+- Config hash `0xfa32a15e`; dashboard embed build `20260731-2209`.
+- RAM ~26.6% DIRAM (slightly over the old 25% soft note — driven by audio/dashboard);
+  Flash app ~2.52 MB / 7 MB OTA slot (~34%, well under 6 MB soft target).
+- Manuals + NS diagram + AUDIO_ALERTS updated where user-facing.
+- Compile/flash/graph/compact as part of this closeout.
+- Bench: RS485 / external I2C still not fitted — offline Modbus expected.
+
+```mermaid
+flowchart LR
+  subgraph mute [Home bell soft-mute]
+    A[Any alarm active] -->|jiggle + red| B[Operator taps bell]
+    B -->|freeze mask| C[Still red / no jiggle<br/>siren+speech off]
+    C -->|all clear| D[Grey idle]
+    C -->|new alarm bit| E[Mute lifts]
+    E --> A
+  end
+  subgraph ha [HA API gate]
+    F[input_ha_api_enabled] -->|OFF| G[p4_ha_api_drop_clients]
+    F -->|ON| H[Native API clients OK]
+  end
+```
+
+---
+
 ## 2026-07-31 — Web Dashboard SSE + ESPHome 2026.7 Entity IDs
 
 **Session scope**: After Login worked, dashboard showed stacked fetch errors and empty

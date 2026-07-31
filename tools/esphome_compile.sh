@@ -130,7 +130,19 @@ for key in ("IDF_PATH", "IDF_TOOLS_PATH", "IDF_PYTHON_ENV_PATH", "ESP_IDF_VERSIO
         print(f'export {key}={shlex.quote(value)}')
 PY
 )"
-  ninja_bin="$(command -v ninja || true)"
+  # Prefer the IDF's own ninja: it is a universal binary, whereas a Homebrew
+  # ninja on an Apple Silicon host is often x86_64-only, which fails outright
+  # under the `arch -arm64` wrapper below ("Bad CPU type in executable").
+  ninja_bin=""
+  for candidate in "$HOME"/Library/Caches/esphome/idf/tools/ninja/*/ninja; do
+    if [[ -x "$candidate" ]]; then
+      ninja_bin="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$ninja_bin" ]]; then
+    ninja_bin="$(command -v ninja || true)"
+  fi
 
   if [[ -z "$ninja_bin" ]]; then
     echo "ERROR: ninja is required for compile retry but was not found in PATH" >&2

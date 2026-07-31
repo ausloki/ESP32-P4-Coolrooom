@@ -1,0 +1,309 @@
+# Voice announcements — ES8311 + NS4150B (Waveshare 7B pins via substitutions
+# in esp32-p4-coolroom.yaml). Clips are pre-recorded female English WAVs under
+# assets/audio/ (regenerate with scripts/generate_audio_clips.sh).
+#
+# Mic / speech-to-command is intentionally not wired yet — PA + speaker path
+# first; ADC/mic follows once playback is proven on hardware.
+
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin: ${audio_i2s_lrck_pin}
+    i2s_bclk_pin: ${audio_i2s_sclk_pin}
+    i2s_mclk_pin: ${audio_i2s_mclk_pin}
+
+audio_dac:
+  - platform: es8311
+    id: es8311_dac
+    i2c_id: i2c_bus
+    address: 0x18
+    bits_per_sample: 16bit
+    sample_rate: 16000
+    use_mclk: true
+
+speaker:
+  - platform: i2s_audio
+    id: i2s_speaker
+    i2s_audio_id: i2s_audio_bus
+    dac_type: external
+    i2s_dout_pin: ${audio_i2s_dout_pin}
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: mono
+    audio_dac: es8311_dac
+
+media_player:
+  - platform: speaker
+    id: coolroom_media
+    name: "Coolroom Speaker"
+    # Volume maps straight onto the ES8311 volume register, where 0.75 is 0 dB
+    # and 1.0 is +32 dB. 0.85 was measured as a good level on the on-board
+    # speaker; cap below unity so the amp can't be driven into clipping.
+    volume_initial: 0.85
+    volume_max: 0.9
+    announcement_pipeline:
+      speaker: i2s_speaker
+      format: WAV
+      num_channels: 1
+      sample_rate: 16000
+    files:
+      - id: clip_alarm_high
+        file: assets/audio/alarm_high.wav
+      - id: clip_alarm_low
+        file: assets/audio/alarm_low.wav
+      - id: clip_alarm_door
+        file: assets/audio/alarm_door.wav
+      - id: clip_alarm_no_cool
+        file: assets/audio/alarm_no_cool.wav
+      - id: clip_alarm_ice
+        file: assets/audio/alarm_ice.wav
+      - id: clip_alarm_probe
+        file: assets/audio/alarm_probe.wav
+      - id: clip_info_cooling_on
+        file: assets/audio/info_cooling_on.wav
+      - id: clip_info_cooling_off
+        file: assets/audio/info_cooling_off.wav
+      - id: clip_info_defrost_on
+        file: assets/audio/info_defrost_on.wav
+      - id: clip_info_defrost_off
+        file: assets/audio/info_defrost_off.wav
+      - id: clip_info_door_open
+        file: assets/audio/info_door_open.wav
+      - id: clip_info_door_closed
+        file: assets/audio/info_door_closed.wav
+      - id: clip_info_audio_test
+        file: assets/audio/info_audio_test.wav
+
+script:
+  # Shared gate: master on, codec present, not soft-muted from the home bell.
+  # Per-clip scripts add their own category toggle.
+  - id: audio_prepare_play
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(hw_audio_ok) &&
+                     !id(ctl_alarm_silenced);
+          then:
+            - switch.turn_on: audio_pa_enable
+            - delay: 60ms
+
+  - id: speak_alarm_high
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_high) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_high
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_low
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_low) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_low
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_door
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_door) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_door
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_no_cool
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_no_cool) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_no_cool
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_ice
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_ice) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_ice
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_probe
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_probe) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_probe
+                announcement: true
+                enqueue: true
+
+  - id: speak_info_cooling_on
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_info_cooling_on) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_cooling_on
+                announcement: true
+                enqueue: true
+
+  - id: speak_info_cooling_off
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_info_cooling_off) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_cooling_off
+                announcement: true
+                enqueue: true
+
+  - id: speak_info_defrost_on
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_info_defrost_on) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_defrost_on
+                announcement: true
+                enqueue: true
+
+  - id: speak_info_defrost_off
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_info_defrost_off) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_defrost_off
+                announcement: true
+                enqueue: true
+
+  - id: speak_info_door_open
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_info_door_open) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_door_open
+                announcement: true
+                enqueue: true
+
+  - id: speak_info_door_closed
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_info_door_closed) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_door_closed
+                announcement: true
+                enqueue: true
+
+  - id: speak_audio_test
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return id(hw_audio_ok);'
+          then:
+            - switch.turn_on: audio_pa_enable
+            - delay: 60ms
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_audio_test
+                announcement: true
+          else:
+            - logger.log: "Audio test skipped — ES8311 not detected"

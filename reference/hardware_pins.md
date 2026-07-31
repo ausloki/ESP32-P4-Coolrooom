@@ -7,6 +7,26 @@ Flash: 32 MB NOR
 PSRAM: 32 MB (DMA-capable, stacked in-package)  
 Display: 7 inch 1024×600 MIPI-DSI (touch via GT911)
 
+**Authoritative sources (check local PDFs first — do not treat chat memory as truth):**
+
+1. Board hardware manual / schematic: `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf`
+2. This digested map: `reference/hardware_pins.md` (update it when pins change)
+3. ESP32-P4 TRM / datasheet: `reference/esp32-p4_technical_reference_manual_en.pdf`,
+   `reference/esp32-p4_datasheet_en.pdf`
+4. Live Waveshare ESP-IDF demos (re-check before pin changes):
+   https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-X/Development-Environment-Setup-IDF
+5. Board wiki: https://www.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B
+
+When Waveshare table names (e.g. codec `ASDOUT` / `DSDIN`) conflict with ESPHome/ESP-IDF
+`dout`/`din`, trust **schematic / sample code** MCU direction macros and document the
+naming inversion here.
+
+### Bench note (current)
+
+RS485 (relay / RTD boards) and external I2C temp sensors are **not** connected on the
+current bench setup. Offline Modbus / missing external readings are expected until that
+hardware is fitted — see `.cursor/rules/bench-hardware-status.mdc`.
+
 ---
 
 ## ✅ CONFIRMED PINS (from official Waveshare documentation)
@@ -60,17 +80,21 @@ Online` (diagnostics) as the signal that the run is marginal if it flaps.
 Source: Waveshare ESP-IDF tutorial, section 5 SDMMC Example.
 
 ### Audio I2S / ES8311 Codec (built-in — items 10/23)
-| Signal        | GPIO | Note                              |
-|---------------|------|-----------------------------------|
-| I2S MCLK      | 13   | Master clock to ES8311            |
-| I2S SCLK      | 12   | Serial clock                      |
-| I2S ASDOUT    | 11   | Audio output (codec → amp)        |
-| I2S LRCK      | 10   | Left/Right channel select         |
-| I2S DSDIN     | 9    | Audio input (mic → codec)         |
-| PA_Ctrl       | 53   | NS4150B amplifier enable (HIGH=on)|
+| Signal        | GPIO | Direction   | Note                                        |
+|---------------|------|-------------|---------------------------------------------|
+| I2S MCLK      | 13   | ESP → codec | Master clock to ES8311                      |
+| I2S SCLK      | 12   | ESP → codec | Serial (bit) clock                          |
+| I2S LRCK      | 10   | ESP → codec | Left/Right channel select                   |
+| I2S DSDIN     | 9    | ESP → codec | Playback data — ESPHome `i2s_dout_pin`      |
+| I2S ASDOUT    | 11   | codec → ESP | Mic/ADC data — ESPHome `i2s_din_pin`        |
+| PA_Ctrl       | 53   | ESP → amp   | NS4150B amplifier enable (HIGH=on)          |
 
 Source: Waveshare ESP-IDF tutorial, section 6 I2S Audio Example.  
-⚠️ **GPIO 9-13 and GPIO 53 are dedicated to on-board audio. Never reuse for RS485 or other peripherals.**
+⚠️ **GPIO 9-13 and GPIO 53 are dedicated to on-board audio. Never reuse for RS485 or other peripherals.**  
+⚠️ **DSDIN/ASDOUT are named from the ES8311's point of view and therefore invert
+relative to ESPHome's `dout`/`din`, which are named from the ESP's point of view.
+Wiring playback to GPIO11 (the codec's own output) yields correct clocks and amp
+switching pops but total silence — the samples never reach the codec.**
 
 ---
 

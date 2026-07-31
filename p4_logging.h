@@ -22,6 +22,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <cstdint>
+#include <string>
 #include <inttypes.h>
 #include <sys/stat.h>
 #include <sys/unistd.h>
@@ -37,6 +39,87 @@
 #endif
 
 static const char* TAG_SD = "p4_sd";
+
+// Soft I/O counters for lifespan estimation. Consumer SD cards do not expose
+ // wear-level SMART data over SDMMC, so we count our own open/read/write
+ // traffic instead — enough to see write rate and relative wear from logging
+ // and backup. Reset on reboot (not persisted).
+static uint32_t p4_sd_open_count   = 0;
+static uint32_t p4_sd_read_count   = 0;
+static uint32_t p4_sd_write_count  = 0;
+static uint64_t p4_sd_bytes_read   = 0;
+static uint64_t p4_sd_bytes_written = 0;
+
+inline void p4_sd_note_open()  { ++p4_sd_open_count; }
+inline void p4_sd_note_read(size_t n)  { ++p4_sd_read_count;  p4_sd_bytes_read    += n; }
+inline void p4_sd_note_write(size_t n) { ++p4_sd_write_count; p4_sd_bytes_written += n; }
+
+// ─── Live event ring (web Events tab) ──────────────────────────────────────
+// The SD events.csv is the durable record; this ring is what the dashboard
+// polls so an operator can watch alarms/errors land without downloading a
+// file. Capacity is deliberately small — a few minutes of dense activity.
+
+static constexpr size_t P4_EVENT_RING_CAP = 80;
+static constexpr size_t P4_EVENT_TYPE_LEN = 28;
+static constexpr size_t P4_EVENT_DETAIL_LEN = 96;
+
+struct P4EventRingEntry {
+  char ts[24];
+  char type[P4_EVENT_TYPE_LEN];
+  char detail[P4_EVENT_DETAIL_LEN];
+};
+
+static P4EventRingEntry p4_event_ring[P4_EVENT_RING_CAP];
+static size_t p4_event_ring_head = 0;   // next write index
+static size_t p4_event_ring_count = 0;  // 0..CAP
+static uint32_t p4_event_ring_seq = 0;  // monotonic, for "since" polling
+// Prebuilt full-ring JSON. The HTTP handler must not build into a stack
+// temporary whose .c_str() dies before the IDF web server finishes the
+// write — same pattern as p4_wifi's status_json.
+static std::string p4_event_ring_full_json{"{\"seq\":0,\"events\":[]}"};
+
+inline void p4_event_ring_rebuild_json_() {
+  std::string events = "[";
+  if (p4_event_ring_count > 0) {
+    size_t start = (p4_event_ring_head + P4_EVENT_RING_CAP - p4_event_ring_count) % P4_EVENT_RING_CAP;
+    uint32_t oldest_seq = p4_event_ring_seq - (uint32_t) p4_event_ring_count + 1;
+    auto esc = [](const char *s) -> std::string {
+      std::string o;
+      for (; s && *s; ++s) {
+        if (*s == '"' || *s == '\\') { o += '\\'; o += *s; }
+        else if ((unsigned char)*s < 0x20) { /* drop controls */ }
+        else o += *s;
+      }
+      return o;
+    };
+    for (size_t i = 0; i < p4_event_ring_count; i++) {
+      if (i) events += ",";
+      const P4EventRingEntry &e = p4_event_ring[(start + i) % P4_EVENT_RING_CAP];
+      uint32_t seq = oldest_seq + (uint32_t) i;
+      events += "{\"seq\":" + std::to_string(seq) +
+                ",\"ts\":\"" + esc(e.ts) +
+                "\",\"event\":\"" + esc(e.type) +
+                "\",\"detail\":\"" + esc(e.detail) + "\"}";
+    }
+  }
+  events += "]";
+  p4_event_ring_full_json = std::string("{\"seq\":") + std::to_string(p4_event_ring_seq) +
+                            ",\"events\":" + events + "}";
+}
+
+inline void p4_event_ring_push(const char *event_type, const char *detail) {
+  P4EventRingEntry &e = p4_event_ring[p4_event_ring_head];
+  p4_fmt_time(e.ts, sizeof(e.ts));
+  snprintf(e.type, sizeof(e.type), "%s", event_type != nullptr ? event_type : "");
+  snprintf(e.detail, sizeof(e.detail), "%s", detail != nullptr ? detail : "");
+  p4_event_ring_head = (p4_event_ring_head + 1) % P4_EVENT_RING_CAP;
+  if (p4_event_ring_count < P4_EVENT_RING_CAP) p4_event_ring_count++;
+  p4_event_ring_seq++;
+  p4_event_ring_rebuild_json_();
+}
+
+/// Snapshot of the live ring for the Events tab. Filter client-side with since.
+inline const std::string &p4_event_ring_json() { return p4_event_ring_full_json; }
 
 // ─── SD mount state ────────────────────────────────────────────────────────
 
@@ -149,14 +232,12 @@ inline void p4_sd_unmount() {
 inline bool p4_sd_is_ready() { return p4_sd_ready; }
 
 /// Marks the card as no longer usable after a write-path failure discovered
-/// at runtime (e.g. physically removed while running) — a successfully
-/// mounted FATFS volume doesn't normally fail a plain fopen("a"/"w") unless
-/// the underlying storage genuinely disappeared or corrupted, so this is
-/// treated as conclusive. Read-path "file not found" (e.g. no backup.json
-/// yet) is NOT failure — callers must not call this for that case. The
-/// control loop watches p4_sd_is_ready() for the true→false edge to fire an
-/// ntfy alert and flip the sd_card_online diagnostic in real time, instead
-/// of that entity silently staying "true" forever after a runtime failure.
+/// at runtime (e.g. physically removed while running). Read-path "file not
+/// found" (e.g. no backup.json yet) is NOT failure — callers must not call
+/// this for that case. The control loop watches p4_sd_is_ready() for the
+/// true→false edge to fire an ntfy alert and flip the sd_card_online
+/// diagnostic in real time, instead of that entity silently staying "true"
+/// forever after a runtime failure.
 /// p4_sd_vfs_registered deliberately stays true here — the mount point is
 /// still registered with ESP-IDF even though I/O is failing; the next
 /// p4_sd_mount() call (auto-remount) cleans that up before retrying.
@@ -164,6 +245,37 @@ inline void p4_sd_mark_failed(const char* where) {
     if (!p4_sd_ready) return;
     p4_sd_ready = false;
     ESP_LOGE(TAG_SD, "SD card write failed in %s — marking card as failed/unavailable", where);
+}
+
+/// Cheap write probe used to tell "this one filename could not be opened"
+/// apart from "the card is gone". A healthy card can still refuse a name the
+/// filesystem cannot represent, and treating that as a dead card took
+/// logging, backup and restore offline on every log tick — then the
+/// auto-remount watchdog brought it straight back, flapping the SD
+/// diagnostic and the ntfy fault/recovery pair. The probe name is 8.3-safe
+/// so it succeeds even on a volume built without long-filename support.
+inline bool p4_sd_probe_writable() {
+    FILE* p = fopen("/sdcard/sdprobe.tmp", "w");
+    if (!p) return false;
+    fclose(p);
+    remove("/sdcard/sdprobe.tmp");
+    return true;
+}
+
+/// Handles a failed fopen() on the card: marks the card failed only when the
+/// card itself is genuinely unwritable, and otherwise reports the offending
+/// path and leaves the rest of the SD features running.
+inline bool p4_sd_handle_open_failure(const char* where, const char* path) {
+    if (p4_sd_probe_writable()) {
+        ESP_LOGE(TAG_SD,
+                 "Cannot open %s in %s — card is still writable, so this is a "
+                 "filename/filesystem problem (check FATFS long-filename support)",
+                 path, where);
+        return false;
+    }
+    ESP_LOGE(TAG_SD, "Cannot open %s", path);
+    p4_sd_mark_failed(where);
+    return false;
 }
 
 // ─── Temperature logging ───────────────────────────────────────────────────
@@ -184,26 +296,31 @@ inline bool p4_sd_log_temps(
 ) {
     if (!p4_sd_ready) return false;
 
-    // Build date-stamped filename
+    // Build date-stamped filename. Before NTP/RTC sync the clock reads 1970,
+    // and dating a day's readings 1970-01-01 buries real data in a file that
+    // every later boot appends to as well — park those rows in nodate.csv
+    // until the clock is trustworthy instead.
     char path[48];
     {
         struct timeval tv{};
         gettimeofday(&tv, nullptr);
         struct tm t{};
         localtime_r(&tv.tv_sec, &t);
-        snprintf(path, sizeof(path), "/sdcard/%04d-%02d-%02d.csv",
-                 t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+        const int year = t.tm_year + 1900;
+        if (year < 2020)
+            snprintf(path, sizeof(path), "/sdcard/nodate.csv");
+        else
+            snprintf(path, sizeof(path), "/sdcard/%04d-%02d-%02d.csv",
+                     year, t.tm_mon + 1, t.tm_mday);
     }
 
     // Create with header if new
     struct stat st{};
     bool is_new = (stat(path, &st) != 0);
     FILE* f = fopen(path, "a");
-    if (!f) {
-        ESP_LOGE(TAG_SD, "Cannot open %s", path);
-        p4_sd_mark_failed("p4_sd_log_temps");
-        return false;
-    }
+    if (!f)
+        return p4_sd_handle_open_failure("p4_sd_log_temps", path);
+    p4_sd_note_open();
     if (is_new) {
         fputs("timestamp,coolroom_c,evap_c,ambient_c,setpoint_c,"
               "compressor,defrost,alarm_hi,alarm_lo,probe_fault\n", f);
@@ -223,10 +340,11 @@ inline bool p4_sd_log_temps(
     fmtf(ac, sizeof(ac), ambient_c);
     fmtf(sp, sizeof(sp), setpoint_c);
 
-    fprintf(f, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%d\n",
+    int written = fprintf(f, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%d\n",
             ts, sc, ec, ac, sp,
             (int)compressor_on, (int)defrost_on,
             (int)alarm_hi, (int)alarm_lo, (int)probe_fault);
+    if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     return true;
 }
@@ -237,15 +355,17 @@ inline bool p4_sd_log_temps(
 /// event_type: e.g. "ALARM_HI", "ALARM_CLEAR", "DEFROST_START", "PROBE_FAULT"
 /// detail: optional extra info, e.g. temperature value string.
 inline bool p4_sd_log_event(const char* event_type, const char* detail = "") {
+    // Always land in the live ring — even when the SD card is missing — so
+    // the Events tab still shows what just happened.
+    p4_event_ring_push(event_type, detail);
+
     if (!p4_sd_ready) return false;
 
     static bool header_written = false;
     FILE* f = fopen("/sdcard/events.csv", "a");
-    if (!f) {
-        ESP_LOGE(TAG_SD, "Cannot open events.csv");
-        p4_sd_mark_failed("p4_sd_log_event");
-        return false;
-    }
+    if (!f)
+        return p4_sd_handle_open_failure("p4_sd_log_event", "/sdcard/events.csv");
+    p4_sd_note_open();
 
     if (!header_written) {
         // Check if file was empty (new)
@@ -256,7 +376,8 @@ inline bool p4_sd_log_event(const char* event_type, const char* detail = "") {
 
     char ts[24];
     p4_fmt_time(ts, sizeof(ts));
-    fprintf(f, "%s,%s,%s\n", ts, event_type, detail);
+    int written = fprintf(f, "%s,%s,%s\n", ts, event_type, detail);
+    if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     ESP_LOGI(TAG_SD, "Event logged: %s %s", event_type, detail);
     return true;
@@ -318,15 +439,13 @@ inline bool p4_sd_backup_params(
         if (p4_sd_mount())
             f = fopen("/sdcard/backup.json", "w");
     }
-    if (!f) {
-        ESP_LOGE(TAG_SD, "Cannot open backup.json for write");
-        p4_sd_mark_failed("p4_sd_backup_params");
-        return false;
-    }
+    if (!f)
+        return p4_sd_handle_open_failure("p4_sd_backup_params", "/sdcard/backup.json");
+    p4_sd_note_open();
 
     char ts[24];
     p4_fmt_time(ts, sizeof(ts));
-    fprintf(f,
+    int written = fprintf(f,
         "{\n"
         "  \"timestamp\": \"%s\",\n"
         "  \"setpoint\":   %.1f,\n"
@@ -387,10 +506,21 @@ inline bool p4_sd_backup_params(
         dew_point_trigger_enabled ? "true" : "false",
         startup_grace_min,
         door_light_enabled ? "true" : "false");
+    if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              setpoint, comp_diff, alarm_high, alarm_low);
     return true;
+}
+
+/// True if a settings backup is present on the card. Used at boot to report
+/// whether the Restore button has anything to work with, without applying it.
+inline bool p4_sd_backup_present(size_t* size_out = nullptr) {
+    if (!p4_sd_ready) return false;
+    struct stat st{};
+    if (stat("/sdcard/backup.json", &st) != 0) return false;
+    if (size_out != nullptr) *size_out = (size_t) st.st_size;
+    return st.st_size > 0;
 }
 
 /// Read /sdcard/backup.json and populate output parameters.
@@ -440,6 +570,7 @@ inline bool p4_sd_restore_params(
         ESP_LOGW(TAG_SD, "backup.json not found");
         return false;
     }
+    p4_sd_note_open();
 
     // Sized well past the full field set (~840 B at last count) so every key
     // actually lands in buf — this was previously char buf[256], which
@@ -451,6 +582,7 @@ inline bool p4_sd_restore_params(
     char buf[1536];
     size_t n = fread(buf, 1, sizeof(buf) - 1, f);
     fclose(f);
+    p4_sd_note_read(n);
     buf[n] = '\0';
 
     // Simple sscanf-based parse (no external JSON library needed)
@@ -541,17 +673,30 @@ inline bool p4_sd_restore_params(
     parse_field("\"startup_grace_min\"", startup_grace);
     parse_bool("\"door_light_enabled\"", b_door_light_en);
 
-    if (!std::isfinite(sp) || !std::isfinite(cd) ||
-        !std::isfinite(ah) || !std::isfinite(al) ||
-        !std::isfinite(lockout) || !std::isfinite(def_grace) ||
-        !std::isfinite(def_int) || !std::isfinite(def_dur) ||
-        !std::isfinite(def_drip) || !std::isfinite(def_end) ||
-        !std::isfinite(alarm_persist) || !std::isfinite(alarm_hyst) ||
-        !std::isfinite(door_delay) || !std::isfinite(no_cool) ||
-        !std::isfinite(ice_delta) || !std::isfinite(fb_on) ||
-        !std::isfinite(fb_off) || !std::isfinite(smart_delta) ||
-        !std::isfinite(smart_dwell)) {
-        ESP_LOGE(TAG_SD, "backup.json parse failed");
+    // Naming the offending key matters: a bare "parse failed" gives no way to
+    // tell a missing key from a malformed value from a stale file, and every
+    // one of those needs a different fix.
+    const struct { const char* key; float value; } required[] = {
+        {"setpoint", sp}, {"comp_diff", cd},
+        {"alarm_high", ah}, {"alarm_low", al},
+        {"comp_lockout_min", lockout}, {"defrost_grace_min", def_grace},
+        {"defrost_interval_min", def_int}, {"defrost_duration_min", def_dur},
+        {"defrost_drip_min", def_drip}, {"defrost_end_c", def_end},
+        {"alarm_persist_min", alarm_persist}, {"alarm_hysteresis_c", alarm_hyst},
+        {"door_alarm_delay_s", door_delay}, {"no_cool_alarm_min", no_cool},
+        {"ice_delta_c", ice_delta}, {"fallback_on_min", fb_on},
+        {"fallback_off_min", fb_off}, {"smart_delta_c", smart_delta},
+        {"smart_dwell_min", smart_dwell},
+    };
+    bool ok = true;
+    for (const auto& r : required) {
+        if (!std::isfinite(r.value)) {
+            ESP_LOGE(TAG_SD, "backup.json: key \"%s\" missing or not a number", r.key);
+            ok = false;
+        }
+    }
+    if (!ok) {
+        ESP_LOGE(TAG_SD, "backup.json parse failed (%u bytes read)", (unsigned) n);
         return false;
     }
 
@@ -615,3 +760,20 @@ inline float p4_sd_total_mb() {
         ((uint64_t)p4_sd_card->csd.capacity) * p4_sd_card->csd.sector_size;
     return static_cast<float>(total_bytes) / (1024.0f * 1024.0f);
 }
+
+/// Card name from CID (empty string if not mounted).
+inline const char* p4_sd_card_name() {
+    if (!p4_sd_ready || p4_sd_card == nullptr) return "";
+    return p4_sd_card->cid.name;
+}
+
+inline uint32_t p4_sd_speed_khz() {
+    if (!p4_sd_ready || p4_sd_card == nullptr) return 0;
+    return p4_sd_card->max_freq_khz;
+}
+
+inline uint32_t p4_sd_stat_opens()   { return p4_sd_open_count; }
+inline uint32_t p4_sd_stat_reads()   { return p4_sd_read_count; }
+inline uint32_t p4_sd_stat_writes()  { return p4_sd_write_count; }
+inline uint64_t p4_sd_stat_bytes_read()    { return p4_sd_bytes_read; }
+inline uint64_t p4_sd_stat_bytes_written() { return p4_sd_bytes_written; }

@@ -1,0 +1,71 @@
+---
+description: Always use local reference hardware manual/schematic (then Waveshare live docs) before pin/peripheral firmware work
+alwaysApply: true
+---
+
+# Hardware reference cross-check (mandatory)
+
+This project targets the **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B**. Before adding or
+changing any board pin, bus, codec, display, touch, SD, Wi-Fi-C6, audio, I2C, RS485, or
+related firmware/docs, **consult the local reference materials first** — do not rely on
+memory, prior chat, or guessed pin numbers.
+
+## Local canonical sources (check these first)
+
+Prefer files under `reference/` in this repo. Open / search them when coding hardware:
+
+| Doc | Path | Use for |
+|-----|------|---------|
+| **Board hardware manual / schematic** | `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` | Board pinout, connectors, on-board peripherals, schematic nets |
+| **ESP32-P4 technical reference manual** | `reference/esp32-p4_technical_reference_manual_en.pdf` | SoC peripherals, registers, bus behaviour |
+| **ESP32-P4 datasheet** | `reference/esp32-p4_datasheet_en.pdf` | Electrical limits, package/pin capabilities |
+| **Digested pin map (project)** | `reference/hardware_pins.md` | Confirmed GPIO/I2C/audio/SD assignments used by this firmware |
+| **Modbus RTU Relay 4CH manual** | `reference/waveshare-modbus-rtu-relay-4ch-manual.pdf` (+ supplement / register-map.md) | Relay board protocol |
+| **PT100 RS485 converter** | `reference/BRT-PT100AD-PT100-to-RS485-AD-Converter.pdf` | RTD Modbus board |
+
+**Always start with the board PDF + `hardware_pins.md` for GPIO/connector work.** Use the
+Espressif TRM/datasheet when the question is chip capability, not board wiring. Use the
+relay/RTD PDFs for Modbus address/register coding.
+
+## Live Waveshare sources (re-check when local notes may be stale)
+
+After local PDFs, verify against current Waveshare pages — especially if `hardware_pins.md`
+and the PDF disagree, or before changing pins:
+
+1. **ESP-IDF tutorial + demos (primary online):**
+   https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-X/Development-Environment-Setup-IDF
+2. **Board wiki / pin overview:**
+   https://www.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B
+3. **Docs hub (same family):**
+   https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-7B
+
+When a demo is named (`i2scodec`, `i2c_tools`, `sdmmc`, MIPI-DSI, RS485, etc.), open that
+section and, if Waveshare links a sample project, **inspect the sample pin macros**
+(MCU `DO`/`DI` / `DOUT`/`DIN`) — not only the prose table.
+
+## How to interpret pin names
+
+Waveshare tables often name signals **from the peripheral's point of view**. ESPHome /
+ESP-IDF usually name them **from the ESP's point of view**. Those invert for bidirectional
+buses.
+
+**Known trap (audio I2S / ES8311):** Waveshare `ASDOUT` = codec → bus = ESP **input**
+(`i2s_din`). Waveshare `DSDIN` = codec ← bus = ESP **output** (`i2s_dout`). Wiring
+playback to GPIO11 yields healthy clocks, PA clicks, media player `PLAYING`, and **no
+speech**. Official IDF-style mapping for this board family is `I2S_DO=GPIO9`,
+`I2S_DI=GPIO11`, `PA_Ctrl=GPIO53`.
+
+## Required workflow
+
+1. **Before** editing substitutions / GPIO / `p4_audio.yaml` / I2C / display / SD / C6
+   pins: read the relevant section of `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` and
+   `reference/hardware_pins.md`. Use TRM/datasheet PDFs when the change depends on SoC
+   behaviour. For RS485 relay/RTD work, use those PDFs too.
+2. Prefer **schematic / sample code pin `#define`s** over marketing/table wording when
+   they disagree.
+3. If local PDF and live Waveshare demo disagree, note both, prefer sample/`#define`
+   direction, and update `reference/hardware_pins.md` with the citation.
+4. After changing pins, update `reference/hardware_pins.md` with the source cited
+   (PDF page/section and/or Waveshare URL) and any MCU-vs-peripheral naming note.
+5. Do not treat chat memory or unverified web summaries as authoritative over the local
+   schematic/manual PDFs.

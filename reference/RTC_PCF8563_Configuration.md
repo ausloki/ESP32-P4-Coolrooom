@@ -76,8 +76,44 @@ time:
 
 **Behavior:**
 
-1. SNTP syncs the ESP32 internal RTC from NTP servers (configurable interval via `ntp_fast_sync_ms` and `ntp_normal_sync_ms`)
-2. Once NTP syncs, ESPHome automatically syncs the PCF8563 chip from the ESP32 internal RTC
+1. At boot, if the PCF8563 answers, `read_time()` seeds the ESP wall clock **before WiFi/NTP** — log timestamps and the UI clock are correct immediately after a power cut.
+2. SNTP still runs for long-term accuracy. When the RTC already held valid time, the poll interval is `ntp_with_rtc_sync_ms` (7 days) instead of the 60s boot hammer / 24h NTP-only cadence.
+3. Each successful NTP sync calls `write_time()` so the chip is corrected, then the next power cut starts accurate again.
+
+### ESP32-P4 USB reset quirk (verification)
+
+On current ESP-IDF builds for ESP32-P4, flashing or resetting through the **USB-to-UART** lines (esptool DTR/RTS toggling `EN`) reports **`ESP_RST_POWERON`**, not a software reboot (`ESP_RST_SW` / similar).
+
+Implications:
+
+- Post-flash / USB-reset is **not** a soft reboot for clock diagnostics. Do not interpret a surviving wall clock as “ESP retained time across a software restart.”
+- With **RTC Offline**, a correct `Current Time` soon after USB reset means **NTP (or equivalent) already filled the clock** — not battery RTC.
+- With **RTC Online**, a correct clock **before** WiFi/NTP is the real proof the PCF8563 seeded time; USB reset is still a useful cold-boot-like check of that path because the reset reason matches power-on.
+4. If the chip is missing or failed, NTP alone is used (`ntp_fast_sync_ms` → `ntp_normal_sync_ms`) and the driver never retries I2C writes (timeouts previously stalled bring-up).
+
+```yaml
+time:
+  - platform: sntp
+    id: ntp_time
+    timezone: ${timezone}
+    servers:
+      - ${ntp_server_1}
+      - ${ntp_server_2}
+    on_time_sync:
+      - lambda: |-
+          if (id(hw_rtc_ok) && !id(rtc_pcf8563).is_failed()) {
+            id(rtc_pcf8563).write_time();
+            p4_ntp_set_interval(${ntp_with_rtc_sync_ms});
+          } else {
+            p4_ntp_set_interval(${ntp_normal_sync_ms});
+          }
+
+  - platform: pcf8563
+    id: rtc_pcf8563
+    i2c_id: i2c_bus
+    address: 0x51
+    update_interval: never
+```
 3. The PCF8563 battery backup preserves time across power cycles
 4. On next boot, the PCF8563 provides a reasonable initial time while awaiting NTP sync
 

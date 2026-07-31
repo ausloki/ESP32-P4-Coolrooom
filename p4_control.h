@@ -114,6 +114,74 @@ inline bool p4_ctl_comp_locked_out(uint32_t comp_last_off_ms, uint32_t lockout_m
     return (millis() - comp_last_off_ms) < lockout_ms;
 }
 
+/// True while the compressor must stay ON even though the room has already
+/// reached the cut-out threshold (min-run / short-cycle protection on the
+/// ON side — complement to p4_ctl_comp_locked_out).
+/// min_run_ms = 0 disables the hold.
+inline bool p4_ctl_comp_min_run_hold(
+    bool     coolroom_at_or_below_cutout,
+    bool     compressor_on,
+    uint32_t comp_on_since_ms,
+    uint32_t min_run_ms
+) {
+    if (!compressor_on || min_run_ms == 0U) return false;
+    if (!coolroom_at_or_below_cutout) return false;
+    if (comp_on_since_ms == 0U) return true;  // unknown start → hold conservatively
+    return (millis() - comp_on_since_ms) < min_run_ms;
+}
+
+/// Scheduled defrost is due but the evaporator is already at/below the skip
+/// threshold (coil already cold / no frost worth clearing). Caller should
+/// roll the interval clock forward instead of starting a cycle.
+inline bool p4_ctl_defrost_skip_if_cold(
+    bool  skip_enabled,
+    bool  evap_ok,
+    float evap_c,
+    float skip_below_c
+) {
+    if (!skip_enabled || !evap_ok || !p4_rtd_valid(evap_c)) return false;
+    return evap_c <= skip_below_c;
+}
+
+/// Safety-net: force a defrost when too long has elapsed since the last cycle
+/// ended (or started, if end was never recorded). Bypasses skip-if-cold.
+inline bool p4_ctl_defrost_force_max_due(
+    uint32_t last_end_ms,
+    uint32_t last_start_ms,
+    uint32_t force_max_ms
+) {
+    if (force_max_ms == 0U) return false;
+    uint32_t ref = last_end_ms != 0U ? last_end_ms : last_start_ms;
+    if (ref == 0U) return false;
+    return (millis() - ref) >= force_max_ms;
+}
+
+/// Frost-rate (humidity-drop) early defrost: large RH drop over the sample
+/// window while room temperature stays nearly stable. Returns true once per
+/// window when the condition holds; caller latches "already triggered" for
+/// the current cooling cycle.
+inline bool p4_ctl_frost_rate_ready(
+    bool     enabled,
+    bool     in_defrost,
+    bool     already_triggered,
+    float    humidity_pct,
+    float    coolroom_c,
+    float    last_humidity_pct,
+    float    last_temp_c,
+    uint32_t last_sample_ms,
+    uint32_t window_ms,
+    float    humidity_drop_threshold_pct,
+    float    max_temp_change_c = 0.5f
+) {
+    if (!enabled || in_defrost || already_triggered) return false;
+    if (isnan(humidity_pct) || isnan(coolroom_c)) return false;
+    if (last_sample_ms == 0U) return false;  // caller must seed baseline first
+    if ((millis() - last_sample_ms) < window_ms) return false;
+    float humidity_drop = last_humidity_pct - humidity_pct;
+    float temp_change = fabsf(coolroom_c - last_temp_c);
+    return humidity_drop >= humidity_drop_threshold_pct && temp_change <= max_temp_change_c;
+}
+
 // ─── Alarm grace periods ────────────────────────────────────────────────────
 
 /// True during the startup quiet period — no alarms should fire.
@@ -233,11 +301,82 @@ inline bool p4_ctl_no_cool_alarm(
 
 // ─── Ice detection alarm ────────────────────────────────────────────────────
 
-/// True when the coolroom-to-evap delta is smaller than ice_delta_c.
-/// A very small delta indicates ice blocking the evaporator coil.
-inline bool p4_ctl_ice_alarm(float coolroom_c, float evap_c, float ice_delta_c) {
+/// Instantaneous ice condition (Precision polarity): a *large* coolroom−evap
+/// gap while the compressor runs means the coil is iced / starved of airflow
+/// and the evaporator is much colder than the room. Older P4 builds used the
+/// inverted "small gap" test — that is deliberately replaced to match Precision.
+inline bool p4_ctl_ice_condition(float coolroom_c, float evap_c, float ice_delta_c) {
     if (!p4_rtd_valid(coolroom_c) || !p4_rtd_valid(evap_c)) return false;
-    return (coolroom_c - evap_c) < ice_delta_c;
+    return (coolroom_c - evap_c) >= ice_delta_c;
+}
+
+/// True once the ice condition has held continuously for dwell_ms.
+/// ice_since_ms: millis() when the condition first appeared; 0 = not active.
+/// dwell_ms = 0 → fire on the same tick the condition appears.
+inline bool p4_ctl_ice_alarm_dwelt(uint32_t ice_since_ms, uint32_t dwell_ms) {
+    if (ice_since_ms == 0U) return false;
+    if (dwell_ms == 0U) return true;
+    return (millis() - ice_since_ms) >= dwell_ms;
+}
+
+/// Bitmask of active alarm / fault conditions for soft-mute tracking.
+/// Bit0 high, 1 low, 2 door, 3 no-cool, 4 ice, 5 probe fault.
+inline uint8_t p4_ctl_alarm_mask(bool hi, bool lo, bool door, bool no_cool, bool ice, bool probe) {
+    uint8_t m = 0;
+    if (hi) m |= 1u << 0;
+    if (lo) m |= 1u << 1;
+    if (door) m |= 1u << 2;
+    if (no_cool) m |= 1u << 3;
+    if (ice) m |= 1u << 4;
+    if (probe) m |= 1u << 5;
+    return m;
+}
+
+/// Soft-mute should end when nothing is left, or when a *new* condition bit
+/// appears that was not active at the moment the operator silenced the bell.
+inline bool p4_ctl_alarm_silence_should_clear(bool silenced, uint8_t silenced_mask, uint8_t now_mask) {
+    if (!silenced) return false;
+    if (now_mask == 0) return true;
+    return (now_mask & ~silenced_mask) != 0;
+}
+
+/// Legacy name → condition only (no dwell). Prefer p4_ctl_ice_condition + dwell.
+inline bool p4_ctl_ice_alarm(float coolroom_c, float evap_c, float ice_delta_c) {
+    return p4_ctl_ice_condition(coolroom_c, evap_c, ice_delta_c);
+}
+
+// ─── Probe source profiles ──────────────────────────────────────────────────
+
+/// Probe source enum (matches Precision / LCD labels).
+enum P4ProbeSource : int {
+    P4_PROBE_RTD_RS485 = 0,
+    P4_PROBE_SHT31_I2C = 1,
+    P4_PROBE_UNUSED    = 2,
+};
+
+/// Resolve the coolroom control temperature from the selected source.
+/// Returns NAN when the source is unused or the reading is invalid.
+inline float p4_ctl_resolve_coolroom_c(int probe1_type, float rtd_c, float sht31_c) {
+    if (probe1_type == P4_PROBE_SHT31_I2C) return p4_rtd_valid(sht31_c) ? sht31_c : NAN;
+    if (probe1_type == P4_PROBE_UNUSED) return NAN;
+    return p4_rtd_valid(rtd_c) ? rtd_c : NAN;
+}
+
+/// Resolve evaporator temperature. Unused / non-RTD → NAN (evap_ok false).
+inline float p4_ctl_resolve_evap_c(int probe2_type, bool probe2_enabled, float rtd_c) {
+    if (!probe2_enabled || probe2_type == P4_PROBE_UNUSED) return NAN;
+    // Evap coil is always an RTD on this board; SHT31 as probe2 is rejected.
+    return p4_rtd_valid(rtd_c) ? rtd_c : NAN;
+}
+
+/// Auto-calibrate offset against an SHT31 reference: offset = ref − probe_avg.
+/// Clamped to ±10 °C. Returns NAN if either input is invalid.
+inline float p4_ctl_calibration_offset(float sht31_ref_c, float probe_avg_c) {
+    if (!p4_rtd_valid(sht31_ref_c) || !p4_rtd_valid(probe_avg_c)) return NAN;
+    float off = sht31_ref_c - probe_avg_c;
+    if (off > 10.0f) off = 10.0f;
+    if (off < -10.0f) off = -10.0f;
+    return off;
 }
 
 // ─── Sensor fallback duty cycle ─────────────────────────────────────────────

@@ -1,7 +1,39 @@
 # Project Instructions — ESP32-P4 Coolroom Controller
 
 These extend (not replace) the global Project Closeout Routine already in effect for every
-project. This file adds one project-specific closeout step for this repo specifically.
+project. This file adds project-specific requirements for this repo.
+
+## Hardware: local schematic/manual first, then Waveshare live docs
+
+Board: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B.
+
+**Before changing GPIO, I2S/audio, I2C, display/touch, SD, ESP32-C6, or Modbus wiring**,
+consult the local reference PDFs and pin map — do not trust memory or chat alone:
+
+- `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` — board hardware manual / schematic
+- `reference/esp32-p4_technical_reference_manual_en.pdf` / `esp32-p4_datasheet_en.pdf` — SoC
+- `reference/hardware_pins.md` — project’s digested GPIO/I2C/audio map
+- Relay / RTD PDFs under `reference/` when touching Modbus
+
+Then re-check live Waveshare ESP-IDF demos if pins may have changed upstream:
+
+- https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-X/Development-Environment-Setup-IDF
+- https://www.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B
+
+Prefer schematic / demo sample pin macros over table wording when names disagree
+(Waveshare often names pins from the *peripheral*; ESPHome/ESP-IDF name them from the
+*ESP*). See `.cursor/rules/waveshare-hardware-check.mdc`.
+
+## Bench hardware status (current)
+
+**Not connected yet** — do not treat as bugs or spend time diagnosing:
+
+- RS485 relay board / RTD Modbus boards (Modbus timeouts and `* Online` OFF are expected)
+- External I2C temp/humidity sensors on the expansion I2C header
+
+Live verification of compressor/defrost/sensor control waits until those are attached.
+On-board UI, Wi-Fi, web, and speaker path remain fair game. See
+`.cursor/rules/bench-hardware-status.mdc` — update that rule when hardware is fitted.
 
 ## Closeout Addition: Documentation Consistency Check
 

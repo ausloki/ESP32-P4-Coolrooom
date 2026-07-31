@@ -48,23 +48,48 @@ Network behavior is optional:
 │  └─────────────────────────────────────────────────┘  └────────────────────┘│
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  DEFROST SCHEDULING  (skip if probe_fault OR compressor just commanded ON)  │
-│  ┌────────── relay_defrost currently OFF ───────────┐                       │
+│  ┌────────── ctl_defrost_active == false ───────────┐                       │
 │  │  p4_ctl_defrost_due(last_end_ms, interval_ms)?   │                       │
 │  │  ┌──── YES ────────────────────────────────────┐ │                       │
 │  │  │ relay_compressor → OFF                      │ │                       │
-│  │  │ relay_defrost    → ON                       │ │                       │
-│  │  │ ctl_defrost_on_since_ms = millis()           │ │                       │
+│  │  │ ctl_defrost_active     = true               │ │                       │
+│  │  │ ctl_defrost_on_since_ms = millis()          │ │                       │
+│  │  │ relay_defrost → ON *only if relay enabled*  │ │                       │
 │  │  └─────────────────────────────────────────────┘ │                       │
+│  │  Auto starts (interval / smart / dew) require    │                       │
+│  │  input_defrost_enabled. Manual start always OK.  │                       │
 │  └──────────────────────────────────────────────────┘                       │
-│  ┌────────── relay_defrost currently ON ────────────┐                       │
+│  ┌────────── ctl_defrost_active == true ────────────┐                       │
 │  │  p4_ctl_defrost_timeout(on_since_ms, max_ms)?    │                       │
+│  │  (or evap reached ctl_defrost_end_c)             │                       │
 │  │  ┌──── YES ────────────────────────────────────┐ │                       │
-│  │  │ relay_defrost          → OFF                │ │                       │
-│  │  │ ctl_defrost_last_end_ms = millis()           │ │                       │
+│  │  │ ctl_defrost_active      = false             │ │                       │
+│  │  │ ctl_defrost_on_since_ms = 0                 │ │                       │
+│  │  │ relay_defrost           → OFF               │ │                       │
+│  │  │ ctl_defrost_last_end_ms = millis()          │ │                       │
 │  │  └─────────────────────────────────────────────┘ │                       │
 │  └──────────────────────────────────────────────────┘                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Passive defrost — cycle state is not the coil
+
+`ctl_defrost_active` is the single source of truth for "a defrost cycle is running".
+The relay is an *output* of that state, not the state itself:
+
+| Situation | `ctl_defrost_active` | `relay_defrost` | Flame icon / FX |
+|---|---|---|---|
+| Normal defrost, relay enabled | true | ON | animated |
+| **Passive defrost** — Defrost Relay Enabled off, or heat supplied outside this controller | true | held OFF | **animated** |
+| Relay re-enabled mid-cycle | true | picks up ON at next tick | animated |
+| Idle | false | OFF | grey, still |
+
+Why it matters beyond cosmetics: the cycle-end test (`p4_ctl_defrost_timeout` /
+evap termination) used to read the coil. With the relay disabled, the coil never
+read back as on, so the cycle could never terminate and the start condition
+re-fired every tick. Compressor hold-off, drip phase, duration/termination
+timing, countdown sensors and `DEFROST_START` / `DEFROST_END` logging all key off
+`ctl_defrost_active` for the same reason.
 
 ---
 
@@ -120,7 +145,8 @@ Control loop:                  if probe_fault → both OFF immediately
 | `ctl_probe_fault`       | bool     | True when probe 1 stale/invalid       |
 | `ctl_alarm_high_active` | bool     | High temp alarm state                 |
 | `ctl_alarm_low_active`  | bool     | Low temp alarm state                  |
-| `ctl_defrost_on_since_ms`| uint32_t| millis() when defrost relay turned ON |
+| `ctl_defrost_active`    | bool     | Defrost cycle running (relay-independent — see Passive defrost) |
+| `ctl_defrost_on_since_ms`| uint32_t| millis() when the defrost cycle started; 0 when idle |
 | `ctl_defrost_last_end_ms`| uint32_t| millis() when last defrost ended      |
 | `hw_rs485_relay_ok`     | bool     | Relay board comms health              |
 | `hw_rtc_ok`             | bool     | PCF8563 RTC health                    |
@@ -306,9 +332,9 @@ RELAY-BOUND ICONS (Hardware State):
 
 CONTROL LOGIC-BOUND ICONS (Software State):
 ├─ defrost_mode_active (binary sensor)
-│  └─ lambda: ctl_defrost_on_since_ms > 0
-│     ├─ TRUE  → ui_defrost_icon.text_color = col_orange
-│     └─ FALSE → ui_defrost_icon.text_color = col_grey
+│  └─ lambda: ctl_defrost_active
+│     ├─ TRUE  → ui_defrost_icon animated + col_red (50ms FX lambda)
+│     └─ FALSE → ui_defrost_icon static + col_grey
 │
 └─ any_alarm_active (binary sensor)
    └─ lambda: ctl_alarm_high_active || ctl_alarm_low_active
@@ -322,8 +348,8 @@ CONTROL LOGIC-BOUND ICONS (Software State):
 |------|-----|--------|-------|-----------|
 | ❄️ Compressor | ui_compressor_icon | Green | Relay ON | relay_compressor |
 | ❄️ Compressor | ui_compressor_icon | Grey | Relay OFF | relay_compressor |
-| 🔥 Defrost | ui_defrost_icon | Orange | Control active | ctl_defrost_on_since_ms > 0 |
-| 🔥 Defrost | ui_defrost_icon | Grey | Control idle | ctl_defrost_on_since_ms = 0 |
+| 🔥 Defrost | ui_defrost_icon | Red, flickering | Control active (incl. passive) | ctl_defrost_active |
+| 🔥 Defrost | ui_defrost_icon | Grey | Control idle | !ctl_defrost_active |
 | 💡 Light | ui_light_icon | Orange | Relay ON | relay_light |
 | 💡 Light | ui_light_icon | Grey | Relay OFF | relay_light |
 | 🔔 Alarm | ui_alarm_icon | Red | Any alarm | ctl_alarm_high/low_active |
@@ -335,8 +361,14 @@ CONTROL LOGIC-BOUND ICONS (Software State):
 - This enables passive defrost cycles, soft alarm triggers, and flexible operation modes
 
 **Touch Handlers:**
-- Light icon: `switch.toggle: relay_light` (toggle relay on/off)
-- Alarm icon: Set `ctl_alarm_high_active = false` and `ctl_alarm_low_active = false` (soft reset)
+- Compressor / Defrost icons: **not clickable** — colour and animation follow relay /
+  control state only (manual coil toggles removed so taps cannot fight the 10s control tick).
+- Light icon: toggle `relay_light` when `ctl_relay_light_enabled` (ignored otherwise).
+- Alarm icon: set `ctl_alarm_silenced = true` and freeze `ctl_alarm_silenced_mask`, turn
+  off `relay_siren` (soft mute). Bell stops jiggling but stays red. Alarm flags, banners
+  and ntfy stay active. Silence clears when every alarm condition is gone, or when a *new*
+  condition bit appears that was not in the frozen mask (bell re-animates; siren/speech may
+  run again).
 
 ### Known Constraints & Workarounds
 

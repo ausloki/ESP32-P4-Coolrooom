@@ -77,6 +77,17 @@ inline void p4_fmt_time(char* buf, size_t len) {
     }
 }
 
+/// True once the wall clock looks set (SNTP or external RTC), not still at
+/// the 1970 epoch. Used to decide whether boot can skip the aggressive NTP
+/// poll — if the battery-backed RTC already seeded time, there is no need
+/// to hammer the network every minute until first sync.
+inline bool p4_wall_clock_ok() {
+    struct timeval tv{};
+    gettimeofday(&tv, nullptr);
+    // 2024-01-01 00:00:00 UTC — anything earlier is "clock never set".
+    return tv.tv_sec >= 1704067200L;
+}
+
 /// Set the SNTP re-sync interval at runtime using the ESP-IDF API.
 /// interval_ms: milliseconds between NTP polls (e.g. 24*3600*1000 = daily).
 inline void p4_ntp_set_interval(uint32_t interval_ms) {
@@ -196,11 +207,41 @@ inline uint32_t p4_pin_hash_djb2(const std::string& pin) {
     return h;
 }
 
+// ─── Home Assistant native API gate ─────────────────────────────────────────
+// When "Home Assistant API Enabled" is off, drop any connected native-API
+// clients so HA cannot subscribe to sensors/switches. The listen socket stays
+// up (ESPHome has no public stop API); new clients are rejected the same way
+// via on_client_connected + the 1 s poll.
+
+#ifdef USE_API
+#include "esphome/components/api/api_server.h"
+
+inline void p4_ha_api_drop_clients() {
+    if (esphome::api::global_api_server == nullptr) return;
+    if (!esphome::api::global_api_server->is_connected()) return;
+    for (auto &c : esphome::api::global_api_server->active_clients()) {
+        if (c) c->on_fatal_error();
+    }
+    ESP_LOGW("ha", "Home Assistant API disabled — dropped client(s)");
+}
+#else
+inline void p4_ha_api_drop_clients() {}
+#endif
+
 // ─── RTC Notes ──────────────────────────────────────────────────────────────
-// The board's external RTC chip identity is not yet hardware-confirmed.
-// This project currently uses PCF8563 (I2C 0x51) as the working assumption.
-// ESPHome's pcf8563 component handles all RTC I2C communication.
-// Call id(rtc_pcf8563).now() from lambdas to get the RTC time.
+// Battery-backed PCF8563 @ 0x51 (Waveshare assumption) keeps wall clock across
+// power cuts. Boot: read_time() seeds the ESP clock before WiFi/NTP. NTP still
+// runs, but at a long interval once the RTC has valid time, and each sync
+// writes back to the chip. Never call read/write when the component is_failed()
+// — a missing chip's I2C timeouts can stall the main loop hard enough that
+// WiFi never comes up.
 //
-// The RTC is synced from the ESP32 internal RTC once NTP syncs.
-// Battery backup preserves time across power cycles.
+// ESP32-P4 / ESP-IDF quirk: flashing or resetting via the USB-to-UART bridge
+// (DTR/RTS → EN) reports ESP_RST_POWERON, not a software reboot. Do not treat
+// post-flash wall-clock survival as "ESP soft-reboot retained time" — the SoC
+// reset reason looks like a cold power-on. A correct clock right after USB
+// reset with RTC Offline means NTP (or another source) already set time; with
+// RTC Online it is evidence the battery chip seeded before WiFi.
+//
+// Call id(rtc_pcf8563).now() only after confirming !is_failed().
+// ────────────────────────────────────────────────────────────────────────────

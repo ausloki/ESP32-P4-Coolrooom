@@ -115,6 +115,65 @@
             font-size: 12px;
             color: #555;
         }
+        .settings-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #dde3ea;
+            padding-bottom: 10px;
+        }
+        .settings-tabs button {
+            background: #eef2f6;
+            color: #334;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .settings-tabs button.active {
+            background: #003d82;
+            color: #fff;
+        }
+        .settings-tab-panel.hidden { display: none !important; }
+        .sd-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .sd-stat {
+            background: #f4f7fb;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+        .sd-stat .label { font-size: 11px; color: #667; text-transform: uppercase; letter-spacing: 0.04em; }
+        .sd-stat .value { font-size: 16px; font-weight: 600; color: #123; margin-top: 4px; }
+        .sd-table-wrap { overflow-x: auto; margin-top: 8px; }
+        .sd-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .sd-table th, .sd-table td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid #e6ebf0;
+        }
+        .sd-table th { color: #556; font-weight: 600; background: #f7f9fc; }
+        .sd-table tr.selected { background: #e8f1fb; }
+        .sd-table tr { cursor: pointer; }
+        .sd-table .kind-backup { color: #003d82; font-weight: 600; }
+        .confirm-modal .modal-content { max-width: 420px; }
+        .confirm-modal .confirm-detail {
+            background: #f4f7fb;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
         .logout-button {
             background: #dc3545 !important;
             color: white !important;
@@ -166,6 +225,11 @@
         .status-ok { background: #d4edda; color: #155724; }
         .status-error { background: #f8d7da; color: #721c24; }
         .status-warning { background: #fff3cd; color: #856404; }
+        .status-idle { background: #e9ecef; color: #555f6a; }
+        /* Relay board absent — rows stay readable but plainly inert. */
+        .relay-row-offline { opacity: 0.45; }
+        .relay-row-offline td { cursor: default; }
+        .wifi-scan-row.selected { background: #e8f1fb; }
 
         .chart-section {
             background: var(--card-bg);
@@ -548,30 +612,6 @@
         .gauge-reading.internal span:last-child { color: #00BCD4; }
         .gauge-reading.external span:last-child { color: #FF1493; }
         .gauge-reading.evaporator span:last-child { color: #FF9F0A; }
-
-        /* Named alarm banner — visible, pulsing, matches the old project's
-           .cr-alarm-banner treatment (as opposed to the generic .alert boxes
-           below, which cover fault/connectivity notices, not named alarms). */
-        .alarm-banner {
-            background: rgba(255, 69, 58, 0.14);
-            border: 1px solid #FF453A;
-            color: #FF453A;
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 16px;
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: 0.03em;
-            text-transform: uppercase;
-            animation: alarm-pulse 1.6s ease-in-out infinite;
-        }
-        @keyframes alarm-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.35); }
-            50% { box-shadow: 0 0 0 8px rgba(255, 69, 58, 0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-            .alarm-banner { animation: none; }
-        }
     </style>
 </head>
 <body>
@@ -590,7 +630,8 @@
             </div>
         </header>
 
-        <!-- System Status Alerts -->
+        <!-- Transient action feedback (login, save, errors). Live alarms/faults
+             are shown only on the Coolroom Status gauge below — not duplicated here. -->
         <div id="alerts"></div>
 
         <!-- Central Display: same three-arc horseshoe gauge as the LVGL touchscreen,
@@ -689,12 +730,26 @@
         </div>
 
 
-        <!-- Settings Section: operator only -->
+        <!-- Settings + Admin: operator only, tabbed so groups stay readable -->
         <div id="settingsSection" class="chart-section operator-only hidden">
             <div class="card-header-row">
-                <h2>⚙️ Operational Settings</h2>
+                <h2>⚙️ Settings &amp; Administration</h2>
             </div>
-            <div id="settingsContent">
+            <div class="settings-tabs" id="settingsTabs" role="tablist">
+                <button type="button" class="active" data-tab="tab-ops" onclick="switchSettingsTab('tab-ops')">Operational</button>
+                <button type="button" data-tab="tab-compressor" onclick="switchSettingsTab('tab-compressor')">Compressor</button>
+                <button type="button" data-tab="tab-defrost" onclick="switchSettingsTab('tab-defrost')">Defrost</button>
+                <button type="button" data-tab="tab-audio" onclick="switchSettingsTab('tab-audio')">Audio</button>
+                <button type="button" data-tab="tab-alarms" onclick="switchSettingsTab('tab-alarms')">Alarms &amp; Notify</button>
+                <button type="button" data-tab="tab-door" onclick="switchSettingsTab('tab-door')">Door</button>
+                <button type="button" data-tab="tab-probes" onclick="switchSettingsTab('tab-probes')">Probes</button>
+                <button type="button" data-tab="tab-sd" onclick="switchSettingsTab('tab-sd')">SD Card</button>
+                <button type="button" data-tab="tab-events" onclick="switchSettingsTab('tab-events')">Events</button>
+                <button type="button" data-tab="tab-hardware" onclick="switchSettingsTab('tab-hardware')">Hardware</button>
+                <button type="button" data-tab="tab-wireless" onclick="switchSettingsTab('tab-wireless')">Wireless</button>
+            </div>
+
+            <div id="tab-ops" class="settings-tab-panel">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
                     <div>
                         <div class="field-label-row">
@@ -707,8 +762,6 @@
                             The target coolroom temperature. The compressor switches <strong>ON</strong> once the
                             room is half the Compressor Hysteresis value above this, and <strong>OFF</strong> the
                             same amount below it — so the room cycles evenly around whatever you set here.
-                            Compared live against the <strong>Coolroom Temperature (Primary Control)</strong>
-                            probe, shown as the big number in the center of the gauge above.
                         </div>
                     </div>
                     <div>
@@ -719,12 +772,7 @@
                         <input type="number" id="alarmHighInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateAlarmHigh()" style="margin-top: 10px;">Update</button>
                         <div id="help-alarm-high" class="help-popover hidden">
-                            How far <strong>above Setpoint</strong> the room can drift before the
-                            <strong>High Temperature</strong> alarm fires — and it has to stay that warm for a
-                            full 5 minutes straight first, so a brief door-open blip won't trigger it. Example:
-                            Setpoint 2.0°C + this value 3.0°C = alarm above 5.0°C. Measured against the same
-                            Coolroom Temperature probe as Setpoint, and drives the pulsing "HIGH TEMPERATURE"
-                            banner and the 🔔 alarm icon.
+                            How far <strong>above Setpoint</strong> the room can drift before the High Temperature alarm fires.
                         </div>
                     </div>
                     <div>
@@ -735,10 +783,7 @@
                         <input type="number" id="alarmLowInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateAlarmLow()" style="margin-top: 10px;">Update</button>
                         <div id="help-alarm-low" class="help-popover hidden">
-                            The same idea as Alarm High Delta, but for the room running <strong>too cold</strong>.
-                            Fires the <strong>Low Temperature</strong> alarm once the room is this many degrees
-                            below Setpoint for a full 5 minutes. Also measured against the Coolroom Temperature
-                            probe.
+                            How far <strong>below Setpoint</strong> before the Low Temperature alarm fires.
                         </div>
                     </div>
                     <div>
@@ -749,138 +794,265 @@
                         <input type="number" id="compDiffInput" step="0.1" style="width: 100%; padding: 8px; margin-top: 5px;">
                         <button onclick="updateCompDiff()" style="margin-top: 10px;">Update</button>
                         <div id="help-comp-diff" class="help-popover hidden">
-                            The temperature band the compressor cycles within around Setpoint (sometimes called
-                            the "differential"). A smaller value keeps the room closer to Setpoint but cycles the
-                            compressor on and off more often — more wear; a larger value cycles it less often but
-                            lets the room drift further each cycle. Compared against the Coolroom Temperature
-                            probe, and also sets the threshold for the <strong>No-Cooling alarm</strong> (which
-                            fires if the compressor has run for over an hour but the room still hasn't dropped
-                            below Setpoint + half this value).
+                            Temperature band the compressor cycles within around Setpoint.
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-
-        <!-- Advanced Settings: operator only -->
-        <div id="advancedSettingsSection" class="chart-section operator-only hidden">
-            <div class="card-header-row">
-                <h2>🛠️ Advanced Settings</h2>
+            <div id="tab-compressor" class="settings-tab-panel hidden" data-adv-group="Compressor & Fallback"></div>
+            <div id="tab-defrost" class="settings-tab-panel hidden" data-adv-group="Defrost"></div>
+            <div id="tab-audio" class="settings-tab-panel hidden" data-adv-group="Audio Alerts"></div>
+            <div id="tab-alarms" class="settings-tab-panel hidden" data-adv-group="Alarms & Notifications"></div>
+            <div id="tab-door" class="settings-tab-panel hidden" data-adv-group="Door"></div>
+            <div id="tab-probes" class="settings-tab-panel hidden" data-adv-group="Probe Calibration & Enable">
+                <div class="card" style="margin-bottom: 16px;">
+                    <h3 style="margin-top:0;">Live probe temperatures</h3>
+                    <p style="margin: 0 0 12px; opacity: 0.75; font-size: 0.9rem;">
+                        Raw is before calibration offset; Corrected is what control, alarms, and the home gauge use.
+                    </p>
+                    <table class="sd-table" style="width:100%; font-size:0.95rem; cursor:default;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Probe</th>
+                                <th>Raw</th>
+                                <th>Offset</th>
+                                <th>Corrected</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Probe 1 (Coolroom RTD)</td>
+                                <td id="probeLiveP1Raw">--</td>
+                                <td id="probeLiveP1Off">--</td>
+                                <td id="probeLiveP1Corr">--</td>
+                            </tr>
+                            <tr>
+                                <td>Probe 2 (Evaporator RTD)</td>
+                                <td id="probeLiveP2Raw">--</td>
+                                <td id="probeLiveP2Off">--</td>
+                                <td id="probeLiveP2Corr">--</td>
+                            </tr>
+                            <tr>
+                                <td>Internal SHT31</td>
+                                <td id="probeLiveShtRaw">--</td>
+                                <td>—</td>
+                                <td id="probeLiveShtCorr">--</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="adv-settings-host"></div>
             </div>
-            <div id="advancedSettingsContent"></div>
-        </div>
 
+            <div id="tab-sd" class="settings-tab-panel hidden">
+                <div class="sd-stats" id="sdStatsGrid">
+                    <div class="sd-stat"><div class="label">Status</div><div class="value" id="sdStatMounted">—</div></div>
+                    <div class="sd-stat"><div class="label">Card</div><div class="value" id="sdStatCard">—</div></div>
+                    <div class="sd-stat"><div class="label">Used</div><div class="value" id="sdStatUsed">—</div></div>
+                    <div class="sd-stat"><div class="label">Free</div><div class="value" id="sdStatFree">—</div></div>
+                    <div class="sd-stat"><div class="label">Total</div><div class="value" id="sdStatTotal">—</div></div>
+                    <div class="sd-stat"><div class="label">Speed</div><div class="value" id="sdStatSpeed">—</div></div>
+                    <div class="sd-stat"><div class="label">Writes (this boot)</div><div class="value" id="sdStatWrites">—</div></div>
+                    <div class="sd-stat"><div class="label">Reads (this boot)</div><div class="value" id="sdStatReads">—</div></div>
+                    <div class="sd-stat"><div class="label">Bytes written</div><div class="value" id="sdStatBytesW">—</div></div>
+                    <div class="sd-stat"><div class="label">Bytes read</div><div class="value" id="sdStatBytesR">—</div></div>
+                </div>
 
-        <!-- System Administration: operator only -->
-        <div id="adminSection" class="chart-section operator-only hidden">
-            <div class="card-header-row">
-                <h2>🔐 System Administration</h2>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
-                <div>
-                    <h3>Backup & Restore</h3>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
                     <button onclick="backupSettings()" class="danger">📦 Backup Settings</button>
-                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-backup')" aria-label="What does Backup Settings do?">i</button>
-                    <button onclick="restoreSettings()" class="danger" style="margin-left: 5px;">📥 Restore Settings</button>
-                    <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-restore')" aria-label="What does Restore Settings do?">i</button>
-                    <div id="help-backup" class="help-popover hidden">
-                        Saves every control parameter — Setpoint, both Alarm Deltas, Compressor Hysteresis,
-                        defrost timing, door/no-cool/ice alarm thresholds — to <strong>backup.json</strong> on
-                        the SD card, so they can be recovered after a factory reset or lost device settings.
-                        Also runs automatically whenever the setpoint changes, not just when you click this.
-                    </div>
-                    <div id="help-restore" class="help-popover hidden">
-                        Reads <strong>backup.json</strong> back off the SD card and applies every saved
-                        parameter immediately, overwriting whatever is currently set. Also runs automatically
-                        once at boot if a backup file exists — this button is for restoring it manually without
-                        a reboot.
-                    </div>
+                    <button onclick="restoreSettings()" class="danger">📥 Restore Settings</button>
+                    <button onclick="refreshLogFileList()">🔄 Refresh</button>
+                    <button onclick="downloadSelectedLog()">⬇️ Download selected</button>
+                    <button onclick="deleteSelectedLog()" class="danger">🗑️ Delete selected</button>
                 </div>
-                <div>
-                    <div class="field-label-row">
-                        <h3>Logs Management</h3>
-                        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-logs')" aria-label="What does log management do?">i</button>
-                    </div>
-                    <select id="logFileSelect" style="width: 100%; padding: 8px; margin-bottom: 8px;">
-                        <option value="">Login to view log files</option>
-                    </select>
-                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                        <button onclick="refreshLogFileList()">🔄 Refresh</button>
-                        <button onclick="downloadSelectedLog()">📥 Download</button>
-                        <button onclick="deleteSelectedLog()" class="danger">🗑️ Delete</button>
-                    </div>
-                    <div id="help-logs" class="help-popover hidden">
-                        Lists the daily temperature log files on the SD card (one per day, plus a running
-                        <code>events.csv</code> of alarm/fault/defrost events) so you can pick one — <strong>Download</strong>
-                        saves it to your computer, <strong>Refresh</strong> re-reads the file list, and
-                        <strong>Delete</strong> permanently removes the selected file from the SD card to free up
-                        space. Deletion cannot be undone, so double-check the filename first.
-                    </div>
+                <div id="backupStatus" style="font-size: 0.9em; margin-bottom: 10px; opacity: 0.9;">
+                    Checking for a backup on the SD card…
                 </div>
-                <div>
-                    <h3>Network & Hardware</h3>
-                    <button onclick="toggleHelp(event, 'wifi-panel')">📡 WiFi Settings</button>
-                    <button onclick="toggleHelp(event, 'hw-panel')" style="margin-left: 5px;">⚙️ Hardware Config</button>
-                    <div id="wifi-panel" class="help-popover hidden">
-                        <div class="hw-grid" style="margin-bottom: 12px;">
-                            <div><strong>Current Network</strong><span id="wifiCurrentSsid">--</span></div>
-                            <div><strong>Signal</strong><span id="wifiCurrentRssi">--</span></div>
-                            <div><strong>IP Address</strong><span id="wifiCurrentIp">--</span></div>
-                        </div>
-                        <p style="margin-bottom: 10px;">
-                            Entering a new network below reconnects <strong>immediately</strong> — the current
-                            WiFi connection drops right away while the device attempts the new one. If the new
-                            credentials are wrong, it falls back to its own <strong>"CoolroomP4-Setup"</strong>
-                            setup access point, same as any other WiFi misconfiguration; you'll need to connect
-                            to that to try again. There is no test-first safety net — double-check before submitting.
-                        </p>
-                        <div style="display: flex; flex-direction: column; gap: 8px; max-width: 320px;">
-                            <div>
-                                <label for="wifiNewSsid" style="display: block; font-size: 12px; margin-bottom: 3px;">New Network Name (SSID)</label>
-                                <input type="text" id="wifiNewSsid" placeholder="Network name" maxlength="32" style="width: 100%; padding: 8px;">
-                            </div>
-                            <div>
-                                <label for="wifiNewPassword" style="display: block; font-size: 12px; margin-bottom: 3px;">New Network Password</label>
-                                <input type="password" id="wifiNewPassword" placeholder="Network password" maxlength="64" style="width: 100%; padding: 8px;">
-                            </div>
-                            <button onclick="applyNewWifi()" class="danger" style="align-self: flex-start;">📡 Reconnect to This Network</button>
-                        </div>
-                    </div>
-                    <div id="hw-panel" class="help-popover hidden">
-                        <div class="hw-grid">
+
+                <div class="sd-table-wrap">
+                    <table class="sd-table" id="sdFileTable">
+                        <thead>
+                            <tr>
+                                <th>File</th>
+                                <th>Type</th>
+                                <th>Size</th>
+                                <th>Modified</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sdFileTableBody">
+                            <tr><td colspan="4">Login to view SD card files</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <input type="hidden" id="logFileSelect" value="">
+            </div>
+
+            <div id="tab-events" class="settings-tab-panel hidden">
+                <p style="margin: 0 0 12px; opacity: 0.85; font-size: 0.95em;">
+                    Live event / error log from this boot. New lines appear as alarms, defrosts,
+                    probe faults and WiFi changes happen — same stream written to
+                    <code>events.csv</code> on the SD card.
+                </p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center;">
+                    <button type="button" id="eventsPauseBtn" onclick="toggleEventsPause()">Pause</button>
+                    <button type="button" onclick="clearEventsView()">Clear view</button>
+                    <span id="eventsStatus" style="opacity:0.8; font-size:0.9em;">Waiting…</span>
+                </div>
+                <div class="sd-table-wrap" style="max-height: 420px; overflow: auto;">
+                    <table class="sd-table" id="eventsTable">
+                        <thead>
+                            <tr>
+                                <th style="width:11em;">Time</th>
+                                <th style="width:10em;">Event</th>
+                                <th>Detail</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eventsTableBody">
+                            <tr><td colspan="3">Open this tab to start live updates</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab-hardware" class="settings-tab-panel hidden">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px;">
+                    <div>
+                        <h3>Device Status</h3>
+                        <div class="hw-grid" id="hw-panel">
                             <div><strong>Controller</strong><span id="hwController">--</span></div>
                             <div><strong>WiFi</strong><span id="hwWifi">--</span></div>
                             <div><strong>IP Address</strong><span id="hwIp">--</span></div>
                             <div><strong>RS485 Relay Board</strong><span id="hwRs485Relay">--</span></div>
                             <div><strong>RS485 RTD Board</strong><span id="hwRs485Rtd">--</span></div>
-                            <div><strong>RTC (PCF8563)</strong><span id="hwRtc">--</span></div>
+                            <div><strong>RTC</strong><span id="hwRtc">--</span></div>
                             <div><strong>SHT31 (Internal)</strong><span id="hwSht31">--</span></div>
                             <div><strong>SHT20 (External)</strong><span id="hwSht20">--</span></div>
                             <div><strong>SD Card</strong><span id="hwSdCard">--</span></div>
                             <div><strong>Chip Temp</strong><span id="hwChipTemp">--</span></div>
                             <div><strong>Free Heap</strong><span id="hwHeap">--</span></div>
                             <div><strong>Free PSRAM</strong><span id="hwPsram">--</span></div>
+                            <div><strong>Uptime</strong><span id="hwUptime">--</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="field-label-row">
+                            <h3>Relay Outputs</h3>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-relays')" aria-label="What do the relay enables do?">i</button>
+                        </div>
+                        <div id="relayBoardWarning" class="alert alert-warning hidden" style="margin-bottom: 10px;">
+                            ⚠️ Relay board not seen on RS485 — outputs cannot be commanded.
+                        </div>
+                        <div class="sd-table-wrap">
+                            <table class="sd-table" id="relayTable">
+                                <thead>
+                                    <tr><th>Output</th><th>State</th><th>Enabled</th></tr>
+                                </thead>
+                                <tbody id="relayTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="help-relays" class="help-popover hidden">
+                            <strong>Enabled</strong> controls whether an output is allowed to energise at
+                            all — separate from the feature switches on the other tabs, which control
+                            whether the function runs. Disabling the <strong>Siren Relay</strong> keeps
+                            alarms, notifications and logging exactly as they are but leaves an external
+                            siren silent. Disabling any output also drops it immediately.
+                        </div>
+                    </div>
+                    <div>
+                        <div class="field-label-row">
+                            <h3>Touchscreen Access PIN</h3>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-pin')" aria-label="What does the Touchscreen Access PIN do?">i</button>
+                        </div>
+                        <input type="password" id="newPinInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New 4-digit PIN" style="width: 140px; padding: 8px;">
+                        <button onclick="changeTouchscreenPin()" style="margin-left: 5px;">🔒 Change PIN</button>
+                        <div id="help-pin" class="help-popover hidden">
+                            The 4-digit code required to reach Settings on the physical touchscreen.
+                            Starts at <strong>0000</strong> until changed.
                         </div>
                     </div>
                 </div>
-                <div>
-                    <div class="field-label-row">
-                        <h3>Touchscreen Access PIN</h3>
-                        <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-pin')" aria-label="What does the Touchscreen Access PIN do?">i</button>
+            </div>
+
+            <div id="tab-wireless" class="settings-tab-panel hidden">
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px;">
+                    <div>
+                        <h3>Current Connection</h3>
+                        <div class="hw-grid">
+                            <div><strong>Network</strong><span id="wifiCurrentSsid">--</span></div>
+                            <div><strong>Signal</strong><span id="wifiCurrentRssi">--</span></div>
+                            <div><strong>IP Address</strong><span id="wifiCurrentIp">--</span></div>
+                            <div><strong>Channel</strong><span id="wifiCurrentChannel">--</span></div>
+                            <div><strong>Access Point (BSSID)</strong><span id="wifiCurrentBssid">--</span></div>
+                            <div><strong>This Device (MAC)</strong><span id="wifiCurrentMac">--</span></div>
+                            <div><strong>Setup AP</strong><span id="wifiApState">--</span></div>
+                        </div>
                     </div>
-                    <input type="password" id="newPinInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="New 4-digit PIN" style="width: 140px; padding: 8px;">
-                    <button onclick="changeTouchscreenPin()" style="margin-left: 5px;">🔒 Change PIN</button>
-                    <div id="help-pin" class="help-popover hidden">
-                        The 4-digit code required to reach the Settings screens on the physical touchscreen unit
-                        itself — it doesn't affect any sensor or reading, it only controls who can change
-                        settings by walking up to the coolroom. Starts at <strong>0000</strong> until changed
-                        here or from the touchscreen's own "Change PIN" screen; changing it in either place
-                        updates the same PIN.
+                    <div>
+                        <div class="field-label-row">
+                            <h3>Available Networks</h3>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-wifi-scan')" aria-label="How does joining a network work?">i</button>
+                        </div>
+                        <button onclick="scanWifiNetworks()" id="wifiScanBtn">📶 Scan</button>
+                        <div class="sd-table-wrap">
+                            <table class="sd-table" id="wifiScanTable">
+                                <thead>
+                                    <tr><th>Network</th><th>Signal</th><th>Security</th></tr>
+                                </thead>
+                                <tbody id="wifiScanTableBody">
+                                    <tr><td colspan="3">Press Scan to list nearby networks</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="help-wifi-scan" class="help-popover hidden">
+                            Pick a network to fill in its name, enter the password, then
+                            <strong>Join Network</strong>. The controller drops the current connection to
+                            try the new one; if it hasn't joined within 45 seconds it puts the previous
+                            network's credentials back by itself, so a mistyped password doesn't strand it.
+                            Scanning briefly hops off-channel but does not disconnect.
+                        </div>
+                    </div>
+                    <div>
+                        <h3>Join a Network</h3>
+                        <div style="display: flex; flex-direction: column; gap: 8px; max-width: 320px;">
+                            <div>
+                                <label for="wifiNewSsid" style="display: block; font-size: 12px; margin-bottom: 3px;">Network Name (SSID)</label>
+                                <input type="text" id="wifiNewSsid" placeholder="Network name" maxlength="32" style="width: 100%; padding: 8px;">
+                            </div>
+                            <div>
+                                <label for="wifiNewPassword" style="display: block; font-size: 12px; margin-bottom: 3px;">Password</label>
+                                <input type="password" id="wifiNewPassword" placeholder="Network password" maxlength="64" style="width: 100%; padding: 8px;">
+                            </div>
+                            <button onclick="applyNewWifi()" class="danger" style="align-self: flex-start;">📡 Join Network</button>
+                        </div>
+                        <div id="wifiSwitchStatus" style="margin-top: 12px; font-size: 13px; min-height: 20px;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label-row">
+                            <h3>Home Assistant</h3>
+                            <button type="button" class="help-icon" onclick="toggleHelp(event, 'help-ha-api')" aria-label="What does Home Assistant API Enabled do?">i</button>
+                        </div>
+                        <p style="margin: 0 0 10px; opacity: 0.75; font-size: 0.9rem;">
+                            Off by default. Turn on only if you want Home Assistant to discover and control this device’s sensors and switches.
+                        </p>
+                        <button id="haApiToggleBtn" class="adv-switch-btn" onclick="toggleHaApiEnabled()">--</button>
+                        <div id="help-ha-api" class="help-popover hidden">
+                            Uses ESPHome’s encrypted native API (port 6053). When <strong>off</strong>,
+                            any Home Assistant connection is dropped immediately — re-enable only from
+                            this dashboard (or the stock ESPHome web UI). When <strong>on</strong>, add
+                            the device in Home Assistant → Integrations → ESPHome and use the encryption
+                            key from <code>secrets.yaml</code>.
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Kept for updateUIForRole class toggling; content moved into tabs above -->
+        <div id="advancedSettingsSection" class="operator-only hidden" style="display:none !important;" aria-hidden="true">
+            <div id="advancedSettingsContent"></div>
+        </div>
+        <div id="adminSection" class="operator-only hidden" style="display:none !important;" aria-hidden="true"></div>
 
         <footer>
             <p>Coolroom Controller — guest view is status only. Auto-refresh: <span id="autoRefresh">enabled (10s)</span>
@@ -909,6 +1081,18 @@
                 Enter the same username/password configured in the device's
                 <code>secrets.yaml</code> (<code>web_server_username</code> / <code>web_server_password</code>).
                 Main status stays available without login; this only unlocks settings.
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup / general confirm modal -->
+    <div id="confirmModal" class="modal confirm-modal">
+        <div class="modal-content">
+            <h2 id="confirmModalTitle">Done</h2>
+            <div class="confirm-detail" id="confirmModalDetail"></div>
+            <div class="modal-button-group">
+                <button class="primary" id="confirmModalPrimary" onclick="closeConfirmModal()">OK</button>
+                <button class="secondary" id="confirmModalSecondary" onclick="closeConfirmModal()" style="display:none;">Close</button>
             </div>
         </div>
     </div>
@@ -1067,7 +1251,14 @@
                 const timeout = setTimeout(() => controller.abort(), timeoutMs);
                 try {
                     const headers = authHeader ? { Authorization: authHeader } : {};
-                    const response = await fetch(url, { method: 'POST', signal: controller.signal, headers });
+                    // Empty body + explicit Content-Length avoids HTTP 411 on
+                    // some ESPHome web_server builds that reject body-less POST.
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        signal: controller.signal,
+                        headers,
+                        body: '',
+                    });
                     if (response.ok) return true;
                 } catch (error) {
                     // Unreachable candidate; try the next one.
@@ -1424,6 +1615,9 @@
         function initializeRole() {
             updateRoleDisplay();
             updateUIForRole();
+            // Covers the restored-session path too, so the admin panel never
+            // sits on its "checking…" placeholder without a login happening.
+            if (currentRole === 'operator') refreshLogFileList();
         }
 
         function updateRoleDisplay() {
@@ -1480,6 +1674,10 @@
         const STATE_FIELD_BY_ID = {
             'sensor-coolroom_temperature__primary_control_': 'temperature',
             'sensor-evaporator_temperature__secondary_control_': 'evap_temp',
+            'sensor-probe_1_raw_temperature': 'probe1_raw',
+            'sensor-probe_2_raw_temperature': 'probe2_raw',
+            'number-probe_1__coolroom__calibration_offset____c_': 'probe1_offset',
+            'number-probe_2__evaporator__calibration_offset____c_': 'probe2_offset',
             'number-setpoint____c_': 'setpoint',
             'switch-compressor_relay': 'compressor_on',
             'switch-defrost_relay': 'defrost_phase',
@@ -1516,13 +1714,30 @@
             'sensor-defrost_drip_remaining__s_': 'defrost_drip_remaining_sec',
             'sensor-system_uptime': 'uptime_seconds',
             'text_sensor-system_psram': 'psram_status_text',
+            'switch-siren_relay': 'siren_on',
+            'switch-compressor_relay_enabled': 'relay_en_compressor',
+            'switch-defrost_relay_enabled': 'relay_en_defrost',
+            'switch-light_relay_enabled': 'relay_en_light',
+            'switch-siren_relay_enabled': 'relay_en_siren',
+            'switch-home_assistant_api_enabled': 'ha_api_enabled',
         };
+
+        // Settings → Hardware. Each output pairs its live coil state with the
+        // enable that decides whether the coil may be energised at all.
+        const RELAY_OUTPUTS = [
+            { key: 'compressor', label: 'Compressor', state: 'compressor_on', name: 'Compressor Relay Enabled' },
+            { key: 'defrost', label: 'Defrost', state: 'defrost_phase', name: 'Defrost Relay Enabled' },
+            { key: 'light', label: 'Light', state: 'light_on', name: 'Light Relay Enabled' },
+            { key: 'siren', label: 'Siren / Alarm', state: 'siren_on', name: 'Siren Relay Enabled' },
+        ];
 
         const BOOL_FIELDS = new Set([
             'compressor_on', 'defrost_phase', 'alarm_high_active', 'alarm_low_active',
             'alarm_ice_active', 'alarm_door_active', 'alarm_nocool_active',
             'rs485_relay_ok', 'rs485_rtd_ok', 'rtc_ok', 'sht31_ok', 'sht20_ok',
             'wifi_connected', 'probe_fault', 'light_on', 'sd_card_ok', 'controller_online',
+            'siren_on', 'relay_en_compressor', 'relay_en_defrost', 'relay_en_light', 'relay_en_siren',
+            'ha_api_enabled',
         ]);
 
         const TEXT_FIELDS = new Set(['wifi_ssid', 'ip_address', 'psram_status_text']);
@@ -1543,14 +1758,24 @@
                 if (dash > 0) {
                     const domain = id.slice(0, dash);
                     const objectId = id.slice(dash + 1);
-                    if (domain === 'number' || domain === 'switch') {
+                    if (domain === 'number' || domain === 'switch' || domain === 'text' || domain === 'select') {
                         for (const group of ADVANCED_SETTINGS_GROUPS) {
                             const fieldDef = group.fields.find((f) => f.entity === objectId);
                             if (!fieldDef) continue;
                             data.adv = data.adv || {};
-                            data.adv[objectId] = fieldDef.type === 'number'
-                                ? entityNumber(entity)
-                                : entityIsOn(entity);
+                            if (fieldDef.type === 'number') data.adv[objectId] = entityNumber(entity);
+                            else if (fieldDef.type === 'text') data.adv[objectId] = entityText(entity);
+                            else if (fieldDef.type === 'switch') data.adv[objectId] = entityIsOn(entity);
+                            else if (fieldDef.type === 'select') {
+                                data.adv[objectId] = entityText(entity);
+                                // The option list only rides along on the first
+                                // (full-detail) event for each entity, so keep the
+                                // last one seen rather than clearing it on updates.
+                                if (Array.isArray(entity.option)) {
+                                    data.advOptions = data.advOptions || {};
+                                    data.advOptions[objectId] = entity.option;
+                                }
+                            }
                             break;
                         }
                     }
@@ -1734,6 +1959,7 @@
             if (data.alarm_door_active) activeAlarms.push('Door Open');
             if (data.alarm_nocool_active) activeAlarms.push('No Cooling');
             if (data.alarm_ice_active) activeAlarms.push('Ice');
+            if (data.probe_fault) activeAlarms.push('Probe Fault');
             setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : null);
             const alarmsEl = document.getElementById('iconAlarms');
             if (alarmsEl) alarmsEl.title = activeAlarms.length ? activeAlarms.join(', ') : 'No active alarms';
@@ -1775,42 +2001,28 @@
             updateWifiPanel(data);
             updateTimers(data);
             updateAdvancedSettings(data);
+            updateProbeLiveReadings(data);
 
-            // Update settings inputs
-            const fillIfEmpty = (id, value, fallback) => {
+            // Update settings inputs. Deliberately has no default value to fall
+            // back on: state arrives one entity at a time over SSE, so the first
+            // few passes through here have no setpoint yet — and a placeholder
+            // written into the box on those passes is never corrected, because
+            // the box is no longer empty. That is what showed a setpoint of 15
+            // in this form while the touchscreen showed the real stored value.
+            // An empty box now simply means "not received yet".
+            const fillIfEmpty = (id, value) => {
                 const el = document.getElementById(id);
                 if (!el || el.value !== '') return;
-                const n = typeof value === 'number' && !isNaN(value) ? value : fallback;
-                el.value = n.toFixed(1);
+                if (typeof value !== 'number' || isNaN(value)) return;
+                el.value = value.toFixed(1);
             };
-            fillIfEmpty('setpointInput', data.setpoint, 15);
-            fillIfEmpty('alarmHighInput', data.alarm_high, 3);
-            fillIfEmpty('alarmLowInput', data.alarm_low, 3);
-            fillIfEmpty('compDiffInput', data.comp_diff, 1);
-
-            const namedAlarms = [];
-            if (data.alarm_high_active) namedAlarms.push('HIGH TEMPERATURE');
-            if (data.alarm_low_active) namedAlarms.push('LOW TEMPERATURE');
-            if (data.alarm_door_active) namedAlarms.push('DOOR OPEN');
-            if (data.alarm_nocool_active) namedAlarms.push('NO COOLING');
-            if (data.alarm_ice_active) namedAlarms.push('ICE DETECTED');
-
-            let alertsHtml = '';
-            if (namedAlarms.length) {
-                alertsHtml += `<div class="alarm-banner">🚨 ${namedAlarms.join(' &nbsp;·&nbsp; ')}</div>`;
-            }
-            if (data.probe_fault) alertsHtml += '<div class="alert alert-danger">⚠️ Probe fault detected. Fallback mode active.</div>';
-            if (data.wifi_connected === false) alertsHtml += '<div class="alert alert-warning">⚠️ WiFi disconnected.</div>';
-            const alertsDiv = document.getElementById('alerts');
-            if (alertsDiv) {
-                let statusSlot = document.getElementById('statusAlerts');
-                if (!statusSlot) {
-                    statusSlot = document.createElement('div');
-                    statusSlot.id = 'statusAlerts';
-                    alertsDiv.prepend(statusSlot);
-                }
-                statusSlot.innerHTML = alertsHtml || '';
-            }
+            fillIfEmpty('setpointInput', data.setpoint);
+            fillIfEmpty('alarmHighInput', data.alarm_high);
+            fillIfEmpty('alarmLowInput', data.alarm_low);
+            fillIfEmpty('compDiffInput', data.comp_diff);
+            // Live alarms / probe fault / WiFi drop are shown on the Coolroom
+            // Status gauge (bell chip, status text, WiFi line) — do not also
+            // paint a pink strip above the dashboard.
         }
 
         // Hardware Config panel — unlike the static help balloons, this one shows
@@ -1833,6 +2045,57 @@
                 typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--');
             setText('hwHeap', data.heap_free_kb ? `${data.heap_free_kb} KB` : '--');
             setText('hwPsram', data.psram_free_kb ? `${data.psram_free_kb} KB` : '--');
+            if (typeof data.uptime_seconds === 'number' && !isNaN(data.uptime_seconds)) {
+                const d = Math.floor(data.uptime_seconds / 86400);
+                const h = Math.floor((data.uptime_seconds % 86400) / 3600);
+                const m = Math.floor((data.uptime_seconds % 3600) / 60);
+                setText('hwUptime', d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m`);
+            }
+            updateRelayTable(data);
+        }
+
+        // Relay rows go grey and non-interactive when the relay board never
+        // answered on RS485: the enables would still be accepted and stored,
+        // but nothing would act on them, and a toggle that appears to work
+        // while the hardware is absent is worse than one that plainly can't.
+        function updateRelayTable(data) {
+            const body = document.getElementById('relayTableBody');
+            if (!body) return;
+            const boardOk = data.rs485_relay_ok === true;
+            const warning = document.getElementById('relayBoardWarning');
+            if (warning) warning.classList.toggle('hidden', boardOk);
+
+            body.innerHTML = RELAY_OUTPUTS.map((relay) => {
+                const on = data[relay.state] === true;
+                const enabled = data[`relay_en_${relay.key}`];
+                const stateText = !boardOk ? '—' : (on ? 'ENERGISED' : 'off');
+                const stateClass = boardOk && on ? 'status-ok' : 'status-idle';
+                const btnLabel = enabled === undefined ? '--' : (enabled ? 'ENABLED' : 'DISABLED');
+                const disabledAttr = boardOk ? '' : ' disabled';
+                const nameEsc = relay.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `
+                    <tr class="${boardOk ? '' : 'relay-row-offline'}">
+                        <td>${relay.label}</td>
+                        <td><span class="status-badge ${stateClass}">${stateText}</span></td>
+                        <td>
+                            <button class="adv-switch-btn${enabled ? ' is-on' : ''}"${disabledAttr}
+                                    onclick="toggleRelayEnable('${nameEsc}')">${btnLabel}</button>
+                        </td>
+                    </tr>`;
+            }).join('');
+        }
+
+        async function toggleRelayEnable(entityName) {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to change relay enables');
+                return;
+            }
+            const ok = await postWithFallback(entityActionPath('switch', entityName, 'toggle'));
+            if (!ok) {
+                showAlert('error', `Could not reach the device to change ${entityName}`);
+                return;
+            }
+            fetchStatus();
         }
 
         function updateWifiPanel(data) {
@@ -1840,6 +2103,26 @@
             setText('wifiCurrentRssi',
                 typeof data.wifi_rssi === 'number' ? `${data.wifi_rssi} dBm` : '--');
             setText('wifiCurrentIp', data.ip_address || '--');
+            const haBtn = document.getElementById('haApiToggleBtn');
+            if (haBtn && data.ha_api_enabled !== undefined) {
+                const on = data.ha_api_enabled === true;
+                haBtn.textContent = on ? 'ENABLED' : 'DISABLED';
+                haBtn.classList.toggle('is-on', on);
+            }
+        }
+
+        async function toggleHaApiEnabled() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to change Home Assistant API');
+                return;
+            }
+            const ok = await postWithFallback(
+                entityActionPath('switch', 'Home Assistant API Enabled', 'toggle'));
+            if (!ok) {
+                showAlert('error', 'Could not reach the device to change Home Assistant API');
+                return;
+            }
+            fetchStatus();
         }
 
         function formatCountdown(seconds) {
@@ -1969,6 +2252,8 @@
                 fields: [
                     { type: 'number', entity: 'compressor_off-delay__min_', name: 'Compressor Off-Delay (min)', label: 'Compressor Off-Delay (min)', min: 0, max: 10, step: 1,
                       help: 'Minimum time the compressor must stay off after switching off before it\u2019s allowed to run again \u2014 protects the compressor motor from rapid on/off cycling ("short cycling").' },
+                    { type: 'number', entity: 'compressor_min_run_time__min_', name: 'Compressor Min Run Time (min)', label: 'Compressor Min Run Time (min)', min: 0, max: 30, step: 1,
+                      help: 'Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. Complements Off-Delay. Set 0 to disable.' },
                     { type: 'switch', entity: 'sensor_fallback_duty-cycle_enabled', name: 'Sensor Fallback Duty-Cycle Enabled', label: 'Sensor Fallback Enabled',
                       help: 'When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle (the two settings below) so cooling continues, degraded, until the probe recovers.' },
                     { type: 'number', entity: 'sensor_fallback_compressor_on_time__min_', name: 'Sensor Fallback Compressor ON Time (min)', label: 'Fallback Compressor ON Time (min)', min: 1, max: 30, step: 1,
@@ -1981,9 +2266,13 @@
                 title: 'Defrost',
                 fields: [
                     { type: 'switch', entity: 'defrost_system_enabled', name: 'Defrost System Enabled', label: 'Defrost System Enabled',
-                      help: 'Master switch for the whole defrost system. Turning this off disables scheduled, smart-delta, and dew-point defrost cycles entirely \u2014 only a manual defrost request would still run.' },
+                      help: 'Master switch for automatic defrost. Off disables scheduled, smart-delta, dew-point, frost-rate, and force-max starts. Start Defrost Now still works for service (and Stop ends any cycle, including drip). Separate from Defrost Relay Enabled on the Hardware tab, which only gates the heater coil.' },
+                    { type: 'button', entity: 'start_manual_defrost', name: 'Start Manual Defrost', label: 'Start Defrost Now',
+                      help: 'Begin a defrost cycle immediately. Resets the interval timer from this cycle. Works even when Defrost System Enabled is off (service override). If Defrost Relay Enabled is off, the cycle still runs as a passive defrost (compressor held off, no heater).' },
+                    { type: 'button', entity: 'stop_manual_defrost', name: 'Stop Manual Defrost', label: 'Stop Defrost Now',
+                      help: 'Abort the current defrost or drip phase immediately and return to normal cooling rules (subject to compressor off-delay).' },
                     { type: 'number', entity: 'defrost_interval__min_', name: 'Defrost Interval (min)', label: 'Defrost Interval (min)', min: 60, max: 1440, step: 30,
-                      help: 'How often a scheduled defrost cycle runs, measured from the end of the last defrost. The triggers below (smart delta, dew point) can start one earlier if conditions call for it.' },
+                      help: 'How often a scheduled defrost cycle runs, measured from the end of the last defrost. The triggers below can start one earlier if conditions call for it.' },
                     { type: 'number', entity: 'defrost_max_duration__min_', name: 'Defrost Max Duration (min)', label: 'Defrost Max Duration (min)', min: 5, max: 60, step: 5,
                       help: 'The hard time limit on a defrost cycle \u2014 it always ends by this point even if the evaporator hasn\u2019t reached the termination temperature yet.' },
                     { type: 'switch', entity: 'defrost_early_termination_by_temperature', name: 'Defrost Early Termination by Temperature', label: 'Defrost Early Termination by Temperature',
@@ -2002,17 +2291,70 @@
                       help: 'How long that temperature gap must hold above the threshold continuously before smart defrost actually triggers \u2014 avoids reacting to a brief spike.' },
                     { type: 'switch', entity: 'dew_point_early_defrost_trigger', name: 'Dew Point Early Defrost Trigger', label: 'Dew Point Early Defrost Trigger',
                       help: 'When enabled, defrost can also start early if the evaporator drops below both freezing and the surrounding air\u2019s dew point (calculated from the internal SHT31) \u2014 the actual physical condition under which frost forms on the coil.' },
+                    { type: 'switch', entity: 'defrost_skip-if-cold', name: 'Defrost Skip-If-Cold', label: 'Defrost Skip-If-Cold',
+                      help: 'When a scheduled interval is due but the evaporator is already at or below the Skip-If-Cold Below temperature, skip that cycle and roll the interval clock forward. Manual, smart, dew-point, frost-rate, and force-max starts are never skipped.' },
+                    { type: 'number', entity: 'defrost_skip-if-cold_below____c_', name: 'Defrost Skip-If-Cold Below (°C)', label: 'Skip-If-Cold Below (°C)', min: -30.0, max: 0.0, step: 0.5,
+                      help: 'Evaporator temperature at or below which a due scheduled defrost is skipped (coil already cold). Requires Probe 2.' },
+                    { type: 'number', entity: 'defrost_max_interval_override__min_', name: 'Defrost Max Interval Override (min)', label: 'Force-Max Interval (min)', min: 720, max: 1440, step: 30,
+                      help: 'Safety net: force a defrost if this many minutes have passed since the last cycle, even when Skip-If-Cold would otherwise keep postponing. Range 12–24 hours.' },
+                    { type: 'switch', entity: 'frost_rate_monitoring', name: 'Frost Rate Monitoring', label: 'Frost Rate Monitoring',
+                      help: 'Early defrost when humidity drops sharply over the sample window while room temperature stays nearly stable (frost forming on the coil). Needs the internal SHT31 humidity sensor.' },
+                    { type: 'number', entity: 'frost_rate_humidity_drop____', name: 'Frost Rate Humidity Drop (%)', label: 'Frost Rate Humidity Drop (%)', min: 1.0, max: 20.0, step: 0.5,
+                      help: 'How large a humidity drop over the frost-rate window must be to trigger an early defrost.' },
+                    { type: 'number', entity: 'frost_rate_window__s_', name: 'Frost Rate Window (s)', label: 'Frost Rate Window (s)', min: 60, max: 3600, step: 30,
+                      help: 'Length of the humidity/temperature sample window used by frost-rate monitoring.' },
                 ],
             },
             {
-                title: 'Alarms',
+                title: 'Audio Alerts',
                 fields: [
+                    { type: 'switch', entity: 'audio_alerts_enabled', name: 'Audio Alerts Enabled', label: 'Audio Alerts Enabled',
+                      help: 'Master switch for spoken announcements over the on-board speaker. Off silences every phrase below. The home-screen bell also mutes speech for the current alarm event (same soft mute as the siren).' },
+                    { type: 'button', entity: 'test_audio_alert', name: 'Test Audio Alert', label: 'Test Speaker',
+                      help: 'Play a short test phrase. Ignores the master toggle so you can verify the speaker even when alerts are off. Requires the ES8311 codec on I2C.' },
+                    { type: 'switch', entity: 'speak_high_temp_alarm', name: 'Speak High Temp Alarm', label: 'Speak High Temp Alarm',
+                      help: 'Voice: “Attention. High temperature alarm.” when that alarm becomes active.' },
+                    { type: 'switch', entity: 'speak_low_temp_alarm', name: 'Speak Low Temp Alarm', label: 'Speak Low Temp Alarm',
+                      help: 'Voice for the low-temperature alarm.' },
+                    { type: 'switch', entity: 'speak_door_open_alarm', name: 'Speak Door Open Alarm', label: 'Speak Door Open Alarm',
+                      help: 'Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves.' },
+                    { type: 'switch', entity: 'speak_no-cool_alarm', name: 'Speak No-Cool Alarm', label: 'Speak No-Cool Alarm',
+                      help: 'Voice for the no-cooling alarm.' },
+                    { type: 'switch', entity: 'speak_ice_alarm', name: 'Speak Ice Alarm', label: 'Speak Ice Alarm',
+                      help: 'Voice for the ice / blocked-coil alarm.' },
+                    { type: 'switch', entity: 'speak_probe_fault', name: 'Speak Probe Fault', label: 'Speak Probe Fault',
+                      help: 'Voice when the main coolroom probe fails.' },
+                    { type: 'switch', entity: 'speak_cooling_started', name: 'Speak Cooling Started', label: 'Speak Cooling Started',
+                      help: 'Info voice when the compressor starts.' },
+                    { type: 'switch', entity: 'speak_cooling_stopped', name: 'Speak Cooling Stopped', label: 'Speak Cooling Stopped',
+                      help: 'Info voice when the compressor stops. Off by default (can be chatty).' },
+                    { type: 'switch', entity: 'speak_defrost_started', name: 'Speak Defrost Started', label: 'Speak Defrost Started',
+                      help: 'Info voice when a defrost cycle begins.' },
+                    { type: 'switch', entity: 'speak_defrost_complete', name: 'Speak Defrost Complete', label: 'Speak Defrost Complete',
+                      help: 'Info voice when a defrost cycle ends.' },
+                    { type: 'switch', entity: 'speak_door_opened', name: 'Speak Door Opened', label: 'Speak Door Opened',
+                      help: 'Info voice the moment the door reed sees open (immediate, not the delayed alarm).' },
+                    { type: 'switch', entity: 'speak_door_closed', name: 'Speak Door Closed', label: 'Speak Door Closed',
+                      help: 'Info voice when the door closes. Off by default.' },
+                ],
+            },
+            {
+                title: 'Alarms & Notifications',
+                fields: [
+                    { type: 'number', entity: 'high_temp_alarm_delta____c_', name: 'High Temp Alarm Delta (°C)', label: 'High Temp Alarm Delta (°C)', min: 0.5, max: 20, step: 0.1,
+                      help: 'How far above Setpoint the room can drift before the High Temperature alarm can fire (still subject to Persist Time below).' },
+                    { type: 'number', entity: 'low_temp_alarm_delta____c_', name: 'Low Temp Alarm Delta (°C)', label: 'Low Temp Alarm Delta (°C)', min: 0.5, max: 20, step: 0.1,
+                      help: 'How far below Setpoint before the Low Temperature alarm can fire.' },
                     { type: 'number', entity: 'alarm_persist_time__min_', name: 'Alarm Persist Time (min)', label: 'Alarm Persist Time (min)', min: 0, max: 30, step: 1,
                       help: 'How long a high or low temperature condition must hold continuously before the alarm actually fires \u2014 filters out brief spikes (e.g. a door opening) from triggering a false alarm.' },
                     { type: 'number', entity: 'alarm_recovery_hysteresis____c_', name: 'Alarm Recovery Hysteresis (°C)', label: 'Alarm Recovery Hysteresis (\u00b0C)', min: 0.1, max: 5.0, step: 0.1,
                       help: 'Once a high/low temperature alarm is active, the room must recover back past Setpoint by this many extra degrees before the alarm clears \u2014 prevents the alarm flickering on and off right at the threshold.' },
-                    { type: 'number', entity: 'ice_alarm_delta____c_', name: 'Ice Alarm Delta (°C)', label: 'Ice Alarm Delta (\u00b0C)', min: 0.5, max: 10.0, step: 0.5,
-                      help: 'If the gap between the coolroom and evaporator probes shrinks below this, it likely means ice is blocking the coil (reduced airflow makes the two probes read closer together) \u2014 triggers the Ice alarm.' },
+                    { type: 'switch', entity: 'ice_detection_enabled', name: 'Ice Detection Enabled', label: 'Ice Detection Enabled',
+                      help: 'Master switch for the evaporator ice alarm. Off disables ice detection entirely.' },
+                    { type: 'number', entity: 'ice_alarm_delta____c_', name: 'Ice Alarm Delta (°C)', label: 'Ice Alarm Delta (\u00b0C)', min: 5.0, max: 30.0, step: 0.5,
+                      help: 'Alarm when (coolroom − evaporator) stays at or above this gap while the compressor runs — a large gap means the coil is iced / starved of airflow (Precision polarity). Default 15°C.' },
+                    { type: 'number', entity: 'ice_alarm_dwell_time__min_', name: 'Ice Alarm Dwell Time (min)', label: 'Ice Alarm Dwell Time (min)', min: 1, max: 60, step: 1,
+                      help: 'How long the ice condition must hold continuously before the Ice alarm fires. Any break resets the dwell timer.' },
                     { type: 'number', entity: 'no-cool_alarm_timeout__min_', name: 'No-Cool Alarm Timeout (min)', label: 'No-Cool Alarm Timeout (min)', min: 15, max: 240, step: 15,
                       help: 'If the compressor has been running continuously for this long but the room still hasn\u2019t cooled below Setpoint + half the Compressor Hysteresis, it likely means the refrigeration system has failed \u2014 triggers the No-Cooling alarm.' },
                     { type: 'switch', entity: 'alarm_siren_enabled', name: 'Alarm Siren Enabled', label: 'Alarm Siren Enabled',
@@ -2021,17 +2363,41 @@
                       help: 'Alarms are always suppressed for at least this long after boot, to give sensors and the control loop time to settle. If the room hasn\u2019t reached Setpoint by then, the grace period actually extends further (up to a fixed 4-hour safety ceiling) rather than false-alarming mid-pulldown.' },
                     { type: 'number', entity: 'post-defrost_alarm_grace__min_', name: 'Post-Defrost Alarm Grace (min)', label: 'Post-Defrost Alarm Grace (min)', min: 0, max: 60, step: 1,
                       help: 'Alarms are suppressed for this long after each defrost cycle ends, since the room is briefly warmer than usual while it re-cools \u2014 avoids a false High Temperature alarm every defrost cycle.' },
+                    { type: 'switch', entity: 'ntfy_notifications_enabled', name: 'ntfy Notifications Enabled', label: 'ntfy Push Notifications Enabled',
+                      help: 'Master switch for phone/computer push alerts via ntfy. Local alarms, banners and the siren still work when this is off \u2014 only the HTTP push is gated.' },
+                    { type: 'text', entity: 'ntfy_server', name: 'ntfy Server', label: 'ntfy Server URL', maxlength: 96,
+                      help: 'Push server base URL, e.g. https://ntfy.sh or your self-hosted ntfy instance. Must start with http:// or https://.' },
+                    { type: 'text', entity: 'ntfy_topic', name: 'ntfy Topic', label: 'ntfy Topic', maxlength: 64,
+                      help: 'Topic name to subscribe to in the ntfy app (or browser). Changing this does not migrate old subscribers \u2014 tell staff the new topic.' },
+                    { type: 'button', entity: 'send_test_ntfy_notification', name: 'Send Test ntfy Notification', label: 'Send Test Notification',
+                      help: 'Fires one test push to the configured server/topic so you can confirm the phone is subscribed before relying on real alarms. Sent at the High Temp Alarm priority, so it also proves a real alarm would get through.' },
+                    { type: 'select', entity: 'high_temp_alarm_priority', name: 'High Temp Alarm Priority', label: 'Priority: High Temp Alarm',
+                      help: 'ntfy priority for the \ud83c\udf21\ufe0f HIGH TEMP push. "urgent" breaks through Do Not Disturb on most phones; "min" arrives silently with no banner.' },
+                    { type: 'select', entity: 'low_temp_alarm_priority', name: 'Low Temp Alarm Priority', label: 'Priority: Low Temp Alarm',
+                      help: 'ntfy priority for the \u2744\ufe0f LOW TEMP push.' },
+                    { type: 'select', entity: 'door_alarm_priority', name: 'Door Alarm Priority', label: 'Priority: Door Open Alarm',
+                      help: 'ntfy priority for the \ud83d\udeaa DOOR OPEN push. Often set lower than the temperature alarms, since a door left open is usually noticed on site first.' },
+                    { type: 'select', entity: 'no-cool_alarm_priority', name: 'No-Cool Alarm Priority', label: 'Priority: No-Cool Alarm',
+                      help: 'ntfy priority for the \ud83e\udd76 NO-COOL push \u2014 compressor running but the room is not cooling. Defaults to urgent: this is the failure that spoils stock.' },
+                    { type: 'select', entity: 'ice_alarm_priority', name: 'Ice Alarm Priority', label: 'Priority: Ice Alarm',
+                      help: 'ntfy priority for the \u2744\ufe0f ICE ALARM push \u2014 evaporator coil likely iced up.' },
+                    { type: 'select', entity: 'probe_fault_priority', name: 'Probe Fault Priority', label: 'Priority: Probe Fault',
+                      help: 'ntfy priority for the \u26a0\ufe0f PROBE FAULT push. Defaults to urgent: with the main probe out, temperature alarms cannot protect the room.' },
+                    { type: 'select', entity: 'sd_card_alert_priority', name: 'SD Card Alert Priority', label: 'Priority: SD Card Failure',
+                      help: 'ntfy priority for the \u26a0\ufe0f SD CARD FAILURE push. Cooling is unaffected by a dead card \u2014 only logging and backup stop \u2014 so this is a fair one to turn down.' },
+                    { type: 'select', entity: 'all-clear_message_priority', name: 'All-Clear Message Priority', label: 'Priority: All-Clear Messages',
+                      help: 'ntfy priority for the recovery pushes: \u2705 Alarm CLEARED and \u2705 SD Card Recovered. Low by default so good news does not wake anyone.' },
                 ],
             },
             {
                 title: 'Door',
                 fields: [
                     { type: 'switch', entity: 'door_sensor_enabled', name: 'Door Sensor Enabled', label: 'Door Sensor Enabled',
-                      help: 'Whether the door reed switch is monitored for the Door Open alarm. Disable only if the sensor is disconnected or faulty \u2014 this does not affect the door-triggered light, which has its own enable switch below.' },
+                      help: 'Whether the door reed switch is monitored for the Door Open alarm. This does NOT control the cabinet light — use Door-Triggered Light Enabled below for that. Disable only if the sensor is disconnected or faulty.' },
                     { type: 'switch', entity: 'door_sensor_mode__nc_or_no_', name: 'Door Sensor Mode (NC or NO)', label: 'Door Sensor Mode: NC (on) / NO (off)',
                       help: 'Matches the reed switch\u2019s wiring: Normally Closed (reads closed when the door is shut) or Normally Open (opposite). Set this wrong and open/closed will read backwards.' },
                     { type: 'switch', entity: 'door-triggered_light_enabled', name: 'Door-Triggered Light Enabled', label: 'Door-Triggered Light Enabled',
-                      help: 'When enabled, opening the door turns the cabinet light on and closing it turns the light off \u2014 independent of the Door Sensor Enabled alarm switch above.' },
+                      help: 'When enabled, opening the door turns the cabinet light on and closing it turns the light off — independent of Door Sensor Enabled above. The home-screen light icon only animates while the light relay is actually on.' },
                     { type: 'number', entity: 'door_alarm_delay__s_', name: 'Door Alarm Delay (s)', label: 'Door Alarm Delay (s)', min: 0, max: 300, step: 10,
                       help: 'How long the door can stay open before the Door Open alarm fires \u2014 a short grace window for normal staff access.' },
                 ],
@@ -2039,24 +2405,155 @@
             {
                 title: 'Probe Calibration & Enable',
                 fields: [
+                    { type: 'select', entity: 'probe_1__coolroom__source', name: 'Probe 1 (Coolroom) Source', label: 'Probe 1 (Coolroom) Source',
+                      options: ['RTD RS485', 'SHT31 I2C', 'Unused'],
+                      help: 'Which sensor feeds coolroom control. RTD RS485 is the Modbus board (not connected on the current bench). SHT31 uses the on-board internal humidity sensor as the coolroom temperature source.' },
+                    { type: 'select', entity: 'probe_2__evaporator__source', name: 'Probe 2 (Evaporator) Source', label: 'Probe 2 (Evaporator) Source',
+                      options: ['RTD RS485', 'Unused'],
+                      help: 'Evaporator coil source. Unused disables probe 2 (and ice detection). Requires the RS485 RTD board when set to RTD.' },
                     { type: 'number', entity: 'probe_1__coolroom__calibration_offset____c_', name: 'Probe 1 (Coolroom) Calibration Offset (°C)', label: 'Probe 1 (Coolroom) Calibration Offset (\u00b0C)', min: -10, max: 10, step: 0.1,
-                      help: 'Manual fine-tuning offset added to the Coolroom Temperature (Primary Control) reading, for correcting against a reference thermometer. Affects every downstream use of that reading \u2014 control, alarms, logs, display.' },
+                      help: 'Manual fine-tuning offset added to the Coolroom Temperature reading. Also written by Calibrate Probes Now when auto-cal succeeds.' },
                     { type: 'number', entity: 'probe_2__evaporator__calibration_offset____c_', name: 'Probe 2 (Evaporator) Calibration Offset (°C)', label: 'Probe 2 (Evaporator) Calibration Offset (\u00b0C)', min: -10, max: 10, step: 0.1,
                       help: 'Same idea as the Probe 1 offset, but for the Evaporator Temperature reading.' },
+                    { type: 'button', entity: 'calibrate_probes_now', name: 'Calibrate Probes Now', label: 'Calibrate Probes Now',
+                      help: 'Auto-calibrate RTD offsets against the internal SHT31 reference (needs SHT31 + at least one RTD online). Refuses on the bench until RS485 boards are connected.' },
                     { type: 'switch', entity: 'evaporator_probe__probe_2__enabled', name: 'Evaporator Probe (Probe 2) Enabled', label: 'Evaporator Probe (Probe 2) Enabled',
                       help: 'Whether the evaporator RTD probe is read at all. Several features depend on it \u2014 smart defrost, ice alarm, temperature-based defrost termination \u2014 and fall back to time-based behavior alone when this is off.' },
                     { type: 'switch', entity: 'internal_sht31_sensor_enabled', name: 'Internal SHT31 Sensor Enabled', label: 'Internal SHT31 Sensor Enabled',
-                      help: 'Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point defrost trigger needs this enabled to work.' },
+                      help: 'Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point / frost-rate triggers and auto-calibrate need this enabled.' },
                     { type: 'switch', entity: 'external_sht20_sensor_enabled', name: 'External SHT20 Sensor Enabled', label: 'External SHT20 Sensor Enabled',
                       help: 'Whether the external (ambient) SHT20 temperature/humidity sensor is read.' },
                 ],
             },
         ];
 
+        function switchSettingsTab(tabId) {
+            document.querySelectorAll('.settings-tab-panel').forEach((el) => el.classList.add('hidden'));
+            document.querySelectorAll('#settingsTabs button').forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.tab === tabId);
+            });
+            const panel = document.getElementById(tabId);
+            if (panel) panel.classList.remove('hidden');
+            if (tabId === 'tab-sd') refreshLogFileList();
+            if (tabId === 'tab-wireless') refreshWifiStatus();
+            if (tabId === 'tab-events') startEventsLive();
+            else stopEventsLive();
+        }
+
+        // ── Live Events tab ────────────────────────────────────────────────
+        let eventsPollTimer = null;
+        let eventsLastSeq = 0;
+        let eventsPaused = false;
+        let eventsInitialized = false;
+        const EVENTS_MAX_ROWS = 200;
+
+        function stopEventsLive() {
+            if (eventsPollTimer) {
+                clearInterval(eventsPollTimer);
+                eventsPollTimer = null;
+            }
+        }
+
+        function startEventsLive() {
+            stopEventsLive();
+            eventsPaused = false;
+            eventsInitialized = false;
+            eventsLastSeq = 0;
+            const pauseBtn = document.getElementById('eventsPauseBtn');
+            if (pauseBtn) pauseBtn.textContent = 'Pause';
+            pollEventsLive();
+            eventsPollTimer = setInterval(pollEventsLive, 2000);
+        }
+
+        function toggleEventsPause() {
+            eventsPaused = !eventsPaused;
+            const pauseBtn = document.getElementById('eventsPauseBtn');
+            if (pauseBtn) pauseBtn.textContent = eventsPaused ? 'Resume' : 'Pause';
+            const status = document.getElementById('eventsStatus');
+            if (status && eventsPaused) status.textContent = 'Paused';
+            if (!eventsPaused) pollEventsLive();
+        }
+
+        function clearEventsView() {
+            const body = document.getElementById('eventsTableBody');
+            if (body) body.innerHTML = '';
+            eventsInitialized = true; // don't dump the whole ring again
+        }
+
+        function appendEventRows(events) {
+            const body = document.getElementById('eventsTableBody');
+            if (!body) return;
+            for (const ev of events) {
+                const tr = document.createElement('tr');
+                const kind = (ev.event || '').toUpperCase();
+                if (kind.includes('FAULT') || kind.includes('ALARM') || kind.includes('FAIL')) {
+                    tr.style.color = '#c0392b';
+                } else if (kind.includes('CLEAR') || kind.includes('OK') || kind.includes('RECOVER')) {
+                    tr.style.color = '#1e8449';
+                }
+                tr.innerHTML = `<td>${escapeHtml(ev.ts)}</td><td>${escapeHtml(ev.event)}</td><td>${escapeHtml(ev.detail)}</td>`;
+                body.appendChild(tr);
+            }
+            while (body.children.length > EVENTS_MAX_ROWS) {
+                body.removeChild(body.firstChild);
+            }
+            if (events.length && body.parentElement && body.parentElement.parentElement) {
+                const wrap = body.parentElement.parentElement;
+                wrap.scrollTop = wrap.scrollHeight;
+            }
+        }
+
+        async function pollEventsLive() {
+            if (eventsPaused) return;
+            const status = document.getElementById('eventsStatus');
+            const data = await fetchJson('/api/events');
+            if (!data) {
+                if (status) status.textContent = 'Could not reach device';
+                return;
+            }
+            const all = Array.isArray(data.events) ? data.events : [];
+            const body = document.getElementById('eventsTableBody');
+            if (body && body.children.length === 1 && body.textContent.includes('Open this tab')) {
+                body.innerHTML = '';
+            }
+            let shown = 0;
+            if (!eventsInitialized) {
+                appendEventRows(all);
+                shown = all.length;
+                eventsInitialized = true;
+            } else {
+                const newer = all.filter((ev) => typeof ev.seq === 'number' && ev.seq > eventsLastSeq);
+                appendEventRows(newer);
+                shown = newer.length;
+            }
+            if (typeof data.seq === 'number') eventsLastSeq = data.seq;
+            if (status) {
+                status.textContent = shown
+                    ? `+${shown} · seq ${eventsLastSeq}`
+                    : `Live · seq ${eventsLastSeq}`;
+            }
+        }
+
+        function showConfirmModal(title, detailHtml, primaryLabel, primaryAction) {
+            const modal = document.getElementById('confirmModal');
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalDetail').innerHTML = detailHtml;
+            const primary = document.getElementById('confirmModalPrimary');
+            primary.textContent = primaryLabel || 'OK';
+            primary.onclick = () => {
+                closeConfirmModal();
+                if (typeof primaryAction === 'function') primaryAction();
+            };
+            modal.classList.add('show');
+        }
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('show');
+        }
+
         function renderAdvancedSettings() {
-            const container = document.getElementById('advancedSettingsContent');
-            if (!container) return;
-            container.innerHTML = ADVANCED_SETTINGS_GROUPS.map((group) => {
+            ADVANCED_SETTINGS_GROUPS.forEach((group) => {
+                const panel = document.querySelector(`.settings-tab-panel[data-adv-group="${group.title}"]`);
+                if (!panel) return;
                 const fieldsHtml = group.fields.map((f) => {
                     const helpId = `help-adv-${f.entity}`;
                     const helpIcon = `<button type="button" class="help-icon" onclick="toggleHelp(event, '${helpId}')" aria-label="What does ${f.label} do?">i</button>`;
@@ -2076,6 +2573,45 @@
                                 ${helpPopover}
                             </div>`;
                     }
+                    if (f.type === 'text') {
+                        const inputId = `adv_${f.entity}`;
+                        const max = f.maxlength || 64;
+                        return `
+                            <div class="adv-field">
+                                <div class="field-label-row">
+                                    <label for="${inputId}">${f.label}</label>
+                                    ${helpIcon}
+                                </div>
+                                <input type="text" id="${inputId}" maxlength="${max}" style="min-width: 220px;">
+                                <button onclick="submitTextSetting('${nameEsc}', '${inputId}', '${labelEsc}')">Set</button>
+                                ${helpPopover}
+                            </div>`;
+                    }
+                    if (f.type === 'button') {
+                        return `
+                            <div class="adv-field">
+                                <div class="field-label-row">
+                                    <label>${f.label}</label>
+                                    ${helpIcon}
+                                </div>
+                                <button onclick="pressButtonSetting('${nameEsc}', '${labelEsc}')">${f.label}</button>
+                                ${helpPopover}
+                            </div>`;
+                    }
+                    if (f.type === 'select') {
+                        const inputId = `adv_${f.entity}`;
+                        return `
+                            <div class="adv-field">
+                                <div class="field-label-row">
+                                    <label for="${inputId}">${f.label}</label>
+                                    ${helpIcon}
+                                </div>
+                                <select id="${inputId}" onchange="submitSelectSetting('${nameEsc}', '${inputId}', '${labelEsc}')">
+                                    <option value="">--</option>
+                                </select>
+                                ${helpPopover}
+                            </div>`;
+                    }
                     const btnId = `adv_${f.entity}_btn`;
                     return `
                         <div class="adv-field">
@@ -2087,8 +2623,40 @@
                             ${helpPopover}
                         </div>`;
                 }).join('');
-                return `<div class="adv-group"><h3>${group.title}</h3><div class="adv-field-grid">${fieldsHtml}</div></div>`;
-            }).join('');
+                const host = panel.querySelector('.adv-settings-host') || panel;
+                host.innerHTML = `<div class="adv-field-grid">${fieldsHtml}</div>`;
+            });
+            const legacy = document.getElementById('advancedSettingsContent');
+            if (legacy) legacy.innerHTML = '';
+        }
+
+        function fmtProbeTemp(v) {
+            return (typeof v === 'number' && !isNaN(v)) ? `${v.toFixed(1)}°C` : '--';
+        }
+
+        function fmtProbeOffset(v) {
+            if (typeof v !== 'number' || isNaN(v)) return '--';
+            const sign = v > 0 ? '+' : '';
+            return `${sign}${v.toFixed(1)}°C`;
+        }
+
+        function updateProbeLiveReadings(data) {
+            const adv = data.adv || {};
+            const p1Off = (typeof data.probe1_offset === 'number')
+                ? data.probe1_offset
+                : adv['probe_1__coolroom__calibration_offset____c_'];
+            const p2Off = (typeof data.probe2_offset === 'number')
+                ? data.probe2_offset
+                : adv['probe_2__evaporator__calibration_offset____c_'];
+            setText('probeLiveP1Raw', fmtProbeTemp(data.probe1_raw));
+            setText('probeLiveP1Off', fmtProbeOffset(p1Off));
+            setText('probeLiveP1Corr', fmtProbeTemp(data.temperature));
+            setText('probeLiveP2Raw', fmtProbeTemp(data.probe2_raw));
+            setText('probeLiveP2Off', fmtProbeOffset(p2Off));
+            setText('probeLiveP2Corr', fmtProbeTemp(data.evap_temp));
+            // SHT31 has no calibration offset in firmware — raw and "corrected" match.
+            setText('probeLiveShtRaw', fmtProbeTemp(data.int_temp));
+            setText('probeLiveShtCorr', fmtProbeTemp(data.int_temp));
         }
 
         async function toggleAdvancedSwitch(entityName, label) {
@@ -2118,7 +2686,29 @@
                         if (input && input.value === '' && typeof value === 'number' && !isNaN(value)) {
                             input.value = value;
                         }
-                    } else {
+                    } else if (f.type === 'text') {
+                        const input = document.getElementById(`adv_${f.entity}`);
+                        if (input && input.value === '' && typeof value === 'string') {
+                            input.value = value;
+                        }
+                    } else if (f.type === 'select') {
+                        const sel = document.getElementById(`adv_${f.entity}`);
+                        if (!sel) return;
+                        const options = (data.advOptions && data.advOptions[f.entity]) || advSelectOptions[f.entity];
+                        if (Array.isArray(options) && options.length) {
+                            advSelectOptions[f.entity] = options;
+                            const wanted = options.join('\u0000');
+                            if (sel.dataset.options !== wanted) {
+                                sel.dataset.options = wanted;
+                                sel.innerHTML = options
+                                    .map((o) => `<option value="${o}">${o}</option>`)
+                                    .join('');
+                            }
+                        }
+                        if (typeof value === 'string' && value && sel.value !== value) {
+                            sel.value = value;
+                        }
+                    } else if (f.type === 'switch') {
                         const btn = document.getElementById(`adv_${f.entity}_btn`);
                         if (!btn) return;
                         const isOn = value === true;
@@ -2127,6 +2717,69 @@
                     }
                 });
             });
+        }
+
+        async function submitTextSetting(entityName, inputId, label) {
+            if (currentRole !== 'operator') {
+                showAlert('warning', `Login required to change ${label}`);
+                return;
+            }
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            const value = input.value.trim();
+            if (!value) {
+                showAlert('warning', `${label} cannot be empty`);
+                return;
+            }
+            const ok = await postWithFallback(
+                entityActionPath('text', entityName, 'set', `value=${encodeURIComponent(value)}`)
+            );
+            if (!ok) {
+                showAlert('error', `Could not update ${label}`);
+                return;
+            }
+            showAlert('success', `${label} updated`);
+            fetchStatus();
+        }
+
+        // Option lists arrive once per entity on the first full-detail event, so
+        // they are cached here — a later state-only update must not wipe the
+        // dropdown out from under the operator.
+        const advSelectOptions = {};
+
+        async function submitSelectSetting(entityName, inputId, label) {
+            const sel = document.getElementById(inputId);
+            if (!sel) return;
+            if (currentRole !== 'operator') {
+                showAlert('warning', `Login required to change ${label}`);
+                fetchStatus();
+                return;
+            }
+            const value = sel.value;
+            if (!value) return;
+            const ok = await postWithFallback(
+                entityActionPath('select', entityName, 'set', `option=${encodeURIComponent(value)}`)
+            );
+            if (!ok) {
+                showAlert('error', `Could not update ${label}`);
+                fetchStatus();
+                return;
+            }
+            showAlert('success', `${label} set to ${value}`);
+            fetchStatus();
+        }
+
+        async function pressButtonSetting(entityName, label) {
+            if (currentRole !== 'operator') {
+                showAlert('warning', `Login required to use ${label}`);
+                return;
+            }
+            const ok = await postWithFallback(entityActionPath('button', entityName, 'press'));
+            if (!ok) {
+                showAlert('error', `Could not trigger ${label}`);
+                return;
+            }
+            showAlert('success', `${label} sent`);
         }
 
         async function updateSetpoint() {
@@ -2161,23 +2814,165 @@
             submitNumberSetting('Compressor Differential (°C)', 'compDiffInput', 'Compressor Hysteresis');
         }
 
-        // Admin functions (operator-only). These remain placeholders — no backing
-        // endpoint exists in the firmware yet — but the permission check now maps
-        // to the one real elevated tier instead of an imaginary "superadmin".
+        // Admin functions (operator-only).
+
+        // /logs now returns { mounted, card, free_mb, ..., files:[...] }.
+        // Older firmwares returned a bare array — accept both.
+        function normalizeSdListing(payload) {
+            if (Array.isArray(payload)) {
+                return { mounted: true, files: payload, stats: null };
+            }
+            if (payload && typeof payload === 'object') {
+                return {
+                    mounted: payload.mounted !== false,
+                    files: Array.isArray(payload.files) ? payload.files : [],
+                    stats: payload,
+                };
+            }
+            return null;
+        }
+
+        async function fetchSdFileList() {
+            const candidates = buildApiCandidates('/logs');
+            for (const url of candidates) {
+                try {
+                    const response = await fetchWithTimeout(url);
+                    if (!response.ok && response.status !== 503) continue;
+                    const payload = await response.json();
+                    return normalizeSdListing(payload);
+                } catch (error) {
+                    // Unreachable candidate; try the next one.
+                }
+            }
+            return null;
+        }
+
+        function findBackupEntry(listing) {
+            const files = listing && listing.files;
+            if (!Array.isArray(files)) return null;
+            return files.find((f) => f && (f.kind === 'backup' || /^backup\.json$/i.test(f.name || ''))) || null;
+        }
+
+        function formatBackupTimestamp(mtime) {
+            // FAT stores no timezone and the clock is only meaningful once the
+            // controller has synced time, so a pre-2020 stamp is not a real date.
+            if (typeof mtime !== 'number' || mtime <= 0) return null;
+            const date = new Date(mtime * 1000);
+            if (date.getFullYear() < 2020) return null;
+            return date.toLocaleString();
+        }
+
+        function formatBytesCount(n) {
+            if (typeof n !== 'number' || isNaN(n)) return '—';
+            if (n < 1024) return `${n} B`;
+            if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+            return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        function renderSdStats(listing) {
+            const s = listing && listing.stats;
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            if (!listing || !listing.mounted) {
+                set('sdStatMounted', 'Not mounted');
+                set('sdStatCard', '—');
+                set('sdStatUsed', '—');
+                set('sdStatFree', '—');
+                set('sdStatTotal', '—');
+                set('sdStatSpeed', '—');
+                set('sdStatWrites', '—');
+                set('sdStatReads', '—');
+                set('sdStatBytesW', '—');
+                set('sdStatBytesR', '—');
+                return;
+            }
+            if (!s) {
+                set('sdStatMounted', 'Mounted');
+                return;
+            }
+            set('sdStatMounted', 'Mounted');
+            set('sdStatCard', s.card || '—');
+            set('sdStatUsed', typeof s.used_mb === 'number' ? `${s.used_mb.toFixed(0)} MB` : '—');
+            set('sdStatFree', typeof s.free_mb === 'number' ? `${s.free_mb.toFixed(0)} MB` : '—');
+            set('sdStatTotal', typeof s.total_mb === 'number' ? `${s.total_mb.toFixed(0)} MB` : '—');
+            set('sdStatSpeed', s.speed_khz ? `${s.speed_khz} kHz` : '—');
+            set('sdStatWrites', `${s.writes ?? 0} (${s.opens ?? 0} opens)`);
+            set('sdStatReads', `${s.reads ?? 0}`);
+            set('sdStatBytesW', formatBytesCount(s.bytes_written));
+            set('sdStatBytesR', formatBytesCount(s.bytes_read));
+        }
+
+        function renderBackupStatus(listing) {
+            const el = document.getElementById('backupStatus');
+            if (!el) return null;
+            if (currentRole !== 'operator') {
+                el.textContent = 'Log in to see the SD card backup.';
+                return null;
+            }
+            if (listing === null) {
+                el.textContent = 'Could not read the SD card file list.';
+                return null;
+            }
+            const entry = findBackupEntry(listing);
+            if (!entry || !entry.size) {
+                el.textContent = entry
+                    ? 'backup.json exists but is empty — press Backup Settings to write it.'
+                    : 'No backup.json on the SD card yet — press Backup Settings to create one.';
+                return entry;
+            }
+            const when = formatBackupTimestamp(entry.mtime);
+            el.textContent = `Backup on card: ${formatLogFileSize(entry.size)}${when ? ` — saved ${when}` : ''}`;
+            return entry;
+        }
+
+        async function refreshBackupStatus() {
+            const listing = await fetchSdFileList();
+            renderSdStats(listing);
+            return renderBackupStatus(listing);
+        }
+
         async function backupSettings() {
             if (currentRole !== 'operator') {
                 showAlert('danger', 'Login required to backup settings');
                 return;
             }
+            const beforeListing = await fetchSdFileList();
+            const before = findBackupEntry(beforeListing);
             const ok = await postWithFallback(entityActionPath('button', 'Backup All Settings to SD', 'press'));
             if (!ok) {
                 showAlert('error', 'Could not reach the device to back up settings');
                 return;
             }
-            // Button press is accepted over HTTP even if SD write fails on device —
-            // check System Health / serial for "Cannot open backup.json". Need a mounted SD card.
-            showAlert('success', 'Backup requested. If SD is missing or full, the device log will show write failure — confirm SD Card status under System Health.');
+            let entry = null;
+            let listing = null;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 700));
+                listing = await fetchSdFileList();
+                renderSdStats(listing);
+                entry = renderBackupStatus(listing);
+                const grew = entry && entry.size > 0;
+                const changed = !before || !before.size || (entry && entry.mtime !== before.mtime);
+                if (grew && changed) {
+                    const when = formatBackupTimestamp(entry.mtime);
+                    showAlert('success',
+                        `Settings backed up to SD card (${formatLogFileSize(entry.size)}${when ? `, ${when}` : ''}). Download a copy from the file list below if you want one.`);
+                    renderSdFileTable(listing);
+                    fetchStatus();
+                    return;
+                }
+            }
+            showAlert('error',
+                entry && entry.size
+                    ? 'Backup file did not change — the SD card may be write-protected or full.'
+                    : 'Backup did not appear on the SD card — check SD Card status under System Health.');
             fetchStatus();
+        }
+
+        async function downloadBackupFile() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to download the backup');
+                return;
+            }
+            await downloadSdFile('backup.json');
         }
 
         async function restoreSettings() {
@@ -2185,7 +2980,15 @@
                 showAlert('danger', 'Login required to restore settings');
                 return;
             }
-            if (!confirm('Restore settings from the SD card backup? This overwrites every current control parameter with whatever was last backed up.')) {
+            // Restoring with no backup on the card is a silent no-op on the
+            // device, which reads as "the button does nothing".
+            const entry = await refreshBackupStatus();
+            if (!entry || !entry.size) {
+                showAlert('warning', 'There is no backup.json on the SD card to restore from — press Backup Settings first.');
+                return;
+            }
+            const savedAt = formatBackupTimestamp(entry.mtime);
+            if (!confirm(`Restore settings from the SD card backup${savedAt ? ` saved ${savedAt}` : ''}? This overwrites every current control parameter with whatever was last backed up.`)) {
                 return;
             }
             const ok = await postWithFallback(entityActionPath('button', 'Restore All Settings from SD', 'press'));
@@ -2207,44 +3010,64 @@
             return `${(bytes / 1024).toFixed(1)} KB`;
         }
 
-        async function refreshLogFileList() {
+        function renderSdFileTable(listing) {
+            const body = document.getElementById('sdFileTableBody');
             const select = document.getElementById('logFileSelect');
-            if (currentRole !== 'operator') {
-                select.innerHTML = '<option value="">Login to view log files</option>';
+            if (!body) return;
+            if (!listing || !listing.mounted) {
+                body.innerHTML = '<tr><td colspan="4">SD card not mounted</td></tr>';
+                if (select) select.value = '';
                 return;
             }
-            select.innerHTML = '<option value="">Loading log files…</option>';
-            const candidates = buildApiCandidates('/logs');
-            for (const url of candidates) {
-                try {
-                    const response = await fetchWithTimeout(url);
-                    if (!response.ok) continue;
-                    const files = await response.json();
-                    if (!files.length) {
-                        select.innerHTML = '<option value="">No log files on the SD card</option>';
-                        return;
-                    }
-                    select.innerHTML = files
-                        .map((f) => `<option value="${f.name}">${f.name} (${formatLogFileSize(f.size)})</option>`)
-                        .join('');
-                    return;
-                } catch (error) {
-                    // Unreachable candidate; try the next one.
-                }
+            const files = listing.files || [];
+            if (!files.length) {
+                body.innerHTML = '<tr><td colspan="4">No files on the SD card</td></tr>';
+                if (select) select.value = '';
+                return;
             }
-            select.innerHTML = '<option value="">Could not reach the device</option>';
+            const selected = select ? select.value : '';
+            body.innerHTML = files.map((f) => {
+                const when = formatBackupTimestamp(f.mtime) || '—';
+                const kind = f.kind === 'backup' ? 'backup' : 'log';
+                const sel = f.name === selected ? ' selected' : '';
+                return `<tr class="${sel}" data-file="${f.name}" onclick="selectSdFile('${f.name}')">
+                    <td class="kind-${kind}">${f.name}</td>
+                    <td>${kind}</td>
+                    <td>${formatLogFileSize(f.size)}</td>
+                    <td>${when}</td>
+                </tr>`;
+            }).join('');
+            if (select && !selected && files[0]) select.value = files[0].name;
         }
 
-        async function downloadSelectedLog() {
+        function selectSdFile(name) {
+            const select = document.getElementById('logFileSelect');
+            if (select) select.value = name;
+            document.querySelectorAll('#sdFileTableBody tr').forEach((tr) => {
+                tr.classList.toggle('selected', tr.dataset.file === name);
+            });
+        }
+
+        async function refreshLogFileList() {
+            const body = document.getElementById('sdFileTableBody');
             if (currentRole !== 'operator') {
-                showAlert('warning', 'Login required to download logs');
+                if (body) body.innerHTML = '<tr><td colspan="4">Login to view SD card files</td></tr>';
+                renderBackupStatus(null);
+                renderSdStats(null);
                 return;
             }
-            const file = document.getElementById('logFileSelect').value;
-            if (!file) {
-                showAlert('warning', 'Select a log file first');
+            if (body) body.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+            const listing = await fetchSdFileList();
+            renderSdStats(listing);
+            renderBackupStatus(listing);
+            if (listing === null) {
+                if (body) body.innerHTML = '<tr><td colspan="4">Could not reach the device</td></tr>';
                 return;
             }
+            renderSdFileTable(listing);
+        }
+
+        async function downloadSdFile(file) {
             const candidates = buildApiCandidates(`/logs/download?file=${encodeURIComponent(file)}`);
             for (const url of candidates) {
                 try {
@@ -2258,12 +3081,26 @@
                     link.click();
                     link.remove();
                     URL.revokeObjectURL(link.href);
-                    return;
+                    return true;
                 } catch (error) {
                     // Unreachable candidate; try the next one.
                 }
             }
             showAlert('error', `Could not download ${file}`);
+            return false;
+        }
+
+        async function downloadSelectedLog() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to download logs');
+                return;
+            }
+            const file = document.getElementById('logFileSelect').value;
+            if (!file) {
+                showAlert('warning', 'Select a file first');
+                return;
+            }
+            await downloadSdFile(file);
         }
 
         async function deleteSelectedLog() {
@@ -2273,7 +3110,11 @@
             }
             const file = document.getElementById('logFileSelect').value;
             if (!file) {
-                showAlert('warning', 'Select a log file first');
+                showAlert('warning', 'Select a file first');
+                return;
+            }
+            if (/^backup\.json$/i.test(file)) {
+                showAlert('warning', 'backup.json holds your saved settings and cannot be deleted here — press Backup Settings to overwrite it.');
                 return;
             }
             if (!confirm(`Permanently delete ${file}? This cannot be undone.`)) return;
@@ -2291,6 +3132,137 @@
         // (see esp32-p4-coolroom.yaml), which calls save_wifi_sta() and reconnects
         // immediately. Two sequential POSTs, awaited in order, since the firmware
         // combines them server-side only once both have arrived.
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // WIRELESS — status, scan, and joining a new network
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        let wifiScanPollTimer = null;
+        let wifiSwitchPollTimer = null;
+
+        async function fetchJson(path, timeoutMs = 4000) {
+            for (const url of buildApiCandidates(path)) {
+                try {
+                    const response = await fetchWithTimeout(url, timeoutMs);
+                    if (!response.ok) continue;
+                    return await response.json();
+                } catch (error) {
+                    // Unreachable candidate; try the next one.
+                }
+            }
+            return null;
+        }
+
+        // Fields the SSE entity stream doesn't carry (channel, BSSID, MAC, the
+        // fallback AP, and where a switchover has got to) come from /api/wifi.
+        async function refreshWifiStatus() {
+            const info = await fetchJson('/api/wifi');
+            if (!info) return null;
+            setText('wifiCurrentChannel', info.channel ? String(info.channel) : '--');
+            setText('wifiCurrentBssid', info.bssid || '--');
+            setText('wifiCurrentMac', info.mac || '--');
+            setText('wifiApState', info.ap_active
+                ? `active — ${info.ap_ssid || 'setup AP'}`
+                : 'inactive');
+            renderWifiSwitchStatus(info);
+            return info;
+        }
+
+        function renderWifiSwitchStatus(info) {
+            const el = document.getElementById('wifiSwitchStatus');
+            if (!el) return;
+            const message = info && info.message ? info.message : '';
+            const state = info && info.switch_state;
+            if (state === 'testing') {
+                el.innerHTML = `<span class="status-badge status-warning">testing</span> ${message}`;
+            } else if (state === 'connected') {
+                el.innerHTML = `<span class="status-badge status-ok">joined</span> ${message}`;
+            } else if (state === 'reverted') {
+                el.innerHTML = `<span class="status-badge status-error">reverted</span> ${message}`;
+            } else {
+                el.textContent = message;
+            }
+        }
+
+        async function scanWifiNetworks() {
+            if (currentRole !== 'operator') {
+                showAlert('warning', 'Login required to scan for networks');
+                return;
+            }
+            const body = document.getElementById('wifiScanTableBody');
+            const btn = document.getElementById('wifiScanBtn');
+            if (body) body.innerHTML = '<tr><td colspan="3">Scanning…</td></tr>';
+            if (btn) btn.disabled = true;
+
+            const started = await postWithFallback('/api/wifi/scan');
+            if (!started) {
+                if (btn) btn.disabled = false;
+                if (body) body.innerHTML = '<tr><td colspan="3">Could not reach the device</td></tr>';
+                return;
+            }
+            // The scan runs on the device's own loop, so the result is polled
+            // rather than awaited — a request held open for the several seconds
+            // a full scan takes would block the single-threaded web server.
+            if (wifiScanPollTimer) clearInterval(wifiScanPollTimer);
+            let attempts = 0;
+            wifiScanPollTimer = setInterval(async () => {
+                attempts++;
+                const result = await fetchJson('/api/wifi/scan');
+                if (result && result.state === 'done') {
+                    clearInterval(wifiScanPollTimer);
+                    wifiScanPollTimer = null;
+                    if (btn) btn.disabled = false;
+                    renderWifiScanResults(result.networks || []);
+                } else if ((result && result.state === 'failed') || attempts > 15) {
+                    clearInterval(wifiScanPollTimer);
+                    wifiScanPollTimer = null;
+                    if (btn) btn.disabled = false;
+                    if (body) body.innerHTML = '<tr><td colspan="3">Scan failed — try again</td></tr>';
+                }
+            }, 1500);
+        }
+
+        function renderWifiScanResults(networks) {
+            const body = document.getElementById('wifiScanTableBody');
+            if (!body) return;
+            if (!networks.length) {
+                body.innerHTML = '<tr><td colspan="3">No networks found</td></tr>';
+                return;
+            }
+            // Strongest first, and only the best entry per SSID — a mesh shows
+            // the same name once per radio otherwise.
+            const best = new Map();
+            networks.forEach((n) => {
+                const existing = best.get(n.ssid);
+                if (!existing || n.rssi > existing.rssi) best.set(n.ssid, n);
+            });
+            const sorted = Array.from(best.values()).sort((a, b) => b.rssi - a.rssi);
+            body.innerHTML = sorted.map((n) => {
+                const ssidAttr = n.ssid.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const ssidText = escapeHtml(n.ssid);
+                return `
+                    <tr class="wifi-scan-row" onclick="selectWifiNetwork('${ssidAttr}', this)">
+                        <td>${ssidText}</td>
+                        <td>${n.rssi} dBm</td>
+                        <td>${n.secure ? '🔒 secured' : 'open'}</td>
+                    </tr>`;
+            }).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function selectWifiNetwork(ssid, row) {
+            const input = document.getElementById('wifiNewSsid');
+            if (input) input.value = ssid;
+            document.querySelectorAll('#wifiScanTableBody tr').forEach((tr) => tr.classList.remove('selected'));
+            if (row) row.classList.add('selected');
+            const password = document.getElementById('wifiNewPassword');
+            if (password) password.focus();
+        }
+
         async function applyNewWifi() {
             if (currentRole !== 'operator') {
                 showAlert('warning', 'Login required to change WiFi settings');
@@ -2299,25 +3271,34 @@
             const ssid = document.getElementById('wifiNewSsid').value.trim();
             const password = document.getElementById('wifiNewPassword').value;
             if (!ssid) {
-                showAlert('warning', 'Enter a network name first');
+                showAlert('warning', 'Pick a network or enter a name first');
                 return;
             }
-            if (!confirm(`Reconnect to "${ssid}"? This drops the current WiFi connection immediately — if the new credentials don't work, the device falls back to its own "CoolroomP4-Setup" access point.`)) {
+            if (!confirm(`Join "${ssid}"? The controller drops the current connection to try it. If it can't join within 45 seconds it puts the previous network back automatically.`)) {
                 return;
             }
-            const ok1 = await postWithFallback(
-                entityActionPath('text', 'New WiFi SSID', 'set', `value=${encodeURIComponent(ssid)}`)
-            );
-            const ok2 = await postWithFallback(
-                entityActionPath('text', 'New WiFi Password (submit after SSID)', 'set', `value=${encodeURIComponent(password)}`)
-            );
-            if (!ok1 || !ok2) {
+            const query = `ssid=${encodeURIComponent(ssid)}&password=${encodeURIComponent(password)}`;
+            const ok = await postWithFallback(`/api/wifi/connect?${query}`, 5000);
+            if (!ok) {
                 showAlert('error', 'Could not reach the device to submit the new WiFi network');
                 return;
             }
-            document.getElementById('wifiNewSsid').value = '';
             document.getElementById('wifiNewPassword').value = '';
-            showAlert('info', `Submitted "${ssid}" — the device is attempting to reconnect. This page will lose contact with it until that finishes (or falls back to the setup access point).`);
+            showAlert('info', `Trying "${ssid}" — this page loses contact with the controller while it switches over. If the new network doesn't work it returns to the old one on its own.`);
+
+            // Keeps reporting after the browser can reach the device again —
+            // which, if the switch worked, means finding it on the new network.
+            if (wifiSwitchPollTimer) clearInterval(wifiSwitchPollTimer);
+            let attempts = 0;
+            wifiSwitchPollTimer = setInterval(async () => {
+                attempts++;
+                const info = await refreshWifiStatus();
+                const settled = info && (info.switch_state === 'connected' || info.switch_state === 'reverted');
+                if (settled || attempts > 40) {
+                    clearInterval(wifiSwitchPollTimer);
+                    wifiSwitchPollTimer = null;
+                }
+            }, 3000);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════════

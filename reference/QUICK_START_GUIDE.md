@@ -19,6 +19,11 @@ the unit, or from a web page on any browser on your network.
 
 - [ ] **Connect to WiFi.** No known network on first boot → connect to the controller's own
       access point → browse to `192.168.4.1` → enter your real network's SSID/password.
+      To change networks later, log in → **Wireless** tab → **Scan** → pick the network →
+      enter the password → **Join Network**. The controller tries it and puts the old
+      network back by itself if it can't join, so a typo can't strand it. See §4.10.
+      Optional: on the same **Wireless** tab, turn on **Home Assistant API Enabled** only if
+      you want Home Assistant to see this device’s sensors/switches (off by default).
 - [ ] **Find the device IP** (router's device list, or touchscreen Info page) and open
       `http://<device-ip>/` in a browser (also `/dashboard`). Main status loads without a
       password; settings stay hidden until 🔐 Login with your `secrets.yaml` web credentials.
@@ -26,8 +31,14 @@ the unit, or from a web page on any browser on your network.
       on the touchscreen → enter `0000` → **Change PIN** button.
 - [ ] **Check both probes are reading sensibly** (System/Diagnostics section — Probe Health
       Summary) before relying on the unit.
-- [ ] **Subscribe to push notifications** — install the free ntfy app and subscribe to your
-      device's topic name (ask your installer). See User Manual §4.8.
+- [ ] **Check the hardware is all present** — log in → **Hardware** tab. Both RS485 boards,
+      the RTC, the humidity sensors and the SD card should read *online*. If you don't want
+      the alarm relay driving an external siren, turn **Siren Relay Enabled** off here:
+      alarms and push notifications carry on as normal. See §4.13.
+- [ ] **Subscribe to push notifications** — log in → **Alarms & Notify** tab → set topic
+      (and server if not using ntfy.sh) → optionally tune each alert's priority →
+      **Send Test Notification**. Install the free ntfy app and subscribe to that same
+      topic. See User Manual §4.8.
 - [ ] **Set your target temperature and alarm thresholds** — see the worked example below,
       or your own product's requirements.
 - [ ] **Do one manual backup** (System section → "Backup All Settings to SD") once you're
@@ -51,7 +62,23 @@ the unit, or from a web page on any browser on your network.
 | 7 | Probes | Settings 7/7 | Calibration offsets, probe/humidity sensor enables |
 
 WiFi, the web login password, and SD card log-delete are **web-dashboard only** — by design,
-not an oversight. Full explanation: User Manual §4.11.
+not an oversight. Full explanation: User Manual §4.11. The web dashboard also carries tabs
+with no touchscreen equivalent: **Hardware**, **Wireless**, and **Events** (live alarm/fault
+log as it happens).
+
+**Door Sensor Enabled is the alarm only.** Cabinet light-on-open is **Door-Triggered Light
+Enabled** (§4.6). The home light icon animates only while the light relay is actually on —
+tap it to toggle the light manually (when Light Relay Enabled is on). Snowflake and flame
+are status-only; tap the bell to soft-mute the siren (bell stays red, stops jiggling;
+a new alarm type re-animates).
+
+**Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/7 — not the
+home flame icon. Defrost System Enabled gates automatic starts only; the Hardware tab's
+Defrost Relay Enabled gates the heater coil (passive cycle when off).
+
+**After a power cut the compressor won't start straight away** — the off-delay counts from
+power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before
+cooling resumes. That is deliberate compressor protection, not a fault. See §4.1.
 
 ---
 
@@ -72,6 +99,7 @@ suffer freeze damage a little below 0 °C.
 | **Setpoint** | `0.5 °C` | Close to optimal storage temperature for stone fruit while leaving a safety margin above freezing. |
 | **Compressor Differential** | `1.0 °C` (default) | Keeps the swing tight around 0.5 °C without excessive compressor cycling. |
 | **Compressor Off-Delay** | `3 min` (default) | No produce-specific reason to change this. |
+| **Compressor Min Run Time** | `2 min` (default) | Leave on; pairs with Off-Delay to stop short-cycling. |
 | **Defrost System Enabled** | `On` | Needed — a near-0 °C, high-humidity room frosts the coil steadily. |
 | **Defrost Interval** | `480 min` (default, 8 h) | Reasonable baseline; shorten if you see visible frost buildup between cycles. |
 | **Defrost Early Termination by Temp** | `On` (default) | Avoids over-warming the room on every cycle — important for a chill-sensitive but not frost-tolerant product. |
@@ -82,7 +110,8 @@ suffer freeze damage a little below 0 °C.
 | **High Temp Alarm Delta** | `2.0 °C` (i.e. alarms above ~2.5 °C) | Catches a warming excursion early enough to act before ripening accelerates or decay risk rises. |
 | **Low Temp Alarm Delta** | `1.5 °C` (i.e. alarms below ~ -1.0 °C) | Tighter than default — protects against freeze injury, since higher-sugar fruit still isn't freeze-proof much below 0 °C. |
 | **Alarm Persist Time** | `5 min` (default) | Fine as-is. |
-| **Ice Alarm Delta** | `2.5 °C` (slightly above default) | A humid room frosts more readily — a slightly higher threshold gives you an earlier warning before ice becomes a real airflow problem. |
+| **Ice Alarm Delta** | `15 °C` (default) | Large coolroom−evap gap while cooling = iced coil (Precision polarity). Raise toward 18–20 if you get false alarms during heavy pull-down; enable Ice Detection + leave Dwell at 10 min. |
+| **Ice Alarm Dwell** | `10 min` (default) | Condition must hold this long before the alarm fires. |
 | **No-Cool Alarm Timeout** | `45 min` (tighter than default 60) | Stone fruit is high-value enough to justify catching a refrigeration failure a bit faster. |
 | **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. |
 | **Door-Triggered Light Enabled** | `On` (default) | Convenient for staff picking/sorting fruit — light comes on automatically while the door's open. |
@@ -132,17 +161,19 @@ the less this list matches your actual product and packaging.
 ┌──────────────────────────────────────────────────────────────────────┐
 │                 ANY of the following becomes true:                   │
 ├────────────────────────┬───────────────────────┬─────────────────────┤
-│ Fixed interval elapsed  │ Smart Defrost:         │ Dew Point Trigger:  │
-│ since last defrost      │ coolroom↔evap gap too  │ evaporator is below │
-│ (§ Defrost Schedule)    │ large, too long        │ freezing AND below  │
-│                         │ (§ Smart & Drip,        │ the calculated dew  │
-│                         │ off by default)         │ point (off by       │
-│                         │                         │ default)            │
+│ Fixed interval elapsed │ Smart Defrost:         │ Dew Point / Frost-  │
+│ since last defrost     │ coolroom↔evap gap too  │ rate humidity drop  │
+│ (Skip-If-Cold can      │ large, too long        │ (both off by        │
+│ postpone this one only)│                        │ default)            │
 ├────────────────────────┴───────────────────────┴─────────────────────┤
+│ Force-Max Interval Override (safety net)  OR  Manual Start Now       │
+├──────────────────────────────────────────────────────────────────────┤
 │ → Defrost starts. Ends at Max Duration, or earlier if Early           │
 │   Termination by Temp is on and the coil reaches its target.         │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+Also: Min Run Time holds the compressor ON until its minimum ON window elapses (pairs with Off-Delay).
 
 ---
 

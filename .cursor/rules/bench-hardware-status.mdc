@@ -1,0 +1,35 @@
+---
+description: Current bench hardware — what is and is not connected; do not chase missing buses as bugs
+alwaysApply: true
+---
+
+# Bench hardware status (current)
+
+The Waveshare ESP32-P4 board under test is **not** fully instrumented yet. Treat missing
+peripheral boards as **expected**, not regressions, until Cory confirms they are wired.
+
+## Not connected (do not diagnose as failures)
+
+- **RS485** — no relay board, no RTD Modbus boards. `RS485 * Online` OFF, Modbus
+  timeouts / "Stop waiting for response", and probe-fault / fallback paths are
+  **expected** on the bench.
+- **External I2C temperature / humidity sensors** on the PH2.0 I2C header — not fitted.
+  Missing ambient/external readings are **expected**.
+
+## Connected / in scope for live checks
+
+- On-board display, touch, Wi-Fi (C6), speaker path (ES8311 / PA), web/API — as already
+  used in this project.
+- On-board RTC (PCF8563) only after battery + chip are confirmed present; do not treat
+  RTC FAIL as blocking if the CR2032 / chip is known absent.
+
+## Rules for agents
+
+1. Do **not** spend the session chasing Modbus offline / RTD offline / external I2C sensor
+   absence unless the user says that hardware is now connected.
+2. Do **not** recommend "fix RS485 wiring" as the next step for unrelated work.
+3. When verifying control logic that needs temps/relays, say clearly that end-to-end
+   coolroom control **cannot** be proven until RS485 (+ sensors) are attached; unit/UI
+   paths may still be tested without them.
+4. When the user reports peripherals are connected, update this rule (and
+   `CLAUDE.md` / `reference/hardware_pins.md`) before treating those buses as live.
