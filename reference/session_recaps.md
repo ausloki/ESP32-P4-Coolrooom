@@ -21,9 +21,15 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 Floor at 50% keeps alarm speech from being silenced by accident; ceiling matches the
 ES8311 clipping limit documented earlier.
 
+### Follow-up fix
+
+Lagged `on_volume` callbacks from an earlier `volume_set` could overwrite a newer value.
+Suppress sync for 2s after our own sets; number entity `update_interval: 2s` for snappy UI.
+Verified live: 75% publishes within 2s and sticks; restored to 85%.
+
 ### Closeout
 
-Coverage OK → embed `20260731-2347` → compile `0x36f2e280` → NVS-safe flash → graph.
+Coverage OK → embed `20260731-2347` → compile `0x9d6b38ea` → NVS-safe flash → graph.
 
 ---
 
