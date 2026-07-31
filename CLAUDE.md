@@ -12,7 +12,9 @@ consult the local reference PDFs and pin map — do not trust memory or chat alo
 
 - `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` — board hardware manual / schematic
 - `reference/esp32-p4_technical_reference_manual_en.pdf` / `esp32-p4_datasheet_en.pdf` — SoC
-- `reference/hardware_pins.md` — project’s digested GPIO/I2C/audio map
+- `reference/hardware_pins.md` — project’s digested GPIO/I2C/audio map. For a **new field-I/O
+  pin**, use the **"⭐ Field-I/O GPIO allocation"** table there (free vs. in-use header pins for
+  THIS board) and update that row in the same commit when a pin is claimed or freed.
 - Relay / RTD PDFs under `reference/` when touching Modbus
 
 Then re-check live Waveshare ESP-IDF demos if pins may have changed upstream:

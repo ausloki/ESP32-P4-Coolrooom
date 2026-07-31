@@ -187,6 +187,38 @@ either for field I/O — pulling them at reset changes boot behaviour.
 **H11** (pin 1 `Core_5V`, 2 `GND`, 3 `CANH`, 4 `CANL` — CAN). The RS485 header is
 **H10** (1 `VCC`, 2 `GND`, 3 `A`, 4 `B`).
 
+### ⭐ Field-I/O GPIO allocation — check here before assigning a pin
+
+This is the single source of truth for "what pins can I use on THIS board." Update it in the
+same commit whenever a header GPIO is claimed or freed.
+
+| GPIO | Header pin | Status | Used by |
+| --- | --- | --- | --- |
+| GPIO46 | P1-7 | 🔴 in use | Door reed sensor (return on P1-8 GND) |
+| GPIO47 | P1-6 | 🟢 free | — |
+| GPIO48 | P1-5 | 🟢 free | — |
+| GPIO49 | P1-4 | 🟢 free | — |
+| GPIO50 | P1-3 | 🟢 free | — |
+| GPIO51 | P1-2 | 🟢 free | — |
+| GPIO52 | P1-1 | 🟢 free | — |
+| GPIO2  | P3-10 | 🟢 free | — |
+| GPIO3  | P3-9 | 🟢 free | — |
+| GPIO4  | P3-8 | 🟢 free | — |
+| GPIO5  | P3-7 | 🟢 free | — |
+| GPIO28 | P3-6 | 🟢 free | — |
+| GPIO29 | P3-5 | 🟢 free | — |
+| GPIO30 | P3-4 | 🟢 free | — |
+| GPIO31 | P3-3 | 🟢 free | — |
+| GPIO34 | P3-2 | ⛔ do not use | ESP32-P4 strapping / JTAG-select pin |
+| GPIO36 | P3-1 | ⛔ do not use | ESP32-P4 strapping (boot-mode) pin |
+
+Grounds available for two-wire field devices: P1-8, P1-11, P3-11. 3.3V on P1-10 / P3-12.
+No 5V on these headers — see the H9/H11 note above.
+
+**Before claiming a "free" pin**, still open the schematic and confirm the pin appears on P1
+or P3 with no other net attached (this is exactly the check that GPIO20 failed). A GPIO number
+existing does not mean the pad is broken out or unshared on this board.
+
 ### Supported Header Voltages
 
 | Rail / Signal Type | Nominal Voltage | Notes |

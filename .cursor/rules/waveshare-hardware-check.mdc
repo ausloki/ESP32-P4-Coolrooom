@@ -49,6 +49,12 @@ Waveshare tables often name signals **from the peripheral's point of view**. ESP
 ESP-IDF usually name them **from the ESP's point of view**. Those invert for bidirectional
 buses.
 
+**Which pins are actually available on THIS board:** the authoritative list of free vs.
+in-use field-I/O GPIOs is the **"⭐ Field-I/O GPIO allocation"** table in
+`reference/hardware_pins.md`, right under the P1/P3 header map. **Consult that table before
+assigning or moving any field-I/O pin**, and update it (same commit) whenever a header GPIO is
+claimed or freed.
+
 **Known trap (a GPIO number is not proof the pin is usable):** `hardware_pins.md` once listed
 GPIO20 as an available header net, and firmware ran the door reed on it for weeks. The
 schematic shows GPIO20 is the battery-sense divider (`BAT → R92 → GPIO20 → R93 → GND`) and is
@@ -67,13 +73,16 @@ speech**. Official IDF-style mapping for this board family is `I2S_DO=GPIO9`,
 
 1. **Before** editing substitutions / GPIO / `p4_audio.yaml` / I2C / display / SD / C6
    pins: read the relevant section of `reference/ESP32-P4-WIFI6-Touch-LCD-7B.pdf` and
-   `reference/hardware_pins.md`. Use TRM/datasheet PDFs when the change depends on SoC
+   `reference/hardware_pins.md`. For a **new field-I/O pin**, pick from the
+   "⭐ Field-I/O GPIO allocation" table in `hardware_pins.md` (free rows only) and confirm it
+   on the schematic before use. Use TRM/datasheet PDFs when the change depends on SoC
    behaviour. For RS485 relay/RTD work, use those PDFs too.
 2. Prefer **schematic / sample code pin `#define`s** over marketing/table wording when
    they disagree.
 3. If local PDF and live Waveshare demo disagree, note both, prefer sample/`#define`
    direction, and update `reference/hardware_pins.md` with the citation.
-4. After changing pins, update `reference/hardware_pins.md` with the source cited
-   (PDF page/section and/or Waveshare URL) and any MCU-vs-peripheral naming note.
+4. After changing pins, update `reference/hardware_pins.md` — both the source citation
+   (PDF page/section and/or Waveshare URL) and the **"⭐ Field-I/O GPIO allocation" table**
+   (flip the row to in-use/free) — plus any MCU-vs-peripheral naming note.
 5. Do not treat chat memory or unverified web summaries as authoritative over the local
    schematic/manual PDFs.
