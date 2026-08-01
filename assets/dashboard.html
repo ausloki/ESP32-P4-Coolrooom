@@ -702,7 +702,7 @@
                     <div id="rs485Status" style="margin-top: 8px;"></div>
                 </div>
                 <div>
-                    <strong>Memory Usage</strong>
+                    <strong>Memory / CPU</strong>
                     <div id="memoryStatus" style="margin-top: 8px;"></div>
                 </div>
                 <div>
@@ -920,6 +920,7 @@
                             <div><strong>SHT20 (External)</strong><span id="hwSht20">--</span></div>
                             <div><strong>SD Card</strong><span id="hwSdCard">--</span></div>
                             <div><strong>Chip Temp</strong><span id="hwChipTemp">--</span></div>
+                            <div><strong>CPU Usage</strong><span id="hwCpu">--</span></div>
                             <div><strong>Free Heap</strong><span id="hwHeap">--</span></div>
                             <div><strong>Free PSRAM</strong><span id="hwPsram">--</span></div>
                             <div><strong>Uptime</strong><span id="hwUptime">--</span></div>
@@ -1701,6 +1702,7 @@
             'sensor-external_temperature__sht20_': 'ext_temp',
             'sensor-external_humidity__sht20_': 'ext_humidity',
             'sensor-free_heap__kb_': 'heap_free_kb',
+            'sensor-cpu_usage': 'cpu_usage_pct',
             'number-high_temp_alarm_delta____c_': 'alarm_high',
             'number-low_temp_alarm_delta____c_': 'alarm_low',
             'number-compressor_differential____c_': 'comp_diff',
@@ -1962,7 +1964,10 @@
             rs485Html += `RTC: <span class="status-badge ${data.rtc_ok ? 'status-ok' : 'status-error'}">${data.rtc_ok ? '✓' : '✗'}</span>`;
             setHtml('rs485Status', rs485Html);
 
-            const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
+            const cpuTxt = (typeof data.cpu_usage_pct === 'number' && !isNaN(data.cpu_usage_pct))
+                ? `${Math.round(data.cpu_usage_pct)}%`
+                : '--';
+            const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>CPU: ${cpuTxt}<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
             setHtml('memoryStatus', memHtml);
 
             const probeHtml = `SHT31: <span class="status-badge ${data.sht31_ok ? 'status-ok' : 'status-error'}">${data.sht31_ok ? '✓' : '✗'}</span>SHT20: <span class="status-badge ${data.sht20_ok ? 'status-ok' : 'status-error'}">${data.sht20_ok ? '✓' : '✗'}</span>`;
@@ -2015,6 +2020,8 @@
             setText('hwChipTemp',
                 typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--');
             setText('hwHeap', data.heap_free_kb ? `${data.heap_free_kb} KB` : '--');
+            setText('hwCpu', (typeof data.cpu_usage_pct === 'number' && !isNaN(data.cpu_usage_pct))
+                ? `${Math.round(data.cpu_usage_pct)}%` : '--');
             setText('hwPsram', data.psram_free_kb ? `${data.psram_free_kb} KB` : '--');
             if (typeof data.uptime_seconds === 'number' && !isNaN(data.uptime_seconds)) {
                 const d = Math.floor(data.uptime_seconds / 86400);

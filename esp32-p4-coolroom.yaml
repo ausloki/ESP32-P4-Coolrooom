@@ -410,6 +410,10 @@ esp32:
       CONFIG_FATFS_LFN_NONE: "n"
       CONFIG_FATFS_LFN_HEAP: "y"
       CONFIG_FATFS_MAX_LFN: "255"
+      # Per-task run-time counters so we can derive CPU utilisation from idle
+      # time (ulTaskGetIdleRunTimeCounterForCore). Selects USE_TRACE_FACILITY.
+      # ESP32-P4 is not on FreeRTOS SMP yet (IDF-8113), so the non-SMP APIs apply.
+      CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS: "y"
     advanced:
       execute_from_psram: true
       enable_idf_experimental_features: true
@@ -1875,6 +1879,18 @@ sensor:
     web_server:
       sorting_group_id: group_diagnostics
       sorting_weight: 12
+
+  - platform: template
+    name: "CPU Usage"
+    id: cpu_usage_pct
+    lambda: 'return p4_cpu_usage_pct();'
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 5s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 13
 
   - platform: uptime
     name: "System Uptime"
@@ -4514,6 +4530,12 @@ interval:
           text: !lambda |-
             char buf[64];
             p4_fmt_heap_mb(buf, sizeof(buf));
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_info_cpu
+          text: !lambda |-
+            char buf[32];
+            p4_fmt_cpu_usage(buf, sizeof(buf));
             return std::string(buf);
       - lvgl.label.update:
           id: lbl_info_psram
@@ -8392,19 +8414,22 @@ lvgl:
             scrollable: true
             scrollbar_mode: "AUTO"
             widgets:
-              # Left column
+              # Left column — Memory / CPU / PSRAM / uptime / WiFi. CPU sits
+              # under Memory; later rows shift down ~80px (scrollable).
               - label: {x: 0, y: 0, width: 470, text: "Memory", text_font: font_medium, text_color: col_subtext}
               - label: {id: lbl_info_heap, x: 0, y: 32, width: 470, text: "---", text_font: font_medium, text_color: col_text}
-              - label: {x: 0, y: 80, width: 470, text: "PSRAM", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_psram, x: 0, y: 112, width: 470, text: "---", text_font: font_medium, text_color: col_text}
-              - label: {x: 0, y: 160, width: 470, text: "Uptime", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_uptime, x: 0, y: 192, width: 470, text: "---", text_font: font_medium, text_color: col_text}
-              - label: {x: 0, y: 240, width: 470, text: "WiFi SSID", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_ssid, x: 0, y: 272, width: 470, text: "---", text_font: font_medium, text_color: col_text}
-              - label: {x: 0, y: 320, width: 470, text: "WiFi Signal", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_signal, x: 0, y: 352, width: 470, text: "---", text_font: font_medium, text_color: col_text}
-              - label: {x: 0, y: 400, width: 470, text: "IP Address", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_ip, x: 0, y: 432, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 80, width: 470, text: "CPU", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_cpu, x: 0, y: 112, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 160, width: 470, text: "PSRAM", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_psram, x: 0, y: 192, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 240, width: 470, text: "Uptime", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_uptime, x: 0, y: 272, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 320, width: 470, text: "WiFi SSID", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_ssid, x: 0, y: 352, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 400, width: 470, text: "WiFi Signal", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_signal, x: 0, y: 432, width: 470, text: "---", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 480, width: 470, text: "IP Address", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_ip, x: 0, y: 512, width: 470, text: "---", text_font: font_medium, text_color: col_text}
 
               # Right column
               - label: {x: 500, y: 0, width: 470, text: "RS485 / RTC", text_font: font_medium, text_color: col_subtext}

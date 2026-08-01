@@ -4,6 +4,16 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — CPU Utilisation on Info + Web
+
+- Enabled `CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS` (P4 is non-SMP FreeRTOS).
+- `p4_cpu_usage_pct()` / `p4_fmt_cpu_usage()` in `p4_helpers.h`: windowed busy% from
+  per-core idle counters, averaged across both HP cores. First sample returns NAN.
+- New diagnostic sensor `cpu_usage_pct` (5 s). LVGL Info page: **CPU** row under Memory.
+- Web: System Health + Hardware Device Status show CPU %. USER_MANUAL §4.12 updated.
+
+---
+
 ## 2026-08-01 (Afternoon) — Gauge Design Locked + Web Twin + Closeout
 
 - New always-apply rule `.cursor/rules/home-gauge-design.mdc`: rings-only on flat

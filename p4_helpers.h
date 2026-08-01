@@ -21,6 +21,7 @@
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/idf_additions.h>
 
 // ─── GT911 touch — shared LCD/touch reset (GPIO33) ─────────────────────────
 
@@ -169,6 +170,65 @@ inline float p4_free_heap_kb() {
 
 inline float p4_free_psram_kb() {
     return static_cast<float>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)) / 1024.0f;
+}
+
+// ─── CPU utilisation (windowed, average across cores) ─────────────────────
+// Needs CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS. Samples idle-task counters
+// between calls and returns busy% = 100 − mean idle fraction. First call
+// after boot (or after enabling the option) returns NAN until a second
+// sample lands — callers should treat that as "unknown".
+
+#if (configGENERATE_RUN_TIME_STATS == 1) && (INCLUDE_xTaskGetIdleTaskHandle == 1) && !defined(CONFIG_FREERTOS_SMP)
+
+inline float p4_cpu_usage_pct() {
+    static uint32_t last_idle[configNUMBER_OF_CORES] = {};
+    static uint32_t last_total = 0;
+    static float last_pct = NAN;
+
+    uint32_t total_now = (uint32_t) portGET_RUN_TIME_COUNTER_VALUE();
+    uint32_t idle_now[configNUMBER_OF_CORES];
+    for (BaseType_t c = 0; c < (BaseType_t) configNUMBER_OF_CORES; c++) {
+        idle_now[c] = (uint32_t) ulTaskGetIdleRunTimeCounterForCore(c);
+    }
+
+    if (last_total == 0 || total_now <= last_total) {
+        for (int c = 0; c < configNUMBER_OF_CORES; c++) last_idle[c] = idle_now[c];
+        last_total = total_now;
+        return last_pct;  // NAN until we have a real window
+    }
+
+    const float dt = (float) (total_now - last_total);
+    float idle_sum = 0.0f;
+    for (int c = 0; c < configNUMBER_OF_CORES; c++) {
+        idle_sum += (float) (idle_now[c] - last_idle[c]);
+        last_idle[c] = idle_now[c];
+    }
+    last_total = total_now;
+
+    // Each core contributes one wall-time worth of idle; average across cores.
+    float idle_frac = idle_sum / (dt * (float) configNUMBER_OF_CORES);
+    if (idle_frac < 0.0f) idle_frac = 0.0f;
+    if (idle_frac > 1.0f) idle_frac = 1.0f;
+    last_pct = (1.0f - idle_frac) * 100.0f;
+    return last_pct;
+}
+
+#else
+
+inline float p4_cpu_usage_pct() {
+    return NAN;  // run-time stats not compiled in
+}
+
+#endif
+
+/// Format "CPU: 23%" / "CPU: --%" into buf (for LVGL info page).
+inline void p4_fmt_cpu_usage(char *buf, size_t n) {
+    float pct = p4_cpu_usage_pct();
+    if (!std::isfinite(pct)) {
+        snprintf(buf, n, "CPU: --%%");
+        return;
+    }
+    snprintf(buf, n, "CPU: %.0f%%", pct);
 }
 
 // ─── Settings-screen PIN lock ──────────────────────────────────────────────

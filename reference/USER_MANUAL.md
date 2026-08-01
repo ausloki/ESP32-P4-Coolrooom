@@ -679,7 +679,7 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 | Item | What it shows |
 |---|---|
 | System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. With a working battery RTC, timestamps are correct from boot without waiting for WiFi; NTP still corrects drift (about weekly when the RTC is healthy, daily if not). |
-| Free Heap / Free PSRAM / Chip Temperature | Controller's own internal health |
+| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU is the average busy percentage across both P4 cores over the last sample window (typically a few seconds). |
 | SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9) |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
 | RTC / SHT31 / SHT20 Online | Whether each optional peripheral is detected. RTC = battery-backed clock (PCF8563); if offline, install/check the CR2032 and expect log timestamps to wait for WiFi/NTP after every power cut. |
