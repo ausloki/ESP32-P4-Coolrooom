@@ -4,6 +4,23 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Midday) — Ticks Scrapped, Dial Floor −10 °C
+
+Cory: the tick scale never looked clean against the glass rings, so it's gone.
+
+- Removed the `meter` widget, the `dial_tick_count` substitution and the `on_boot −100`
+  `LV_PART_ITEMS` opacity lambda. Back to the three arcs + rim + plate + disc.
+- `dial_min_c` **−15 → −10** (`dial_max_c` unchanged at 30). A 40 °C span gives finer
+  resolution across the range that actually matters. Setpoint 2 °C now sits at 30% of the
+  240° sweep (was 37.8%).
+- Flash 2.46 MB → 2.45 MB, DIRAM unchanged at 26.7%.
+
+The earlier LVGL note still holds if ticks are ever revisited: a meter's widget-level
+`ticks:` style block lands on `LV_PART_INDICATOR` (major ticks), while minor ticks are
+`LV_PART_ITEMS` and only expose width/length/color in the schema.
+
+---
+
 ## 2026-08-01 (Midday) — Gauge Ticks Toned Down to Border Weight
 
 Ticks were reading too heavy at 2px/grey. Now 1px `col_glass_rim` at `LV_OPA_20`, matching

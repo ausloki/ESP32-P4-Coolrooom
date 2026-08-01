@@ -49,15 +49,12 @@ substitutions:
   timezone:      Australia/Perth
 
   # ── Home gauge dial range (°C) ───────────────────────────────────────────
-  # Shared by the coolroom / setpoint / ambient arcs AND the tick ring, so
-  # every ring reads against the same scale. dial_min_c is the left-hand
-  # (bottom-left) end of the horseshoe — the coldest the room is expected to
-  # reach; dial_max_c must stay high enough that summer ambient does not peg.
-  # Change both here only: the arcs, the helpers and the tick count follow.
-  dial_min_c: "-15"
+  # Shared by the coolroom / setpoint / ambient arcs so every ring reads
+  # against the same scale. dial_min_c is the left-hand (bottom-left) end of
+  # the horseshoe; dial_max_c must stay high enough that summer ambient does
+  # not peg. Change here only — the arcs and helpers follow.
+  dial_min_c: "-10"
   dial_max_c: "30"
-  # One minor tick per °C across the range: (max - min) + 1.
-  dial_tick_count: "46"
 
   # ── NTP servers ───────────────────────────────────────────────────────────
   ntp_server_1: au.pool.ntp.org
@@ -331,17 +328,6 @@ esphome:
     - priority: -100
       then:
         - lambda: id(status_text).publish_state("Booting...");
-    - priority: -100
-      then:
-        # Fade the home dial's tick marks to match the thin glass circle
-        # outlines (1px col_glass_rim at ~20%). ESPHome maps a meter's
-        # widget-level `ticks:` style block onto the scale's INDICATOR part,
-        # which in LVGL 9 is the *major* ticks — this gauge has none. Minor
-        # ticks are styled on LV_PART_ITEMS, which the YAML schema doesn't
-        # expose, so set the opacity directly on the named scale object.
-        - lambda: |-
-            lv_obj_set_style_line_opa(id(home_dial_scale), LV_OPA_20,
-                                      LV_PART_ITEMS);
     - priority: -95
       then:
         # Apply NVS-restored speaker volume after the media player is up. The
@@ -5953,9 +5939,8 @@ lvgl:
               #   - Left rail + touch targets untouched (container stays
               #     x:80, clickable false).
               #   - No real Gaussian blur (too expensive on P4 full-refresh).
-              #   - Widget order IS z-order: the tick meter sits AFTER the three
-              #     arcs so its marks cross over them (segmented look), and
-              #     BEFORE the centre disc so the disc trims the inner stubs.
+              #   - A radial tick scale (LVGL meter) was tried over the rings
+              #     and dropped — too busy against the glass look.
 
               # Soft white glass rim (outer highlight edge)
               - arc:
@@ -6062,44 +6047,6 @@ lvgl:
                     arc_rounded: true
                   knob:
                     bg_opa: TRANSP
-
-              # Tick overlay — radial marks only, no numerals. Drawn AFTER the
-              # three arcs so each mark crosses all of them, cutting the rings
-              # into per-degree segments; the centre disc (next) trims the
-              # inner stubs. Outer edge (r=224) matches the glass rim, length
-              # 67 reaches just inside the ambient ring's inner edge (r=156).
-              # Shares the dial range with the arcs so ticks and fills agree.
-              # Weight deliberately matches the thin glass circle outlines:
-              # 1px of col_glass_rim, faded to LV_OPA_20 in on_boot (see the
-              # note there — the tick opacity isn't reachable from YAML).
-              # No `major:` block on purpose: major ticks render value labels
-              # and this scale is meant to be unlabelled.
-              - meter:
-                  align: CENTER
-                  y: 0
-                  width: 448
-                  height: 448
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scales:
-                    - id: home_dial_scale
-                      range_from: ${dial_min_c}
-                      range_to: ${dial_max_c}
-                      angle_range: 240
-                      rotation: 150
-                      ticks:
-                        count: ${dial_tick_count}
-                        width: 1
-                        length: 67
-                        color: col_glass_rim
-                      indicators:
-                        - tick_style:
-                            start_value: ${dial_min_c}
-                            end_value: ${dial_max_c}
-                            color_start: col_glass_rim
-                            color_end: col_glass_rim
 
               # Glass center disc (readout sits on frosted glass)
               - obj:
