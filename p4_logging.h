@@ -422,7 +422,8 @@ inline bool p4_sd_backup_params(
     float probe2_offset_c,
     bool  dew_point_trigger_enabled,
     float startup_grace_min,
-    bool  door_light_enabled
+    bool  door_light_enabled,
+    bool  door_hold_compressor
 ) {
     if (!p4_sd_ready) {
         ESP_LOGW(TAG_SD, "SD not ready for backup — attempting remount");
@@ -482,7 +483,8 @@ inline bool p4_sd_backup_params(
         "  \"probe2_offset_c\": %.2f,\n"
         "  \"dew_point_trigger_enabled\": %s,\n"
         "  \"startup_grace_min\": %.1f,\n"
-        "  \"door_light_enabled\": %s\n"
+        "  \"door_light_enabled\": %s,\n"
+        "  \"door_hold_compressor\": %s\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -505,7 +507,8 @@ inline bool p4_sd_backup_params(
         probe1_offset_c, probe2_offset_c,
         dew_point_trigger_enabled ? "true" : "false",
         startup_grace_min,
-        door_light_enabled ? "true" : "false");
+        door_light_enabled ? "true" : "false",
+        door_hold_compressor ? "true" : "false");
     if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
@@ -561,7 +564,8 @@ inline bool p4_sd_restore_params(
     float& probe2_offset_c,
     bool&  dew_point_trigger_enabled,
     float& startup_grace_min,
-    bool&  door_light_enabled
+    bool&  door_light_enabled,
+    bool&  door_hold_compressor
 ) {
     if (!p4_sd_ready) return false;
 
@@ -616,6 +620,7 @@ inline bool p4_sd_restore_params(
     // backup.json files won't have this key either.
     // door_light_enabled: brand new setting, same seeding rationale.
     bool b_door_light_en = door_light_enabled;
+    bool b_door_hold_en = door_hold_compressor;
     float startup_grace = startup_grace_min;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
@@ -672,6 +677,7 @@ inline bool p4_sd_restore_params(
     parse_bool("\"dew_point_trigger_enabled\"", b_dew_trigger);
     parse_field("\"startup_grace_min\"", startup_grace);
     parse_bool("\"door_light_enabled\"", b_door_light_en);
+    parse_bool("\"door_hold_compressor\"", b_door_hold_en);
 
     // Naming the offending key matters: a bare "parse failed" gives no way to
     // tell a missing key from a malformed value from a stale file, and every
@@ -735,6 +741,7 @@ inline bool p4_sd_restore_params(
     dew_point_trigger_enabled = b_dew_trigger;
     startup_grace_min = startup_grace;
     door_light_enabled = b_door_light_en;
+    door_hold_compressor = b_door_hold_en;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

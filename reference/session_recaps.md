@@ -4,6 +4,16 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Evening) — Carel D + fan relay; A closed, B confirmed
+
+- **A** asymmetric hysteresis: not required (keep symmetric).
+- **B** min ON-time: already in firmware.
+- **D** Hold Compressor While Door Open — opt-in, default off; LVGL + web Door.
+- Coil 0 renamed Defrost → **Fan Relay** (enable default off); fan follows
+  compressor, off during defrost/drip; defrost always passive.
+
+---
+
 ## 2026-08-01 (Evening) — Close can-do-now punch list
 
 - Virtual preview: dropped pink alarm strip; centre status rotates firmware fault labels;

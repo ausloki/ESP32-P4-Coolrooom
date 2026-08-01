@@ -22,7 +22,7 @@ flowchart TD
     FAULT -->|No| COMP[p4_ctl_compressor_eval\nt vs setpoint ± diff/2]
 
     COMP --> C1{result?}
-    C1 -->|+1 turn ON| CON[relay_compressor ON\nrelay_defrost must be OFF]
+    C1 -->|+1 turn ON| CON[relay_compressor ON\n(fan follows if enabled)]
     C1 -->|-1 turn OFF| COFF[relay_compressor OFF]
     C1 -->|0 hold| CHOLD[no change]
     CON --> ALM
@@ -36,15 +36,15 @@ flowchart TD
     SIREON --> DEFCHK
     SIREOFF --> DEFCHK
 
-    DEFCHK{relay_defrost\ncurrently ON?}
+    DEFCHK{relay_fan\ncurrently ON?}
     DEFCHK -->|No - check if due| DEFDUE{p4_ctl_defrost_due\nelapsed >= interval_h?}
     DEFDUE -->|No| WAIT10
-    DEFDUE -->|Yes| DEFSTART[relay_compressor OFF\nrelay_defrost ON\ndefrost_on_since_ms = millis]
+    DEFDUE -->|Yes| DEFSTART[relay_compressor OFF\nrelay_fan OFF (passive)\ndefrost_on_since_ms = millis]
     DEFSTART --> WAIT10
 
     DEFCHK -->|Yes - check timeout| DEFTMO{p4_ctl_defrost_timeout\nelapsed >= max_min?}
     DEFTMO -->|No - still running| WAIT10
-    DEFTMO -->|Yes| DEFEND[relay_defrost OFF\ndefrost_last_end_ms = millis]
+    DEFTMO -->|Yes| DEFEND[ctl_defrost_active = false\ndefrost_last_end_ms = millis]
     DEFEND --> WAIT10
 ```
 
@@ -90,7 +90,7 @@ graph LR
     P1 --> CTL["10s Control Loop\np4_ctl_compressor_eval\np4_ctl_alarm_high/low\np4_ctl_defrost_due"]
     P2 --> CTL
     CTL --> REL1["relay_compressor\nCoil 1"]
-    CTL --> REL0["relay_defrost\nCoil 0"]
+    CTL --> REL0["relay_fan\nCoil 0"]
     CTL --> REL3["relay_siren\nCoil 3"]
 ```
 

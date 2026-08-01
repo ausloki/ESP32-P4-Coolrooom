@@ -336,6 +336,10 @@ esphome:
               id(input_door_light_enabled) = false;
               ESP_LOGW("config", "Door light cleared at boot (sensor was off)");
             }
+            if (id(input_door_hold_compressor) && !id(input_door_sensor_enabled)) {
+              id(input_door_hold_compressor) = false;
+              ESP_LOGW("config", "Door-hold compressor cleared at boot (sensor was off)");
+            }
             // Coerce stale NVS: setpoint below the dial floor (was -30..15).
             if (id(ctl_setpoint) < ${dial_min_c}) {
               ESP_LOGW("config", "Setpoint %.1f°C raised to dial floor %.0f°C",
@@ -655,7 +659,7 @@ modbus_controller:
           if (!id(ctl_relays_synced_at_boot)) {
               id(ctl_relays_synced_at_boot) = true;
               id(relay_compressor).turn_off();
-              id(relay_defrost).turn_off();
+              id(relay_fan).turn_off();
               id(relay_siren).turn_off();
               // The light coil latches the same way, which left the home-screen
               // bulb lit after a reboot. It is reconciled rather than simply
@@ -699,36 +703,24 @@ modbus_controller:
 ##############################################################################
 
 switch:
+  # Coil 0 — formerly Defrost heater. Repurposed as evaporator Fan.
+  # Defrost cycles are always passive (compressor held off); flame UI follows
+  # ctl_defrost_active, not this coil. Fan may run together with the compressor.
   - platform: modbus_controller
     modbus_controller_id: relay_board
-    id: relay_defrost
-    name: "Defrost Relay"
-    icon: "mdi:snowflake-melt"
+    id: relay_fan
+    name: "Fan Relay"
+    icon: "mdi:fan"
     web_server:
-      sorting_group_id: group_defrost
+      sorting_group_id: group_compressor
       sorting_weight: 2
     register_type: coil
     address: 0
     restore_mode: ALWAYS_OFF
-    write_lambda: |-
-      if (x) id(relay_compressor).turn_off();
-      return x;
     on_turn_on:
-      - lambda: ESP_LOGI("relay", "Defrost ON");
-      - lvgl.led.update:
-          id: led_defrost
-          brightness: 100%
-      - lvgl.label.update:
-          id: ui_defrost_icon
-          text_color: col_red
+      - lambda: ESP_LOGI("relay", "Fan ON");
     on_turn_off:
-      - lambda: ESP_LOGI("relay", "Defrost OFF");
-      - lvgl.led.update:
-          id: led_defrost
-          brightness: 0%
-      - lvgl.label.update:
-          id: ui_defrost_icon
-          text_color: col_grey
+      - lambda: ESP_LOGI("relay", "Fan OFF");
 
   - platform: modbus_controller
     modbus_controller_id: relay_board
@@ -741,9 +733,6 @@ switch:
     register_type: coil
     address: 1
     restore_mode: ALWAYS_OFF
-    write_lambda: |-
-      if (x) id(relay_defrost).turn_off();
-      return x;
     on_turn_on:
       - lambda: ESP_LOGI("relay", "Compressor ON");
       - lvgl.led.update:
@@ -894,9 +883,9 @@ switch:
     lambda: 'return id(ctl_relay_compressor_enabled);'
 
   - platform: template
-    id: sw_relay_defrost_enabled
-    name: "Defrost Relay Enabled"
-    icon: "mdi:power-plug"
+    id: sw_relay_fan_enabled
+    name: "Fan Relay Enabled"
+    icon: "mdi:fan"
     restore_mode: DISABLED
     entity_category: config
     web_server:
@@ -904,17 +893,16 @@ switch:
       sorting_weight: 31
     turn_on_action:
       - lambda: |-
-          id(ctl_relay_defrost_enabled) = true;
-          ESP_LOGI("relay", "Defrost relay ENABLED");
+          id(ctl_relay_fan_enabled) = true;
+          ESP_LOGI("relay", "Fan relay ENABLED");
       - script.execute: persist_config_to_nvs
     turn_off_action:
       - lambda: |-
-          id(ctl_relay_defrost_enabled) = false;
-          if (id(relay_defrost).state) id(relay_defrost).turn_off();
-          ESP_LOGW("relay", "Defrost relay DISABLED — output held off, "
-                            "defrost cycle still runs (passive)");
+          id(ctl_relay_fan_enabled) = false;
+          if (id(relay_fan).state) id(relay_fan).turn_off();
+          ESP_LOGW("relay", "Fan relay DISABLED — output held off");
       - script.execute: persist_config_to_nvs
-    lambda: 'return id(ctl_relay_defrost_enabled);'
+    lambda: 'return id(ctl_relay_fan_enabled);'
 
   - platform: template
     id: sw_relay_light_enabled
@@ -1042,6 +1030,33 @@ switch:
           ESP_LOGI("config", "Door-triggered light DISABLED");
       - script.execute: persist_config_to_nvs
     lambda: 'return id(input_door_light_enabled);'
+
+  # ── Hold compressor while door open (Carel-style pause). Default off so a
+  # missing/stuck reed cannot starve cooling. Requires Door Sensor Enabled.
+  - platform: template
+    id: sw_door_hold_compressor
+    name: "Hold Compressor While Door Open"
+    icon: "mdi:door-closed-lock"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_door
+      sorting_weight: 5
+    turn_on_action:
+      - lambda: |-
+          if (!id(input_door_sensor_enabled)) {
+            id(input_door_sensor_enabled) = true;
+            ESP_LOGI("config", "Door sensor auto-ENABLED (required for door hold)");
+          }
+          id(input_door_hold_compressor) = true;
+          ESP_LOGI("config", "Door-hold compressor ENABLED");
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_door_hold_compressor) = false;
+          ESP_LOGI("config", "Door-hold compressor DISABLED");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_door_hold_compressor);'
 
   # ── Dew-point-triggered early defrost — an early-defrost trigger layered
   # on top of the fixed interval, not a replacement for it. See the control
@@ -1650,6 +1665,10 @@ switch:
             id(input_door_light_enabled) = false;
             if (id(relay_light).state) id(relay_light).turn_off();
             ESP_LOGI("config", "Door-triggered light auto-DISABLED (sensor off)");
+          }
+          if (id(input_door_hold_compressor)) {
+            id(input_door_hold_compressor) = false;
+            ESP_LOGI("config", "Door-hold compressor auto-DISABLED (sensor off)");
           }
           ESP_LOGI("config", "Door sensor DISABLED");
       - script.execute: persist_config_to_nvs
@@ -2684,15 +2703,21 @@ binary_sensor:
     lambda: 'return id(ctl_defrost_dripping);'
 
   # ── Defrost control logic mode indicator ───────────────────────────────────
-  # The control tick's own view of "a defrost cycle is running", which is what
-  # the flame icon and background FX animate from. True for a passive defrost
-  # as well, where the coil is never commanded.
+  # Flame icon / FX animate from this — always passive on coil 0 (now Fan).
   - platform: template
     id: defrost_mode_active
     name: "Defrost Mode Active"
     device_class: running
     entity_category: diagnostic
     lambda: 'return id(ctl_defrost_active);'
+    on_press:
+      - lvgl.led.update:
+          id: led_defrost
+          brightness: 100%
+    on_release:
+      - lvgl.led.update:
+          id: led_defrost
+          brightness: 0%
 
   # ── Phase 9: LVGL page navigation states ───────────────────────────────────
   - platform: template
@@ -3531,7 +3556,6 @@ button:
       - lambda: |-
           id(ctl_defrost_active) = false;
           id(ctl_defrost_on_since_ms) = 0;
-          if (id(relay_defrost).state) id(relay_defrost).turn_off();
           if (id(relay_compressor).state) id(relay_compressor).turn_off();
           id(ctl_manual_defrost_req) = false;
           id(ctl_defrost_dripping) = false;
@@ -3572,7 +3596,7 @@ button:
           id(input_humidity_internal_enabled), id(input_humidity_external_enabled),
           id(ctl_probe1_offset_c), id(ctl_probe2_offset_c),
           id(input_dew_point_trigger_enabled), id(ctl_startup_grace_min),
-          id(input_door_light_enabled));
+          id(input_door_light_enabled), id(input_door_hold_compressor));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -3621,6 +3645,7 @@ button:
           bool dew_trigger_en = id(input_dew_point_trigger_enabled);
           float startup_grace = id(ctl_startup_grace_min);
           bool door_light_en = id(input_door_light_enabled);
+          bool door_hold_en = id(input_door_hold_compressor);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -3629,7 +3654,8 @@ button:
               probe2_en, door_mode_nc, door_en, siren_en,
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en,
-              p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en)) {
+              p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en,
+              door_hold_en)) {
               // Clamp to the live dial floor (backup may pre-date the clamp).
               if (sp < ${dial_min_c}) {
                 ESP_LOGW("config", "Restore: setpoint %.1f°C raised to %.0f°C",
@@ -3670,12 +3696,17 @@ button:
             id(ctl_probe2_offset_c) = p2_off;
             id(input_dew_point_trigger_enabled) = dew_trigger_en;
             id(ctl_startup_grace_min) = startup_grace;
-            // Coerce: light without sensor is invalid — drop the light flag.
+            // Coerce: light / hold without sensor is invalid — drop those flags.
             if (door_light_en && !door_en) {
               door_light_en = false;
               ESP_LOGW("config", "Restore: door light cleared (sensor was off)");
             }
+            if (door_hold_en && !door_en) {
+              door_hold_en = false;
+              ESP_LOGW("config", "Restore: door-hold compressor cleared (sensor was off)");
+            }
             id(input_door_light_enabled) = door_light_en;
+            id(input_door_hold_compressor) = door_hold_en;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");
@@ -3762,7 +3793,13 @@ interval:
           // Treat a missing board like the off-delay for start purposes so
           // the fallback ON window is held, not spent, while the bus is down.
           const bool relay_board_ok = id(hw_rs485_relay_ok);
-          const bool comp_start_blocked = locked_out || !relay_board_ok;
+          // Door-hold (optional): while the reed reads open, refuse compressor
+          // starts and force the coil off. Default off — same as Carel door
+          // pause, but opt-in so a stuck reed cannot starve cooling by accident.
+          const bool door_open_now = id(input_door_sensor_enabled) &&
+              (id(ctl_door_open_since_ms) > 0);
+          const bool door_hold_comp = id(input_door_hold_compressor) && door_open_now;
+          const bool comp_start_blocked = locked_out || !relay_board_ok || door_hold_comp;
 
           // ── 4. Sensor fallback duty cycle (when probe is faulted) ───────
           bool fallback_run = p4_ctl_fallback_should_run(
@@ -3777,7 +3814,7 @@ interval:
                   if (fallback_run && !comp_start_blocked && !id(relay_compressor).state) {
                       id(relay_compressor).turn_on();
                       id(ctl_comp_on_since_ms) = now_ms;
-                  } else if (!fallback_run && id(relay_compressor).state) {
+                  } else if ((!fallback_run || door_hold_comp) && id(relay_compressor).state) {
                       id(relay_compressor).turn_off();
                       id(ctl_comp_last_off_ms) = now_ms;
                       id(ctl_comp_on_since_ms) = 0;
@@ -3836,7 +3873,6 @@ interval:
                   if (end_by_temp || end_by_time) {
                       id(ctl_defrost_active) = false;
                       id(ctl_defrost_on_since_ms) = 0;
-                      if (id(relay_defrost).state) id(relay_defrost).turn_off();
                       id(ctl_defrost_last_end_ms) = now_ms;
                       id(ctl_dew_point_defrost_triggered) = false;
                       id(ctl_frost_rate_defrost_triggered) = false;
@@ -3959,9 +3995,8 @@ interval:
                       id(ctl_defrost_active) = true;
                       id(ctl_defrost_on_since_ms) = now_ms;
                       id(ctl_defrost_last_start_ms) = now_ms;
-                      // Coil only when the output is enabled; the cycle itself
-                      // runs either way (see ctl_defrost_active).
-                      if (id(ctl_relay_defrost_enabled)) id(relay_defrost).turn_on();
+                      // Coil 0 is the fan now — defrost is always passive
+                      // (compressor held off; heater if any is external).
                       const char* reason = manual_start ? "manual" :
                                            (force_max_start ? "force_max" :
                                            (frost_rate_start ? "frost_rate" :
@@ -3996,11 +4031,11 @@ interval:
                               cmd = 0;
                           }
                       }
-                      if (cmd == 1 && relay_board_ok) {
+                      if (cmd == 1 && relay_board_ok && !door_hold_comp) {
                           id(relay_compressor).turn_on();
                           if (id(ctl_comp_on_since_ms) == 0) id(ctl_comp_on_since_ms) = now_ms;
                       }
-                      if (cmd == -1) {
+                      if (cmd == -1 || door_hold_comp) {
                           if (id(relay_compressor).state) {
                               id(relay_compressor).turn_off();
                               id(ctl_comp_last_off_ms) = now_ms;
@@ -4373,7 +4408,13 @@ interval:
               id(ntfy_ambient_sensor_offline_sent) = false;
             }
 
-          // ── 10. Relay hardware enables ───────────────────────────────────
+          // ── 10. Relay hardware enables + fan follow ──────────────────────
+          // Door-hold catch-all (covers lockout / paths that skip §6).
+          if (door_hold_comp && id(relay_compressor).state) {
+              id(relay_compressor).turn_off();
+              id(ctl_comp_last_off_ms) = now_ms;
+              id(ctl_comp_on_since_ms) = 0;
+          }
           // Last word on every output, after all the logic above has had its
           // say. Enforced here as one block rather than as a condition on each
           // individual turn_on() so there is exactly one place that decides
@@ -4389,13 +4430,16 @@ interval:
               id(ctl_comp_last_off_ms) = now_ms;
               id(ctl_comp_on_since_ms) = 0;
           }
-          if (!id(ctl_relay_defrost_enabled) && id(relay_defrost).state)
-              id(relay_defrost).turn_off();
-          // Re-enabling mid-cycle picks the coil back up: the cycle itself
-          // (ctl_defrost_active) kept running while the output was held off.
-          if (id(ctl_relay_defrost_enabled) && id(ctl_defrost_active) &&
-              !id(relay_defrost).state)
-              id(relay_defrost).turn_on();
+          // Fan (coil 0): follows compressor when enabled; forced off during
+          // defrost / drip, when the master enable is off, or board offline.
+          {
+              const bool fan_want =
+                  id(ctl_relay_fan_enabled) && id(hw_rs485_relay_ok) &&
+                  id(relay_compressor).state &&
+                  !id(ctl_defrost_active) && !id(ctl_defrost_dripping);
+              if (fan_want && !id(relay_fan).state) id(relay_fan).turn_on();
+              else if (!fan_want && id(relay_fan).state) id(relay_fan).turn_off();
+          }
           if (!id(ctl_relay_light_enabled) && id(relay_light).state)
               id(relay_light).turn_off();
           if (!id(ctl_relay_siren_enabled) && id(relay_siren).state)
@@ -5380,10 +5424,10 @@ globals:
     restore_value: yes
     initial_value: "true"
 
-  - id: ctl_relay_defrost_enabled
+  - id: ctl_relay_fan_enabled
     type: bool
     restore_value: yes
-    initial_value: "true"
+    initial_value: "false"
 
   - id: ctl_relay_light_enabled
     type: bool
@@ -5453,12 +5497,11 @@ globals:
     restore_value: yes
     initial_value: "true"
 
-  # Defrost cycle state, owned by the control tick and independent of the
-  # relay. A site can run "passive" defrost (off-cycle / hot-gas handled
-  # elsewhere, or Defrost Relay Enabled deliberately off) and still get the
-  # full cycle: compressor held off, duration/termination timing, drip phase,
-  # event logging and the animated flame. The relay is commanded from this
-  # flag when it is enabled — it is not the flag itself.
+  # Defrost cycle state, owned by the control tick. Defrost is always passive
+  # on this controller (compressor held off; coil 0 is the Fan Relay). A site
+  # still gets the full cycle: duration/termination timing, drip phase, event
+  # logging and the animated flame. Fan output is forced off while this flag
+  # (or drip) is active.
   - id: ctl_defrost_active
     type: bool
     restore_value: no
@@ -5608,6 +5651,11 @@ globals:
   # this switch auto-enables the sensor; disabling the sensor forces this off.
   # Default off to match Door Sensor Enabled (factory: no door features until fitted).
   - id: input_door_light_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+  - id: input_door_hold_compressor
     type: bool
     restore_value: yes
     initial_value: "false"
@@ -6774,6 +6822,43 @@ lvgl:
                         widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - switch.toggle: sw_fallback_enabled
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 216, width: 460, text: "Fan Relay Enable", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_fanrelay, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_relay_fan_enabled
                           - script.execute: refresh_all_settings_labels
               - label: {x: 0, y: 216, width: 460, text: "Fallback ON (min)", text_font: font_medium, text_color: col_text}
               - obj:
@@ -8287,6 +8372,43 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_door_light_enabled
                           - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 216, width: 460, text: "Hold Comp. Door Open", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_doorhold, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_door_hold_compressor
+                          - script.execute: refresh_all_settings_labels
               - label: {x: 500, y: 108, width: 460, text: "Door Alarm Delay (s)", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9292,7 +9414,7 @@ script:
           ctl_smart_delta_c->update();
           ctl_smart_dwell_min->update();
           ctl_relay_compressor_enabled->update();
-          ctl_relay_defrost_enabled->update();
+          ctl_relay_fan_enabled->update();
           ctl_relay_light_enabled->update();
           ctl_relay_siren_enabled->update();
           ctl_door_sensor_mode_is_nc->update();
@@ -9306,6 +9428,7 @@ script:
           ctl_calibration_samples_max->update();
           input_door_sensor_enabled->update();
           input_door_light_enabled->update();
+          input_door_hold_compressor->update();
           input_siren_enabled->update();
           input_audio_alerts_enabled->update();
           ctl_audio_volume_pct->update();
@@ -9463,6 +9586,14 @@ script:
           id: lbl_sw_doorlight
           text: !lambda 'return std::string(id(input_door_light_enabled) ? "ON" : "OFF");'
           text_color: !lambda 'return id(input_door_light_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_doorhold
+          text: !lambda 'return std::string(id(input_door_hold_compressor) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_door_hold_compressor) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_fanrelay
+          text: !lambda 'return std::string(id(ctl_relay_fan_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(ctl_relay_fan_enabled) ? id(col_green) : id(col_grey);'
       - lvgl.label.update:
           id: lbl_st_doordelay
           text: !lambda |-

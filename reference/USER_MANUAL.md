@@ -95,7 +95,7 @@ to your phone.
 | Internal humidity sensor (SHT31) | Cabinet humidity, informational (see §4.7 — no automatic humidity control) |
 | External humidity sensor (SHT20) | Room/ambient humidity, informational |
 | Compressor relay | Turns cooling on/off |
-| Defrost relay | Runs the defrost heater/cycle |
+| Fan relay | Evaporator fan (coil 0) — follows compressor when Fan Relay Enabled (§4.13) |
 | Light relay | Cabinet light — home-screen tap and/or door-triggered (§0 home icons, §4.6) |
 | Siren relay | Audible alarm — automatic when Alarm Siren Enabled; mute from home bell (§0, §4.4) |
 | Door sensor | Optional — off by default, see §4.6 |
@@ -246,7 +246,7 @@ periodic defrosting. This group controls the basic on/off timer for that.
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
-| **Defrost System Enabled** | Master switch for **automatic** defrost (scheduled, smart-delta, dew-point). | On/Off | On | Turning this off stops those automatic starts. **Start Defrost Now** still works for service. Separate from **Defrost Relay Enabled** (§4.13), which only decides whether the heater coil energises during a cycle (passive defrost when off). |
+| **Defrost System Enabled** | Master switch for **automatic** defrost (scheduled, smart-delta, dew-point). | On/Off | On | Turning this off stops those automatic starts. **Start Defrost Now** still works for service. Defrost on this controller is always **passive** (compressor held off); coil 0 is the **Fan Relay** (§4.13), not a heater. |
 | **Start Defrost Now** *(button)* | Begin a defrost cycle immediately. | — | — | Use for service or when the coil looks iced between schedules. Resets the interval clock from this cycle. Works even during a probe fault (ends by Max Duration if the evaporator reading isn't available) and even when Defrost System Enabled is off. |
 | **Stop Defrost Now** *(button)* | Abort the current defrost or drip phase immediately. | — | — | Cooling resumes subject to the compressor off-delay (§4.1). |
 | **Defrost Interval** | How often a defrost cycle starts, on a fixed timer. | 60 – 1440 min | 480 min (8 h) | Shorter interval for rooms with heavy door traffic or high humidity (more frost buildup); longer for dry, low-traffic rooms. |
@@ -435,6 +435,7 @@ place updates the other.
 | **Door Sensor Enabled** | Master switch for the door reed: door-open **alarm**, and a prerequisite for Door-Triggered Light. Turning this **off** also turns Door-Triggered Light off. | On/Off | **Off** | Enable when a door sensor is fitted. Leave off if the reed is disconnected or faulty. |
 | **Door Sensor Mode (NC or NO)** | Tells the controller whether your physical door switch is Normally Closed or Normally Open wiring. | NC or NO | NC | Must match how the door switch is actually wired, or "open" and "closed" will read backwards. |
 | **Door-Triggered Light Enabled** | When on (and Door Sensor Enabled is on), opening the door turns the cabinet light on; closing it turns the light off. Turning light on while the sensor is off **auto-enables** the sensor. | On/Off | **Off** | Turn on for automatic cabinet lighting with staff traffic. Use the Home screen light button for manual control instead. |
+| **Hold Compressor While Door Open** | When on (and Door Sensor Enabled is on), the compressor stays off for as long as the door reed reads open. The fan (if Fan Relay Enabled) follows the compressor, so it also stops. | On/Off | **Off** | Use for busy doors / less humid air through a cold coil. Leave **off** if the reed can stick open — that would starve cooling. Auto-disables when Door Sensor is turned off. |
 | **Door Alarm Delay** | How long the door can stay open before an alarm fires. | 0 – 300 s | 300 s (5 min) | Shorten for rooms where doors should only ever be open briefly; lengthen for rooms with routine long-duration loading. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: Door section**
@@ -752,7 +753,7 @@ holding **Restart Controller** and **Factory Reset** (both described in §4.12).
 | Setting | What it does | Default | When to change it |
 |---|---|---|---|
 | **Compressor Relay Enabled** | Whether the compressor output may energise at all. | On | Turn off to isolate the compressor for maintenance without disabling the control logic behind it. |
-| **Defrost Relay Enabled** | Whether the defrost output may energise at all. | On | As above, for defrost heat. Turning it off does **not** cancel defrost: the cycle still runs (compressor held off, timing, drip phase, logging, animated flame) with the output held open — use this where defrost heat is supplied by something outside this controller. Re-enabling mid-cycle picks the output back up. |
+| **Fan Relay Enabled** | Whether the evaporator **fan** output (Modbus coil 0) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. Default **off**. | **Off** | Confirm the plant wires a fan (not a heater) to coil 0 before enabling. |
 | **Light Relay Enabled** | Whether the light output may energise at all. | On | Turn off if the room light is switched by something else. |
 | **Siren Relay Enabled** | Whether the alarm output may energise at all. | On | Turn off where the alarm relay drives an external siren you don't want sounding every time — see below. |
 

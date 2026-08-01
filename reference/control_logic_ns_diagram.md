@@ -29,7 +29,7 @@ Network behavior is optional:
 │  ┌──────── YES ──────────────────┐  ┌──────── NO ───────────────────────── │
 │  │ ctl_probe_fault = true        │  │ ctl_probe_fault = false               │
 │  │ relay_compressor → OFF        │  └──────────────────────────────────────┘│
-│  │ relay_defrost    → OFF        │                                           │
+│  │ relay_fan    → OFF        │                                           │
 │  │ relay_siren      → ON         │                                           │
 │  └───────────────────────────────┘                                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -76,7 +76,7 @@ Network behavior is optional:
 │  │  │ relay_compressor → OFF                      │ │                       │
 │  │  │ ctl_defrost_active     = true               │ │                       │
 │  │  │ ctl_defrost_on_since_ms = millis()          │ │                       │
-│  │  │ relay_defrost → ON *only if relay enabled*  │ │                       │
+│  │  │ relay_fan → ON *only if relay enabled*  │ │                       │
 │  │  └─────────────────────────────────────────────┘ │                       │
 │  │  Auto starts (interval / smart / dew) require    │                       │
 │  │  input_defrost_enabled. Manual start always OK.  │                       │
@@ -87,7 +87,7 @@ Network behavior is optional:
 │  │  ┌──── YES ────────────────────────────────────┐ │                       │
 │  │  │ ctl_defrost_active      = false             │ │                       │
 │  │  │ ctl_defrost_on_since_ms = 0                 │ │                       │
-│  │  │ relay_defrost           → OFF               │ │                       │
+│  │  │ relay_fan           → OFF               │ │                       │
 │  │  │ ctl_defrost_last_end_ms = millis()          │ │                       │
 │  │  └─────────────────────────────────────────────┘ │                       │
 │  └──────────────────────────────────────────────────┘                       │
@@ -97,21 +97,16 @@ Network behavior is optional:
 ### Passive defrost — cycle state is not the coil
 
 `ctl_defrost_active` is the single source of truth for "a defrost cycle is running".
-The relay is an *output* of that state, not the state itself:
+Modbus coil 0 is the **Fan Relay** (not a heater). Defrost is always passive:
 
-| Situation | `ctl_defrost_active` | `relay_defrost` | Flame icon / FX |
+| Situation | `ctl_defrost_active` | `relay_fan` | Flame icon / FX |
 |---|---|---|---|
-| Normal defrost, relay enabled | true | ON | animated |
-| **Passive defrost** — Defrost Relay Enabled off, or heat supplied outside this controller | true | held OFF | **animated** |
-| Relay re-enabled mid-cycle | true | picks up ON at next tick | animated |
-| Idle | false | OFF | grey, still |
+| Defrost / drip active | true / drip | forced OFF | animated while `ctl_defrost_active` |
+| Cooling, Fan Relay Enabled | false | follows compressor | grey |
+| Fan Relay Enabled off | — | held OFF | — |
 
-Why it matters beyond cosmetics: the cycle-end test (`p4_ctl_defrost_timeout` /
-evap termination) used to read the coil. With the relay disabled, the coil never
-read back as on, so the cycle could never terminate and the start condition
-re-fired every tick. Compressor hold-off, drip phase, duration/termination
-timing, countdown sensors and `DEFROST_START` / `DEFROST_END` logging all key off
-`ctl_defrost_active` for the same reason.
+Compressor hold-off, drip phase, duration/termination timing, countdown sensors and
+`DEFROST_START` / `DEFROST_END` logging all key off `ctl_defrost_active`.
 
 ---
 
@@ -146,12 +141,13 @@ Temperature
 
 ---
 
-## Relay Mutual Exclusion
+## Relay policy (fan + compressor)
 
 ```
-relay_compressor.write_lambda: if (x) → relay_defrost.turn_off()
-relay_defrost.write_lambda:    if (x) → relay_compressor.turn_off()
-Control loop:                  if probe_fault → both OFF immediately
+relay_fan: follows relay_compressor when Fan Relay Enabled;
+           forced OFF during ctl_defrost_active / ctl_defrost_dripping
+No mutual exclusion write_lambdas — fan and compressor may both be ON
+Door hold (opt-in): while door open → compressor OFF (fan follows)
 ```
 
 ---

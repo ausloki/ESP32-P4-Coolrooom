@@ -271,7 +271,7 @@ lvgl:
 
         # Left sidebar: Relay control buttons
         - obj: (x: 0, y: 56)  [btn_defrost]
-          └─ on_click: relay_defrost.toggle()
+          └─ on_click: relay_fan.toggle()  (coil 0 = Fan Relay)
         - obj: (x: 0, y: 174)  [btn_compressor]
           └─ on_click: relay_compressor.toggle()
         - obj: (x: 0, y: 292)  [btn_light]

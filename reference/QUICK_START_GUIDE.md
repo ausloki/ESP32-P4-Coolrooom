@@ -77,7 +77,8 @@ a new alarm type re-animates).
 
 **Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/7 — not the
 home flame icon. Defrost System Enabled gates automatic starts only; the Hardware tab's
-Defrost Relay Enabled gates the heater coil (passive cycle when off).
+Defrost is always passive here (compressor held off). Fan Relay Enabled (coil 0, default off)
+gates the evaporator fan — when on, the fan follows the compressor and stops during defrost/drip.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before

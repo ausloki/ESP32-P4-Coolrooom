@@ -29,8 +29,8 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 
 - Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 - Manual screenshots still placeholders
-- Carel decisions: asymmetric hysteresis, min compressor ON-time, fan control,
-  door-open cooling pause
+- Carel **A** not required; **B** done; **D** + fan relay implemented 2026-08-01
+  (see `reference/CAREL_CONTROL_DECISIONS.md`)
 - Deferred product: mic/voice, LVGL audio toggles, web log download, dashboard OTA UI,
   multi-user server auth
 

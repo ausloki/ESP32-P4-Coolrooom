@@ -1704,7 +1704,8 @@
             'number-probe_2__evaporator__calibration_offset____c_': 'probe2_offset',
             'number-setpoint____c_': 'setpoint',
             'switch-compressor_relay': 'compressor_on',
-            'switch-defrost_relay': 'defrost_phase',
+            'switch-fan_relay': 'fan_on',
+            'binary_sensor-defrost_mode_active': 'defrost_phase',
             'binary_sensor-high_temperature_alarm': 'alarm_high_active',
             'binary_sensor-low_temperature_alarm': 'alarm_low_active',
             'binary_sensor-ice_detect_alarm': 'alarm_ice_active',
@@ -1742,7 +1743,7 @@
             'text_sensor-system_psram': 'psram_status_text',
             'switch-siren_relay': 'siren_on',
             'switch-compressor_relay_enabled': 'relay_en_compressor',
-            'switch-defrost_relay_enabled': 'relay_en_defrost',
+            'switch-fan_relay_enabled': 'relay_en_fan',
             'switch-light_relay_enabled': 'relay_en_light',
             'switch-siren_relay_enabled': 'relay_en_siren',
             'switch-home_assistant_api_enabled': 'ha_api_enabled',
@@ -1751,18 +1752,18 @@
         // Settings → Hardware. Each output pairs its live coil state with the
         // enable that decides whether the coil may be energised at all.
         const RELAY_OUTPUTS = [
-            { key: 'compressor', label: 'Compressor', state: 'compressor_on', name: 'Compressor Relay Enabled' },
-            { key: 'defrost', label: 'Defrost', state: 'defrost_phase', name: 'Defrost Relay Enabled' },
-            { key: 'light', label: 'Light', state: 'light_on', name: 'Light Relay Enabled' },
-            { key: 'siren', label: 'Siren / Alarm', state: 'siren_on', name: 'Siren Relay Enabled' },
+            { key: 'compressor', label: 'Compressor', state: 'compressor_on', enable: 'relay_en_compressor', name: 'Compressor Relay Enabled' },
+            { key: 'fan', label: 'Fan', state: 'fan_on', enable: 'relay_en_fan', name: 'Fan Relay Enabled' },
+            { key: 'light', label: 'Light', state: 'light_on', enable: 'relay_en_light', name: 'Light Relay Enabled' },
+            { key: 'siren', label: 'Siren / Alarm', state: 'siren_on', enable: 'relay_en_siren', name: 'Siren Relay Enabled' },
         ];
 
         const BOOL_FIELDS = new Set([
-            'compressor_on', 'defrost_phase', 'alarm_high_active', 'alarm_low_active',
+            'compressor_on', 'fan_on', 'defrost_phase', 'alarm_high_active', 'alarm_low_active',
             'alarm_ice_active', 'alarm_door_active', 'alarm_nocool_active',
             'rs485_relay_ok', 'rs485_rtd_ok', 'system_time_ok', 'sht31_ok', 'sht20_ok',
             'wifi_connected', 'probe_fault', 'light_on', 'sd_card_ok', 'controller_online',
-            'siren_on', 'relay_en_compressor', 'relay_en_defrost', 'relay_en_light', 'relay_en_siren',
+            'siren_on', 'relay_en_compressor', 'relay_en_fan', 'relay_en_light', 'relay_en_siren',
             'ha_api_enabled',
         ]);
 
@@ -2274,6 +2275,8 @@
                       help: 'Minimum time the compressor must stay off after switching off before it\u2019s allowed to run again \u2014 protects the compressor motor from rapid on/off cycling ("short cycling").' },
                     { type: 'number', entity: 'compressor_min_run_time__min_', name: 'Compressor Min Run Time (min)', label: 'Compressor Min Run Time (min)', min: 0, max: 30, step: 1,
                       help: 'Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. Complements Off-Delay. Set 0 to disable.' },
+                    { type: 'switch', entity: 'fan_relay_enabled', name: 'Fan Relay Enabled', label: 'Fan Relay Enabled',
+                      help: 'When on, Modbus coil 0 (evaporator fan) follows the compressor and is forced off during defrost + drip. Default off — confirm coil 0 is wired to a fan before enabling. Same control as Hardware \u2192 Fan.' },
                     { type: 'switch', entity: 'sensor_fallback_duty-cycle_enabled', name: 'Sensor Fallback Duty-Cycle Enabled', label: 'Sensor Fallback Enabled',
                       help: 'When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle (the two settings below) so cooling continues, degraded, until the probe recovers.' },
                     { type: 'number', entity: 'sensor_fallback_compressor_on_time__min_', name: 'Sensor Fallback Compressor ON Time (min)', label: 'Fallback Compressor ON Time (min)', min: 1, max: 30, step: 1,
@@ -2286,9 +2289,9 @@
                 title: 'Defrost',
                 fields: [
                     { type: 'switch', entity: 'defrost_system_enabled', name: 'Defrost System Enabled', label: 'Defrost System Enabled',
-                      help: 'Master switch for automatic defrost. Off disables scheduled, smart-delta, dew-point, frost-rate, and force-max starts. Start Defrost Now still works for service (and Stop ends any cycle, including drip). Separate from Defrost Relay Enabled on the Hardware tab, which only gates the heater coil.' },
+                      help: 'Master switch for automatic defrost. Off disables scheduled, smart-delta, dew-point, frost-rate, and force-max starts. Start Defrost Now still works for service (and Stop ends any cycle, including drip). Defrost is always passive on this controller (compressor held off); coil 0 is the Fan Relay.' },
                     { type: 'button', entity: 'start_manual_defrost', name: 'Start Manual Defrost', label: 'Start Defrost Now',
-                      help: 'Begin a defrost cycle immediately. Resets the interval timer from this cycle. Works even when Defrost System Enabled is off (service override). If Defrost Relay Enabled is off, the cycle still runs as a passive defrost (compressor held off, no heater).' },
+                      help: 'Begin a defrost cycle immediately. Resets the interval timer from this cycle. Works even when Defrost System Enabled is off (service override). Passive is always passive here (compressor held off; any heater is external).' },
                     { type: 'button', entity: 'stop_manual_defrost', name: 'Stop Manual Defrost', label: 'Stop Defrost Now',
                       help: 'Abort the current defrost or drip phase immediately and return to normal cooling rules (subject to compressor off-delay).' },
                     { type: 'number', entity: 'defrost_interval__min_', name: 'Defrost Interval (min)', label: 'Defrost Interval (min)', min: 60, max: 1440, step: 30,
@@ -2432,6 +2435,8 @@
                       help: 'Matches the reed switch\u2019s wiring: Normally Closed (reads closed when the door is shut) or Normally Open (opposite). Set this wrong and open/closed will read backwards.' },
                     { type: 'switch', entity: 'door-triggered_light_enabled', name: 'Door-Triggered Light Enabled', label: 'Door-Triggered Light Enabled',
                       help: 'When enabled, opening the door turns the cabinet light on and closing it turns the light off. Requires Door Sensor Enabled — turning this on auto-enables the sensor; turning the sensor off turns this off.' },
+                    { type: 'switch', entity: 'hold_compressor_while_door_open', name: 'Hold Compressor While Door Open', label: 'Hold Compressor While Door Open',
+                      help: 'When enabled, the compressor (and fan, if Fan Relay Enabled) stay off while the door reed reads open. Default off so a missing or stuck reed cannot starve cooling. Requires Door Sensor Enabled.' },
                     { type: 'number', entity: 'door_alarm_delay__s_', name: 'Door Alarm Delay (s)', label: 'Door Alarm Delay (s)', min: 0, max: 300, step: 10,
                       help: 'How long the door can stay open before the Door Open alarm fires \u2014 a short grace window for normal staff access.' },
                 ],

@@ -8,7 +8,7 @@
 - Confirmed SD `opendir`/`readdir` already fixed via `disable_vfs_support_dir: false`.
 - Refreshed `HANDOVER_NOTES_2026-07-31.md` + `activeContext.md`; device spot-check OK
   (Status rotating humidity offline; no guest gate / alarm strip in embedded page).
-- Manual screenshots and Carel control decisions left open (need photos / product choice).
+- Manual screenshots still placeholders. Carel A/B/C/D closed 2026-08-01 (`reference/CAREL_CONTROL_DECISIONS.md`).
 
 ## 2026-08-01 — Hardware-offline ntfy + afternoon closeout
 
@@ -593,7 +593,7 @@
 
 - [ ] Fit RS485 relay + RTD boards; verify end-to-end cooling + Probes tab Raw/Offset/Corrected
 - [ ] Replace USER_MANUAL / Quick Start screenshot placeholders with real captures
-- [ ] Decide Carel follow-ups: asymmetric hysteresis, min compressor ON-time, fan control,
+- [x] Carel follow-ups closed 2026-08-01 (A not required, B already done, C fan relay, D door hold)
       door-open cooling pause
 
 **Deferred enhancements:**
