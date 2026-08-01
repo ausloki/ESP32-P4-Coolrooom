@@ -1811,6 +1811,19 @@ select:
       sorting_weight: 35
 
   - platform: template
+    id: sel_ntfy_prio_hw_offline
+    name: "Hardware Offline Priority"
+    icon: "mdi:lan-disconnect"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "urgent"
+    options: ["min", "low", "default", "high", "urgent"]
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 36
+
+  - platform: template
     id: sel_ntfy_prio_sd
     name: "SD Card Alert Priority"
     icon: "mdi:sd"
@@ -1821,7 +1834,7 @@ select:
     options: ["min", "low", "default", "high", "urgent"]
     web_server:
       sorting_group_id: group_alarms
-      sorting_weight: 36
+      sorting_weight: 37
 
   # Covers both "Alarm CLEARED" and "SD Card Recovered" — the recovery class.
   - platform: template
@@ -1835,7 +1848,7 @@ select:
     options: ["min", "low", "default", "high", "urgent"]
     web_server:
       sorting_group_id: group_alarms
-      sorting_weight: 37
+      sorting_weight: 38
 
   # Probe source profiles (Precision-compatible). Physical RTD boards are not
   # on the bench yet — selects still persist so wiring-up day is one toggle.
@@ -4306,6 +4319,45 @@ interval:
               } else if (id(sd_card_ok) && id(ntfy_sd_failure_sent)) {
                 id(ntfy_sd_failure_sent) = false;
               }
+              // Hardware offline — same conditions as step 7b speak/SD edges and
+              // rotating centre status. Recovery uses the shared All-Clear priority.
+              const bool ntfy_relay_off = !id(hw_rs485_relay_ok);
+              const bool ntfy_rtd_expected =
+                  (id(input_probe1_type) == 0) ||
+                  (id(input_probe2_enabled) && id(input_probe2_type) == 0);
+              const bool ntfy_temp_off = ntfy_rtd_expected && !id(hw_rs485_rtd1_ok);
+              const bool ntfy_hum_off = id(input_humidity_internal_enabled) &&
+                  isnan(id(sht31_internal_temp_raw).state);
+              const bool ntfy_amb_off = id(input_humidity_external_enabled) &&
+                  isnan(id(sht20_external_temp_raw).state);
+              if (ntfy_relay_off && !id(ntfy_relay_board_offline_sent)) {
+                id(ntfy_relay_board_offline_sent) = true;
+                id(ntfy_relay_board_offline_request).trigger();
+              } else if (!ntfy_relay_off && id(ntfy_relay_board_offline_sent)) {
+                id(ntfy_relay_board_offline_sent) = false;
+                id(ntfy_relay_board_online_request).trigger();
+              }
+              if (ntfy_temp_off && !id(ntfy_temp_board_offline_sent)) {
+                id(ntfy_temp_board_offline_sent) = true;
+                id(ntfy_temp_board_offline_request).trigger();
+              } else if (!ntfy_temp_off && id(ntfy_temp_board_offline_sent)) {
+                id(ntfy_temp_board_offline_sent) = false;
+                id(ntfy_temp_board_online_request).trigger();
+              }
+              if (ntfy_hum_off && !id(ntfy_humidity_sensor_offline_sent)) {
+                id(ntfy_humidity_sensor_offline_sent) = true;
+                id(ntfy_humidity_sensor_offline_request).trigger();
+              } else if (!ntfy_hum_off && id(ntfy_humidity_sensor_offline_sent)) {
+                id(ntfy_humidity_sensor_offline_sent) = false;
+                id(ntfy_humidity_sensor_online_request).trigger();
+              }
+              if (ntfy_amb_off && !id(ntfy_ambient_sensor_offline_sent)) {
+                id(ntfy_ambient_sensor_offline_sent) = true;
+                id(ntfy_ambient_sensor_offline_request).trigger();
+              } else if (!ntfy_amb_off && id(ntfy_ambient_sensor_offline_sent)) {
+                id(ntfy_ambient_sensor_offline_sent) = false;
+                id(ntfy_ambient_sensor_online_request).trigger();
+              }
             } else {
               // Keep edge flags reset while offline so active alarms can notify after reconnect.
               id(ntfy_alarm_hi_sent) = false;
@@ -4315,6 +4367,10 @@ interval:
               id(ntfy_no_cool_alarm_sent) = false;
               id(ntfy_ice_alarm_sent) = false;
               id(ntfy_sd_failure_sent) = false;
+              id(ntfy_relay_board_offline_sent) = false;
+              id(ntfy_temp_board_offline_sent) = false;
+              id(ntfy_humidity_sensor_offline_sent) = false;
+              id(ntfy_ambient_sensor_offline_sent) = false;
             }
 
           // ── 10. Relay hardware enables ───────────────────────────────────
@@ -5103,6 +5159,28 @@ globals:
     initial_value: "false"
 
   - id: ntfy_ice_alarm_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Hardware offline (relay / RTD / humidity / ambient) — same rising edges
+  # as centre-status labels, SD event log, and spoken alerts.
+  - id: ntfy_relay_board_offline_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_temp_board_offline_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_humidity_sensor_offline_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_ambient_sensor_offline_sent
     type: bool
     restore_value: no
     initial_value: "false"
@@ -9475,6 +9553,139 @@ script:
             p4_fmt_time(ts, sizeof(ts));
             char buf[84];
             snprintf(buf, sizeof(buf), "[%s] Probe 1 stale or invalid — check RS485 connection.", ts);
+            return std::string(buf);
+
+  # Hardware offline — titles match rotating centre status / spoken alerts.
+  - id: ntfy_relay_board_offline_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom RELAY BOARD OFFLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_hw_offline).current_option().c_str();'
+            Tags: "electric_plug,warning"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Modbus relay board not responding — compressor/defrost outputs unavailable.", ts);
+            return std::string(buf);
+
+  - id: ntfy_relay_board_online_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom RELAY BOARD ONLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_clear).current_option().c_str();'
+            Tags: "white_check_mark,electric_plug"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[96];
+            snprintf(buf, sizeof(buf), "[%s] Modbus relay board responding again.", ts);
+            return std::string(buf);
+
+  - id: ntfy_temp_board_offline_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom TEMP BOARD OFFLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_hw_offline).current_option().c_str();'
+            Tags: "thermometer,warning"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Modbus RTD temperature board not responding — check RS485.", ts);
+            return std::string(buf);
+
+  - id: ntfy_temp_board_online_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom TEMP BOARD ONLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_clear).current_option().c_str();'
+            Tags: "white_check_mark,thermometer"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[96];
+            snprintf(buf, sizeof(buf), "[%s] Modbus RTD temperature board responding again.", ts);
+            return std::string(buf);
+
+  - id: ntfy_humidity_sensor_offline_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom HUMIDITY SENSOR OFFLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_hw_offline).current_option().c_str();'
+            Tags: "droplet,warning"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[112];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Cabinet humidity sensor (SHT31) not responding — check I2C.", ts);
+            return std::string(buf);
+
+  - id: ntfy_humidity_sensor_online_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom HUMIDITY SENSOR ONLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_clear).current_option().c_str();'
+            Tags: "white_check_mark,droplet"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[96];
+            snprintf(buf, sizeof(buf), "[%s] Cabinet humidity sensor responding again.", ts);
+            return std::string(buf);
+
+  - id: ntfy_ambient_sensor_offline_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom AMBIENT SENSOR OFFLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_hw_offline).current_option().c_str();'
+            Tags: "cloud,warning"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[112];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Ambient sensor (SHT20) not responding — check I2C.", ts);
+            return std::string(buf);
+
+  - id: ntfy_ambient_sensor_online_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom AMBIENT SENSOR ONLINE"
+            Priority: !lambda 'return id(sel_ntfy_prio_clear).current_option().c_str();'
+            Tags: "white_check_mark,cloud"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[96];
+            snprintf(buf, sizeof(buf), "[%s] Ambient sensor responding again.", ts);
             return std::string(buf);
 
   # Door/no-cool/ice alarms — previously event-log only (step 7b); every

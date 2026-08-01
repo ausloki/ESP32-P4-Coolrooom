@@ -1,5 +1,15 @@
 # Progress Tracking
 
+## 2026-08-01 — Hardware-offline ntfy + afternoon closeout
+
+- ntfy now covers RELAY/TEMP BOARD and HUMIDITY/AMBIENT SENSOR OFFLINE (rising edge)
+  plus matching ONLINE recoveries; shared **Hardware Offline Priority** (default urgent).
+- Same conditions as rotating centre status, spoken alerts, and SD event log.
+- Manuals (§4.8 + Quick Start alert table) and dashboard Alarms & Notify updated.
+- Closeout: coverage OK, compile `0x8a9c1893`, NVS-safe USB flash, graph update, compact
+  commit. DIRAM ~27.2% / app ~2.77 MB. Persistence smoke OK on retry; hardened
+  `wait_published` against transient post-boot GET errors (false FAIL).
+
 ## 2026-07-31 — HA Gate, Probe Live UI, Header Clock, Bell Soft-Mute
 
 - Opt-in **Home Assistant API Enabled** (default OFF) drops native API clients when off.

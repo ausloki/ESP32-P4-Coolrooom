@@ -131,13 +131,20 @@ def matches(domain: str, got: Any, want: Any) -> bool:
 def wait_published(host: str, domain: str, name: str, want: Any, timeout_s: float = PUBLISH_WAIT_S) -> Any:
     deadline = time.time() + timeout_s
     last = None
+    last_err = None
     while time.time() < deadline:
-        last = get_state(host, domain, name)
-        if matches(domain, last, want):
-            return last
+        try:
+            last = get_state(host, domain, name)
+            last_err = None
+            if matches(domain, last, want):
+                return last
+        except Exception as e:
+            # Boot / Wi-Fi settle can briefly 404 or refuse GETs; keep polling.
+            last_err = e
         time.sleep(0.4)
+    detail = f"last={last!r}" if last_err is None else f"last={last!r} err={last_err!r}"
     raise RuntimeError(
-        f"{domain}/{name} did not publish {want!r} within {timeout_s}s (last={last!r})"
+        f"{domain}/{name} did not publish {want!r} within {timeout_s}s ({detail})"
     )
 
 

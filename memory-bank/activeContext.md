@@ -31,7 +31,9 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 4. ✅ Rotating multi-fault centre status + matching speech (2026-08-01): plain-language
    labels (RELAY/TEMP BOARD OFFLINE, HUMIDITY/AMBIENT SENSOR OFFLINE, COOLROOM PROBE BAD,
    …); audio clips + Audio-tab toggles edge-triggered with the status.
-5. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
+5. ✅ Hardware-offline ntfy pushes (2026-08-01): same four rising edges + ONLINE
+   recoveries; shared Hardware Offline Priority (urgent); All-Clear for recoveries.
+6. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 
 ## Leave for later
 

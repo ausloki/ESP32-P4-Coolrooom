@@ -4,6 +4,18 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Hardware-offline alerts on ntfy
+
+- Four new rising-edge ntfy pushes (relay board / temp board / humidity / ambient offline)
+  with matching ONLINE recoveries; shared **Hardware Offline Priority** select (default
+  urgent); All-Clear priority for recoveries.
+- Same conditions as centre status, spoken alerts, and SD event log; edge flags reset
+  while Wi-Fi/ntfy is off so reconnect re-notifies.
+- Closeout: embed + coverage OK, compile `0x8a9c1893`, NVS-safe flash, persistence smoke
+  OK (hardened `wait_published` for brief post-boot GET flakes).
+
+---
+
 ## 2026-08-01 (Afternoon) — Audio alerts match rotating fault labels
 
 - Regenerated speech clips to match centre status wording; added four hardware-offline

@@ -2415,10 +2415,12 @@
                       help: 'ntfy priority for the \u2744\ufe0f ICE ALARM push \u2014 evaporator coil likely iced up.' },
                     { type: 'select', entity: 'probe_fault_priority', name: 'Probe Fault Priority', label: 'Priority: Probe Fault',
                       help: 'ntfy priority for the \u26a0\ufe0f PROBE FAULT push. Defaults to urgent: with the main probe out, temperature alarms cannot protect the room.' },
+                    { type: 'select', entity: 'hardware_offline_priority', name: 'Hardware Offline Priority', label: 'Priority: Hardware Offline',
+                      help: 'ntfy priority for RELAY BOARD / TEMP BOARD / HUMIDITY SENSOR / AMBIENT SENSOR OFFLINE pushes. Defaults to urgent — these match the rotating centre-status faults and spoken alerts.' },
                     { type: 'select', entity: 'sd_card_alert_priority', name: 'SD Card Alert Priority', label: 'Priority: SD Card Failure',
                       help: 'ntfy priority for the \u26a0\ufe0f SD CARD FAILURE push. Cooling is unaffected by a dead card \u2014 only logging and backup stop \u2014 so this is a fair one to turn down.' },
                     { type: 'select', entity: 'all-clear_message_priority', name: 'All-Clear Message Priority', label: 'Priority: All-Clear Messages',
-                      help: 'ntfy priority for the recovery pushes: \u2705 Alarm CLEARED and \u2705 SD Card Recovered. Low by default so good news does not wake anyone.' },
+                      help: 'ntfy priority for recovery pushes: Alarm CLEARED, SD Card Recovered, and hardware ONLINE (relay/temp/humidity/ambient). Low by default so good news does not wake anyone.' },
                 ],
             },
             {

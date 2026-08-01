@@ -551,8 +551,9 @@ no-account-needed push service. Every message includes a timestamp.
 | **Priority: No-Cool Alarm** | min / low / default / high / urgent | urgent | The failure that spoils stock; leave urgent unless you have a reason |
 | **Priority: Ice Alarm** | min / low / default / high / urgent | high | Coil icing / airflow issue |
 | **Priority: Probe Fault** | min / low / default / high / urgent | urgent | With the main probe out, temperature alarms cannot protect the room |
+| **Priority: Hardware Offline** | min / low / default / high / urgent | urgent | Shared priority for relay board / temp board / humidity / ambient offline pushes (same faults as centre status + spoken alerts) |
 | **Priority: SD Card Failure** | min / low / default / high / urgent | high | Cooling is unaffected — fair one to turn down |
-| **Priority: All-Clear Messages** | min / low / default / high / urgent | low | Covers Alarm CLEARED and SD Card Recovered; low so good news does not wake anyone |
+| **Priority: All-Clear Messages** | min / low / default / high / urgent | low | Covers Alarm CLEARED, SD Card Recovered, and hardware ONLINE recoveries; low so good news does not wake anyone |
 | **Send Test Notification** *(button)* | — | — | Confirm the phone is subscribed; sent at the High Temp Alarm priority |
 
 | Alert | Priority | When it fires |
@@ -564,6 +565,11 @@ no-account-needed push service. Every message includes a timestamp.
 | ❄️ Coolroom ICE ALARM | *(Priority: Ice)* | Ice Alarm Delta condition met (§4.5) |
 | ✅ Coolroom Alarm CLEARED | *(Priority: All-Clear)* | Any alarm above recovers past its threshold/hysteresis band |
 | ⚠️ Coolroom PROBE FAULT | *(Priority: Probe Fault)* | Main probe fails (§4.7) |
+| ⚠️ Coolroom RELAY BOARD OFFLINE | *(Priority: Hardware Offline)* | Modbus relay board stops responding (§4.3 / centre status) |
+| ⚠️ Coolroom TEMP BOARD OFFLINE | *(Priority: Hardware Offline)* | Modbus RTD board expected but offline |
+| ⚠️ Coolroom HUMIDITY SENSOR OFFLINE | *(Priority: Hardware Offline)* | Cabinet SHT31 enabled but not responding |
+| ⚠️ Coolroom AMBIENT SENSOR OFFLINE | *(Priority: Hardware Offline)* | Ambient SHT20 enabled but not responding |
+| ✅ Coolroom … ONLINE (relay / temp / humidity / ambient) | *(Priority: All-Clear)* | Matching board or sensor responds again |
 | ⚠️ Coolroom SD CARD FAILURE | *(Priority: SD Card)* | SD card missing at boot, or fails during operation (§4.9) |
 | ✅ Coolroom SD Card Recovered | *(Priority: All-Clear)* | Auto-remount brings a previously-failed card back online (§4.9) |
 
