@@ -4,6 +4,27 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Midday) — Gauge Ticks Toned Down to Border Weight
+
+Ticks were reading too heavy at 2px/grey. Now 1px `col_glass_rim` at `LV_OPA_20`, matching
+the thin glass circle outlines (plate/disc borders).
+
+**ESPHome trap worth remembering:** a meter's *widget-level* `ticks:` style block is
+remapped to the scale's `LV_PART_INDICATOR`, which in LVGL 9 is the **major** ticks — this
+gauge deliberately has none, so `ticks: {line_opa: 20%}` compiled fine and did nothing.
+Minor ticks are styled on `LV_PART_ITEMS` (see `lvgl/widgets/meter.py` ~line 519), and the
+schema exposes only `width` / `length` / `color` there — no opacity. Fix: give the scale an
+explicit `id: home_dial_scale` (the schema's `cv.GenerateID()` accepts one, and `lv_scale_t`
+is just `lv_obj_t`) and set the opacity from an `on_boot` priority −100 lambda:
+
+```cpp
+lv_obj_set_style_line_opa(id(home_dial_scale), LV_OPA_20, LV_PART_ITEMS);
+```
+
+Verified in generated `main.cpp` that width/colour/opacity all land on `LV_PART_ITEMS`.
+
+---
+
 ## 2026-08-01 (Midday) — Tick Overlay Crosses the Rings
 
 Follow-up to the tick-ring pass: Cory wanted the marks to cross the arcs, not sit in a

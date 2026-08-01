@@ -331,6 +331,17 @@ esphome:
     - priority: -100
       then:
         - lambda: id(status_text).publish_state("Booting...");
+    - priority: -100
+      then:
+        # Fade the home dial's tick marks to match the thin glass circle
+        # outlines (1px col_glass_rim at ~20%). ESPHome maps a meter's
+        # widget-level `ticks:` style block onto the scale's INDICATOR part,
+        # which in LVGL 9 is the *major* ticks — this gauge has none. Minor
+        # ticks are styled on LV_PART_ITEMS, which the YAML schema doesn't
+        # expose, so set the opacity directly on the named scale object.
+        - lambda: |-
+            lv_obj_set_style_line_opa(id(home_dial_scale), LV_OPA_20,
+                                      LV_PART_ITEMS);
     - priority: -95
       then:
         # Apply NVS-restored speaker volume after the media player is up. The
@@ -6058,6 +6069,9 @@ lvgl:
               # inner stubs. Outer edge (r=224) matches the glass rim, length
               # 67 reaches just inside the ambient ring's inner edge (r=156).
               # Shares the dial range with the arcs so ticks and fills agree.
+              # Weight deliberately matches the thin glass circle outlines:
+              # 1px of col_glass_rim, faded to LV_OPA_20 in on_boot (see the
+              # note there — the tick opacity isn't reachable from YAML).
               # No `major:` block on purpose: major ticks render value labels
               # and this scale is meant to be unlabelled.
               - meter:
@@ -6070,21 +6084,22 @@ lvgl:
                   pad_all: 0
                   clickable: false
                   scales:
-                    - range_from: ${dial_min_c}
+                    - id: home_dial_scale
+                      range_from: ${dial_min_c}
                       range_to: ${dial_max_c}
                       angle_range: 240
                       rotation: 150
                       ticks:
                         count: ${dial_tick_count}
-                        width: 2
+                        width: 1
                         length: 67
-                        color: col_subtext
+                        color: col_glass_rim
                       indicators:
                         - tick_style:
                             start_value: ${dial_min_c}
                             end_value: ${dial_max_c}
-                            color_start: col_subtext
-                            color_end: col_subtext
+                            color_start: col_glass_rim
+                            color_end: col_glass_rim
 
               # Glass center disc (readout sits on frosted glass)
               - obj:
