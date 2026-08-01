@@ -77,7 +77,14 @@ def get_state(host: str, domain: str, name: str) -> Any:
     if domain == "switch":
         return body.get("state") == "ON" or body.get("value") is True
     if domain == "number":
-        return float(body.get("value"))
+        raw = body.get("value", body.get("state"))
+        if isinstance(raw, (int, float)):
+            return float(raw)
+        # ESPHome sometimes publishes value as a string, or only state with a unit
+        # ("2.5 °C"). Pull the leading number so a unit suffix cannot fail the check.
+        text = str(raw).strip().replace(",", " ")
+        token = text.split()[0] if text else ""
+        return float(token)
     if domain == "select":
         return body.get("value") or body.get("state")
     if domain == "text":
