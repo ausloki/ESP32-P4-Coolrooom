@@ -4,6 +4,15 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Centre Disc Matches Screen Background
+
+Centre disc was `col_panel` (#2C2C2E) at 78% — a visibly lighter plate under the big
+readout. Now `col_bg` + `bg_opa: COVER`, identical to the surrounding screen. Kept opaque
+so it still masks the inner stub of the ambient ring, and left the 1 px `col_glass_rim`
+border at 22% in place (not asked for; it's now the only thing outlining the centre).
+
+---
+
 ## 2026-08-01 (Afternoon) — Outer Grey Ring Removed from Home Gauge
 
 Two elements drew outside the coolroom arc and together read as a grey ring:

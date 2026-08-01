@@ -6046,7 +6046,9 @@ lvgl:
                   knob:
                     bg_opa: TRANSP
 
-              # Glass center disc (readout sits on frosted glass)
+              # Center disc — same col_bg as the surrounding screen so the
+              # readout sits on flat background, not a lighter panel. Still
+              # opaque: it masks the inner stub of the ambient ring.
               - obj:
                   align: CENTER
                   y: 0
@@ -6056,8 +6058,8 @@ lvgl:
                   border_width: 1
                   border_color: col_glass_rim
                   border_opa: 22%
-                  bg_color: col_panel
-                  bg_opa: 78%
+                  bg_color: col_bg
+                  bg_opa: COVER
                   clickable: false
 
               # CENTER: Large temperature display
