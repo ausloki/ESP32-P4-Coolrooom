@@ -5,7 +5,10 @@
 - ES8311 DAC + I2S speaker + NS4150B PA enable (`p4_audio.yaml`)
 - Pre-recorded female English clips (`assets/audio/*.wav`, Samantha via
   `scripts/generate_audio_clips.sh`)
-- Master **Audio Alerts Enabled** + per-phrase toggles (alarms + info)
+- Master **Audio Alerts Enabled** + per-phrase toggles (alarms + info), including
+  hardware-offline phrases that match the home centre status
+  (`RELAY BOARD OFFLINE`, `TEMP BOARD OFFLINE`, `HUMIDITY SENSOR OFFLINE`,
+  `AMBIENT SENSOR OFFLINE`) and updated wording for probe / not-cooling / ice
 - Web **Speaker Volume (%)** (50–90, default 85) — NVS-backed, synced with HA media player
 - Edge-triggered play on alarm/info events; home bell soft-mute silences speech
 - Web dashboard **Audio** tab + Test Speaker button

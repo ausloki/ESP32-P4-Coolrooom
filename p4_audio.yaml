@@ -79,6 +79,14 @@ media_player:
         file: assets/audio/alarm_ice.wav
       - id: clip_alarm_probe
         file: assets/audio/alarm_probe.wav
+      - id: clip_alarm_relay_board
+        file: assets/audio/alarm_relay_board.wav
+      - id: clip_alarm_temp_board
+        file: assets/audio/alarm_temp_board.wav
+      - id: clip_alarm_humidity_sensor
+        file: assets/audio/alarm_humidity_sensor.wav
+      - id: clip_alarm_ambient_sensor
+        file: assets/audio/alarm_ambient_sensor.wav
       - id: clip_info_cooling_on
         file: assets/audio/info_cooling_on.wav
       - id: clip_info_cooling_off
@@ -214,6 +222,74 @@ script:
             - media_player.speaker.play_on_device_media_file:
                 id: coolroom_media
                 media_file: clip_alarm_probe
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_relay_board
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_relay_board) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_relay_board
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_temp_board
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_temp_board) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_temp_board
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_humidity_sensor
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_humidity_sensor) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_humidity_sensor
+                announcement: true
+                enqueue: true
+
+  - id: speak_alarm_ambient_sensor
+    mode: queued
+    max_runs: 3
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(input_audio_alerts_enabled) && id(input_audio_alarm_ambient_sensor) &&
+                     id(hw_audio_ok) && !id(ctl_alarm_silenced);
+          then:
+            - script.execute: audio_prepare_play
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_ambient_sensor
                 announcement: true
                 enqueue: true
 
