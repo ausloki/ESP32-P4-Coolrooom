@@ -4,7 +4,7 @@
 # https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-7B
 #
 # CODING PRINCIPLE: C++/ESP-IDF first.
-#   Complex logic lives in p4_helpers.h as proper C++ functions.
+#   Complex logic lives in p4_helpers.h / p4_control.h / p4_ui.h as C++ functions.
 #   YAML lambdas are one-liners that call those helpers.
 #   YAML is configuration; C++ is the firmware.
 #
@@ -202,6 +202,7 @@ esphome:
   includes:
     - p4_helpers.h
     - p4_control.h
+    - p4_ui.h
     - p4_logging.h
     - p4_log_manager.h
     - p4_wifi.h
@@ -681,9 +682,8 @@ modbus_controller:
               bool light_should_be_on = false;
               if (id(input_door_sensor_enabled) && id(input_door_light_enabled) &&
                   id(ctl_relay_light_enabled)) {
-                  light_should_be_on = id(ctl_door_sensor_mode_is_nc)
-                      ? id(door_reed_sensor).state
-                      : !id(door_reed_sensor).state;
+                  light_should_be_on = p4_door_is_open(
+                      id(ctl_door_sensor_mode_is_nc), id(door_reed_sensor).state);
               }
               if (light_should_be_on) id(relay_light).turn_on();
               else                    id(relay_light).turn_off();
@@ -1042,9 +1042,8 @@ switch:
           // operator has to open/close the door once before anything moves,
           // which reads as "the switch does nothing".
           if (id(ctl_relay_light_enabled)) {
-            bool door_is_open = id(ctl_door_sensor_mode_is_nc)
-                ? id(door_reed_sensor).state
-                : !id(door_reed_sensor).state;
+            bool door_is_open = p4_door_is_open(
+                id(ctl_door_sensor_mode_is_nc), id(door_reed_sensor).state);
             if (door_is_open) id(relay_light).turn_on();
             else              id(relay_light).turn_off();
           }
@@ -1924,8 +1923,7 @@ sensor:
       - lvgl.arc.update:
           id: home_temp_arc
           value: !lambda |-
-            if (!p4_rtd_valid(x)) return 0;
-            return (int)((x + 20.0f) / 35.0f * 100.0f);
+            return p4_ui_temp_to_arc_pct(x);
       - if:
           condition:
             lambda: 'return p4_rtd_valid(x) && x > id(ctl_setpoint) + id(ctl_alarm_high_delta);'
@@ -2106,9 +2104,7 @@ sensor:
             return std::string(buf);
       - lvgl.arc.update:
           id: home_ambient_arc
-          value: !lambda |-
-            if (isnan(x)) return 0;
-            return (int)((x + 20.0f) / 35.0f * 100.0f);
+          value: !lambda 'return p4_ui_temp_to_arc_pct(x);'
 
   - platform: template
     id: probe_external_humidity
@@ -2497,7 +2493,7 @@ binary_sensor:
     name: "Any Alarm Active"
     device_class: problem
     entity_category: diagnostic
-    lambda: 'return id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_door_alarm_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_probe_fault);'
+    lambda: 'return p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault));'
     on_state:
       - lvgl.label.update:
           id: ui_alarm_icon
@@ -2557,7 +2553,7 @@ binary_sensor:
       - lambda: |-
           // If mode is NC (true): x=false→closed, x=true→open
           // If mode is NO (false): x=false→open, x=true→closed
-          bool door_is_open = id(ctl_door_sensor_mode_is_nc) ? x : !x;
+          bool door_is_open = p4_door_is_open(id(ctl_door_sensor_mode_is_nc), x);
 
           // Door features all require Door Sensor Enabled. Light is an
           // optional add-on on top of that (cannot run with the sensor off).
@@ -2653,7 +2649,7 @@ number:
             return std::string(buf);
       - lvgl.arc.update:
           id: home_setpoint_arc
-          value: !lambda 'return (int)((x + 20.0f) / 35.0f * 100.0f);'
+          value: !lambda 'return p4_ui_setpoint_to_arc_pct(x);'
 
   - platform: template
     id: compressor_differential
@@ -4392,14 +4388,14 @@ interval:
       - lvgl.arc.update:
           id: home_setpoint_arc
           value: !lambda |-
-            // Same -20..15°C dial scale as home_temp_arc above.
-            return (int)((id(ctl_setpoint) + 20.0f) / 35.0f * 100.0f);
+            return p4_ui_setpoint_to_arc_pct(id(ctl_setpoint));
       - lvgl.widget.update:
           id: lbl_home_alarm_banner
           hidden: !lambda |-
-            return !(id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
-                     id(ctl_door_alarm_active) || id(ctl_no_cool_alarm_active) ||
-                     id(ctl_ice_alarm_active));
+            return !p4_ui_any_banner_alarm(
+                id(ctl_alarm_high_active), id(ctl_alarm_low_active),
+                id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
+                id(ctl_ice_alarm_active));
       - lvgl.label.update:
           id: lbl_home_alarm_banner
           text: !lambda |-
@@ -4417,9 +4413,10 @@ interval:
           // force-hidden after a redraw-artifact scare on first hardware bring-
           // up; re-enabled now that the gauge orientation/clip issues that
           // caused those artifacts are fixed.
-          const bool motion_suppressed =
-              id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
-              id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active);
+          const bool motion_suppressed = p4_ui_any_alarm(
+              id(ctl_alarm_high_active), id(ctl_alarm_low_active),
+              id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
+              id(ctl_ice_alarm_active), id(ctl_probe_fault));
           const bool snow_active = !motion_suppressed && id(relay_compressor).state && !id(ctl_defrost_active);
           const bool flame_active = !motion_suppressed && id(ctl_defrost_active);
           if (snow_active || flame_active) {
@@ -4429,9 +4426,18 @@ interval:
           }
       - lvgl.widget.update:
           id: bg_fx_defrost_border
-          hidden: !lambda 'return !(id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda |-
+            return !p4_ui_fx_flame_visible(
+                id(ctl_defrost_active),
+                p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active),
+                                id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
+                                id(ctl_ice_alarm_active), id(ctl_probe_fault)));
           border_width: !lambda |-
-            if (!id(ctl_defrost_active) || id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active))
+            if (!p4_ui_fx_flame_visible(
+                    id(ctl_defrost_active),
+                    p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active),
+                                    id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
+                                    id(ctl_ice_alarm_active), id(ctl_probe_fault))))
               return 0;
             switch (id(fx_anim_tick) % 4U) {
               case 0: return 3;
@@ -4440,7 +4446,11 @@ interval:
               default: return 7;
             }
           border_opa: !lambda |-
-            if (!id(ctl_defrost_active) || id(ctl_probe_fault) || id(ctl_alarm_high_active) || id(ctl_alarm_low_active) || id(ctl_no_cool_alarm_active) || id(ctl_ice_alarm_active) || id(ctl_door_alarm_active))
+            if (!p4_ui_fx_flame_visible(
+                    id(ctl_defrost_active),
+                    p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active),
+                                    id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
+                                    id(ctl_ice_alarm_active), id(ctl_probe_fault))))
               return 0;
             switch (id(fx_anim_tick) % 4U) {
               case 0: return 55;
@@ -4452,42 +4462,42 @@ interval:
             return (id(fx_anim_tick) % 2U == 0U) ? id(col_orange) : lv_color_hex(0xFFCF33);
       - lvgl.widget.update:
           id: bg_fx_snow_1
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
           x: !lambda |-
             return 120 + (int)((id(fx_anim_tick) * 7U + 11U) % 760U);
           y: !lambda |-
             return 60 + (int)((id(fx_anim_tick) * 13U + 19U) % 470U);
       - lvgl.widget.update:
           id: bg_fx_snow_2
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
           x: !lambda |-
             return 250 + (int)((id(fx_anim_tick) * 9U + 29U) % 660U);
           y: !lambda |-
             return 80 + (int)((id(fx_anim_tick) * 11U + 37U) % 450U);
       - lvgl.widget.update:
           id: bg_fx_snow_3
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
           x: !lambda |-
             return 390 + (int)((id(fx_anim_tick) * 5U + 53U) % 560U);
           y: !lambda |-
             return 100 + (int)((id(fx_anim_tick) * 15U + 71U) % 430U);
       - lvgl.widget.update:
           id: bg_fx_snow_4
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
           x: !lambda |-
             return 530 + (int)((id(fx_anim_tick) * 8U + 97U) % 460U);
           y: !lambda |-
             return 70 + (int)((id(fx_anim_tick) * 17U + 23U) % 460U);
       - lvgl.widget.update:
           id: bg_fx_snow_5
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
           x: !lambda |-
             return 690 + (int)((id(fx_anim_tick) * 6U + 131U) % 360U);
           y: !lambda |-
             return 90 + (int)((id(fx_anim_tick) * 12U + 41U) % 440U);
       - lvgl.widget.update:
           id: bg_fx_snow_6
-          hidden: !lambda 'return !(id(relay_compressor).state && !id(ctl_defrost_active) && !id(ctl_probe_fault) && !id(ctl_alarm_high_active) && !id(ctl_alarm_low_active) && !id(ctl_no_cool_alarm_active) && !id(ctl_ice_alarm_active) && !id(ctl_door_alarm_active));'
+          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
           x: !lambda |-
             return 840 + (int)((id(fx_anim_tick) * 10U + 173U) % 220U);
           y: !lambda |-
@@ -4604,92 +4614,24 @@ interval:
       - lambda: |-
           static uint32_t tick = 0;
           tick++;
-
-          // lv_obj_get_width/height need LVGL's complete (private) lv_obj_t
-          // definition, which isn't visible from lambda code (only the
-          // public API's opaque forward declaration is) -- lv_pct() avoids
-          // that entirely: it just encodes "50% of this object's own size"
-          // as a marker value that LVGL's internal (library-compiled, not
-          // our-lambda-compiled) rendering code resolves later.
-          auto spin_pivot = [](lv_obj_t *obj) {
-              lv_obj_set_style_transform_pivot_x(obj, lv_pct(50), 0);
-              lv_obj_set_style_transform_pivot_y(obj, lv_pct(50), 0);
-          };
-
-          // Snowflake (compressor): slow continuous spin + gentle flicker,
-          // blue while the compressor relay is on (idle = grey).
-          {
-              lv_obj_t *o = id(ui_compressor_icon);
-              if (id(relay_compressor).state) {
-                  spin_pivot(o);
-                  lv_obj_set_style_transform_rotation(o, (int32_t)((tick * 22) % 3600), 0);
-                  float flicker = sinf(tick * 0.3f) * 0.5f + 0.5f;
-                  lv_obj_set_style_opa(o, (lv_opa_t)(160 + flicker * 95), 0);
-              } else {
-                  lv_obj_set_style_transform_rotation(o, 0, 0);
-                  lv_obj_set_style_opa(o, 255, 0);
-              }
-          }
-
-          // Flame (defrost): irregular flicker (two combined sine waves,
-          // not a single smooth pulse, so it doesn't read as metronomic).
-          // Driven by the control tick's defrost state, not the coil, so a
-          // passive defrost (Defrost Relay Enabled off, or heat supplied
-          // outside this controller) still animates. Colour is set here too
-          // rather than only from relay on_turn_on/off, which never fires
-          // when the relay isn't part of the installation.
-          {
-              lv_obj_t *o = id(ui_defrost_icon);
-              if (id(ctl_defrost_active)) {
-                  float flicker = sinf(tick * 0.5f) * 0.3f + sinf(tick * 1.3f + 1.0f) * 0.2f + 0.5f;
-                  int32_t opa = (int32_t)(140 + flicker * 115);
-                  if (opa < 100) opa = 100;
-                  if (opa > 255) opa = 255;
-                  lv_obj_set_style_opa(o, (lv_opa_t)opa, 0);
-                  lv_obj_set_style_text_color(o, id(col_red), 0);
-              } else {
-                  lv_obj_set_style_opa(o, 255, 0);
-                  lv_obj_set_style_text_color(o, id(col_grey), 0);
-              }
-          }
-
-          // Light globe: slow smooth "breathing" glow, only while the
-          // light relay is actually on. Colour tracks the same way as
-          // the compressor icon so an on light isn't a grey silhouette.
-          {
-              lv_obj_t *o = id(ui_light_icon);
-              if (id(relay_light).state) {
-                  float glow = sinf(tick * 0.15f) * 0.5f + 0.5f;
-                  lv_obj_set_style_opa(o, (lv_opa_t)(90 + glow * 165), 0);
-                  lv_obj_set_style_text_color(o, id(col_orange), 0);
-              } else {
-                  lv_obj_set_style_opa(o, 255, 0);
-                  lv_obj_set_style_text_color(o, id(col_grey), 0);
-              }
-          }
-
-          // Bell: red while any alarm/fault is active. Jiggle only until the
-          // operator soft-mutes from the bell; mute keeps it red and still.
-          // A *new* alarm type clears mute (see control tick) and jiggle resumes.
-          {
-              lv_obj_t *o = id(ui_alarm_icon);
-              bool any_alarm = id(ctl_alarm_high_active) || id(ctl_alarm_low_active) ||
-                                id(ctl_door_alarm_active) || id(ctl_no_cool_alarm_active) ||
-                                id(ctl_ice_alarm_active) || id(ctl_probe_fault);
-              if (any_alarm) {
-                  lv_obj_set_style_text_color(o, id(col_red), 0);
-                  if (!id(ctl_alarm_silenced)) {
-                      spin_pivot(o);
-                      float jiggle = sinf(tick * 1.3f) * 150.0f;  // +-15 degrees
-                      lv_obj_set_style_transform_rotation(o, (int32_t)jiggle, 0);
-                  } else {
-                      lv_obj_set_style_transform_rotation(o, 0, 0);
-                  }
-              } else {
-                  lv_obj_set_style_text_color(o, id(col_grey), 0);
-                  lv_obj_set_style_transform_rotation(o, 0, 0);
-              }
-          }
+          P4UiHomeIconAnimIn in{};
+          in.compressor_on = id(relay_compressor).state;
+          in.defrost_active = id(ctl_defrost_active);
+          in.light_on = id(relay_light).state;
+          in.any_alarm = p4_ui_any_alarm(
+              id(ctl_alarm_high_active), id(ctl_alarm_low_active),
+              id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
+              id(ctl_ice_alarm_active), id(ctl_probe_fault));
+          in.alarm_silenced = id(ctl_alarm_silenced);
+          in.col_blue = id(col_blue);
+          in.col_red = id(col_red);
+          in.col_grey = id(col_grey);
+          in.col_orange = id(col_orange);
+          p4_ui_home_icon_anim_tick(
+              tick,
+              id(ui_compressor_icon), id(ui_defrost_icon),
+              id(ui_light_icon), id(ui_alarm_icon),
+              in);
 
   # ── Phase 5: SD card auto-remount ────────────────────────────────────────
   # Retries the mount every 60s while the card is marked unavailable —

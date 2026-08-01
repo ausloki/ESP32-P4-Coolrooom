@@ -4,6 +4,20 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Morning) — Phase 2: `p4_ui.h` Hot-Path Extract
+
+Moved presentation helpers out of YAML without changing behavior:
+
+- New `p4_ui.h`: arc dial scale, `p4_door_is_open`, `p4_ui_any_alarm` / banner /
+  snow+flame FX predicates, and `p4_ui_home_icon_anim_tick` (former 50 ms lambda).
+- YAML 50 ms interval is now a thin caller; door reed / light / boot reconcile and
+  arc value updates call the shared helpers.
+
+DIRAM unchanged (~26.7%). Compile `0x4843a70f`, NVS-safe flash. Next optional: 1 s
+formatters, then control-tick phase structs.
+
+---
+
 ## 2026-08-01 (Morning) — Glass Horseshoe Gauge (Bigger Center Arcs)
 
 Home gauge visual pass 1 (before C-helper extraction):
