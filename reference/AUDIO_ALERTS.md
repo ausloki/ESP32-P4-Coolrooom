@@ -32,13 +32,17 @@ project uses `volume_initial: 0.85`, `volume_min: 0.50`, `volume_max: 0.90`, exp
 web as **Speaker Volume (%)** (50–90, default 85). The same value is what HA sees on
 *Coolroom Speaker*.
 
-## Follow-up — microphone / voice input
+## On hold — microphone / voice input
 
-Not started. Board has I2S DIN (`audio_i2s_din_pin` / GPIO11) and ES8311 ADC.
-Web **Audio** tab (and virtual preview) already expose speak toggles including hardware-offline
-phrases; LVGL audio toggles remain web-only until settings-page budget allows.
+**Not in scope for now.** No microphone is fitted on the current build, and voice
+input may not be used on this project. Speaker announcements remain the audio path.
 
-Suggested next steps when picking this up:
+Board still has I2S DIN (`audio_i2s_din_pin` / GPIO11) and ES8311 ADC if that ever
+changes. Web **Audio** tab (and virtual preview) already expose speak toggles including
+hardware-offline phrases; LVGL audio toggles remain a separate deferred item
+(web-only today).
+
+If picking mic work up later (only if product need returns):
 
 1. ESPHome `microphone` + `i2s_audio` input on the same bus (or second I2S port if
    duplex conflicts with speaker on this BSP).

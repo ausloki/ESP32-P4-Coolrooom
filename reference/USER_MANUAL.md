@@ -43,6 +43,13 @@ range is set by the `dial_min_c` / `dial_max_c` substitutions at the top of
 `esp32-p4-coolroom.yaml`. The setpoint's minimum is locked to `dial_min_c`, so every
 legal setpoint has a visible position on the cyan arc.
 
+**Temperature Display Unit** (Settings 7/8 on LVGL, **Probes & Sensors** on web)
+switches touchscreen and web temperature readouts between Celsius and Fahrenheit.
+Default is **Celsius**. It is a display preference only: control calculations, stored
+settings, logs, and device sensor payloads remain Celsius. The preference is exposed to
+Home Assistant as `select.temperature_display_unit`; Home Assistant independently renders
+temperature sensors using its configured unit system.
+
 **Home-screen left icons (touchscreen):**
 
 | Icon | Touch? | What it does |
@@ -145,7 +152,7 @@ Before relying on cooling or fan output:
    compressor**, **coil 2 = light**, **coil 3 = siren**. Defrost on this controller is
    always **passive** (no heater coil) — do not treat channel 1 as a defrost heater.
 2. Leave **Fan Relay Enabled** **off** (factory default) until coil 0 is confirmed as a
-   fan. Then enable it from touchscreen Settings 1/7, web **Compressor**, or **Hardware**.
+   fan. Then enable it from touchscreen Settings 1/8, web **Compressor**, or **Hardware**.
    When on, the fan follows the compressor and is forced off during defrost and drip.
 3. Door features default **off**: enable **Door Sensor Enabled** only when the reed is
    fitted and **Door Sensor Mode** matches NC/NO wiring. **Hold Compressor While Door Open**
@@ -190,7 +197,7 @@ you just read the boxes top to bottom, like a recipe:
 
 ### 4.1 Temperature Control & Compressor
 
-*Touchscreen: Settings 1/7 — "Compressor & Fallback". Web: **Temperature Control** +
+*Touchscreen: Settings 1/8 — "Compressor & Fallback". Web: **Temperature Control** +
 **Compressor** sections.*
 
 This is the core loop: keep the coolroom near a target temperature without short-cycling
@@ -202,7 +209,7 @@ the compressor.
 | **Compressor Differential** | The "dead band" around the setpoint. Compressor switches ON at setpoint + half the differential, OFF at setpoint − half. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing. Narrower = tighter temperature control but more frequent cycling. |
 | **Compressor Off-Delay (Lockout)** | Minimum time the compressor must stay off before it's allowed to restart, even if the temperature calls for cooling. | 0 – 10 min | 3 min | Protects the compressor motor from rapid restart. Only lower this if your compressor's manufacturer explicitly allows shorter cycling. |
 | **Compressor Min Run Time** | Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. | 0 – 30 min | 2 min | Complements Off-Delay on the ON side. Set 0 to disable. |
-| **Fan Relay Enabled** | Whether Modbus coil 0 (evaporator fan) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. | On/Off | **Off** | Same control as §4.13 Hardware → Fan. Confirm coil 0 is a fan before enabling. Also on touchscreen Settings 1/7. |
+| **Fan Relay Enabled** | Whether Modbus coil 0 (evaporator fan) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. | On/Off | **Off** | Same control as §4.13 Hardware → Fan. Confirm coil 0 is a fan before enabling. Also on touchscreen Settings 1/8. |
 | **Sensor Fallback Duty-Cycle Enabled** | If the main probe fails, run the compressor on a fixed timer instead of stopping cooling completely. | On/Off | On | Leave on unless you'd rather the room simply stop cooling during a sensor fault (some sites prefer that so staff notice immediately). |
 | **Fallback Compressor ON Time** | How long the compressor runs per fallback cycle when the probe has failed. | 1 – 30 min | 3 min | Works together with OFF time below — together they set a safe average duty cycle without real temperature feedback. |
 | **Fallback Compressor OFF Time** | How long the compressor rests per fallback cycle when the probe has failed. | 1 – 60 min | 27 min | Default 3 min ON / 27 min OFF ≈ 10% duty cycle — a conservative "keep it cold-ish, don't ice up or overwork the compressor" fallback. |
@@ -257,13 +264,13 @@ resumes. If other faults are active at the same time, the centre status rotates
 through them (§0).
 
 > 📷 **Screenshot placeholder — Web Dashboard: Temperature Control & Compressor sections**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 1/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 1/8**
 
 ---
 
 ### 4.2 Defrost Schedule
 
-*Touchscreen: Settings 2/7 — "Defrost Schedule". Web: **Defrost** section.*
+*Touchscreen: Settings 2/8 — "Defrost Schedule" (scroll for Skip-If-Cold / Force-Max). Web: **Defrost** section.*
 
 Frost builds up on the evaporator coil over time and blocks airflow, so the coil needs
 periodic defrosting. This group controls the basic on/off timer for that.
@@ -305,13 +312,13 @@ periodic defrosting. This group controls the basic on/off timer for that.
 ```
 
 > 📷 **Screenshot placeholder — Web Dashboard: Defrost section**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 2/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 2/8**
 
 ---
 
 ### 4.3 Defrost — Smart & Drip
 
-*Touchscreen: Settings 3/7 — "Defrost Smart & Drip". Web: **Defrost** section (same
+*Touchscreen: Settings 3/8 — "Defrost Smart & Drip" (scroll for Frost Rate). Web: **Defrost** section (same
 group as §4.2 on the web dashboard).*
 
 These add two *extra* ways to trigger a defrost early, on top of the fixed timer in §4.2 —
@@ -336,13 +343,13 @@ they never replace the timer, only supplement it.
 fixed timer (§4.2) until you turn one or both of these on.
 
 > 📷 **Screenshot placeholder — Web Dashboard: Defrost (Smart) fields**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 3/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 3/8**
 
 ---
 
 ### 4.4 Alarm Thresholds
 
-*Touchscreen: Settings 4/7 — "Alarm Thresholds". Web: **Alarms** section.*
+*Touchscreen: Settings 4/8 — "Alarm Thresholds". Web: **Alarms** section.*
 
 The basic "something's wrong with the temperature" alarms.
 
@@ -354,13 +361,13 @@ The basic "something's wrong with the temperature" alarms.
 | **Alarm Siren Enabled** | Master switch for the physical siren relay. | On/Off | On | When on, the siren sounds automatically for any active alarm (past its persist time). Tap the **home-screen bell** to mute it for the current event — the bell stops animating but stays red; banners and notifications keep running. Mute lifts when every alarm has cleared, or when a *new* alarm type appears so that event can sound and the bell re-animates. Turn this switch off if you want the siren permanently quiet. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: Alarms section**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 4/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 4/8**
 
 ---
 
 ### 4.5 Alarms — Advanced
 
-*Touchscreen: Settings 5/7 — "Alarms Advanced". Web: **Alarms** section (same group as
+*Touchscreen: Settings 5/8 — "Alarms Advanced". Web: **Alarms** section (same group as
 §4.4 on the web dashboard).*
 
 Less commonly touched, but important for tuning out false alarms.
@@ -376,7 +383,7 @@ Less commonly touched, but important for tuning out false alarms.
 | **Alarm Recovery Hysteresis** | Once an alarm has fired, the temperature must come back this far *past* the original threshold (not just to it) before the alarm is considered cleared. | 0.1 – 5.0 °C | 0.5 °C | Prevents the alarm flapping on/off right at the threshold. Raise if you're seeing repeated clear/re-alarm cycles. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: Alarms (advanced) fields**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 5/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 5/8**
 
 **High/Low alarm lifecycle:**
 
@@ -413,9 +420,9 @@ condition is evaluated at all — for their respective windows.)*
 
 ### 4.5b Audio Alerts (Speaker)
 
-*Web: **Audio** tab. ESPHome web: **Audio Alerts** group. Touchscreen: not yet mirrored
-(operator uses web for these toggles). Microphone / voice commands are **not** implemented
-yet — speaker announcements only.*
+*Touchscreen: Settings 8/8 — "Audio". Web: **Audio** tab. ESPHome web: **Audio Alerts** group.
+Microphone / voice commands are **on hold** — no mic fitted; may not be used on this project.
+Speaker announcements only.*
 
 Spoken phrases use a pre-recorded female English voice on the on-board ES8311 speaker
 (NS4150B amp). They work offline (no cloud TTS). Regenerate clips with
@@ -442,7 +449,7 @@ The home-screen **bell** soft-mute also suppresses spoken phrases for the curren
 so speech and the jiggle can run again. Flip **Audio Alerts Enabled** off if you want the
 room quiet permanently.
 
-**Volume.** Use **Speaker Volume (%)** on the web Audio tab (default 85%). The scale is
+**Volume.** Use **Speaker Volume (%)** on touchscreen Settings 8/8 or the web Audio tab (default 85%). The scale is
 not a linear percentage of loudness: on this codec ~75% is unity gain and anything above
 roughly 90% clips, so the control is deliberately limited to 50–90%. The same value is
 what Home Assistant sees on the *Coolroom Speaker* media player — changing it in either
@@ -452,7 +459,7 @@ place updates the other.
 
 ### 4.6 Door
 
-*Touchscreen: Settings 6/7 — "Door". Web: **Door** section.*
+*Touchscreen: Settings 6/8 — "Door". Web: **Door** section.*
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
@@ -463,7 +470,7 @@ place updates the other.
 | **Door Alarm Delay** | How long the door can stay open before an alarm fires. | 0 – 300 s | 300 s (5 min) | Shorten for rooms where doors should only ever be open briefly; lengthen for rooms with routine long-duration loading. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: Door section**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 6/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 6/8**
 
 **Door-triggered light** (requires Door Sensor Enabled):
 
@@ -518,7 +525,7 @@ disable it.
 
 ### 4.7 Probes & Sensors
 
-*Touchscreen: Settings 7/7 — "Probes". Web: **Probes & Sensors** section.*
+*Touchscreen: Settings 7/8 — "Probes". Web: **Probes & Sensors** section.*
 
 The web Probes tab also shows a live table of **Raw** (before calibration offset),
 **Offset**, and **Corrected** (what control, alarms, and the home gauge use) for Probe 1,
@@ -526,6 +533,7 @@ Probe 2, and the internal SHT31 (SHT31 has no offset — raw and corrected match
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
+| **Temperature Display Unit** | Chooses Celsius or Fahrenheit for LVGL and web dashboard temperature readouts. Published to Home Assistant as a select. | Celsius / Fahrenheit | **Celsius** | Change for operator preference. This does not alter control math or stored values; HA temperature sensors follow HA's own unit system. |
 | **Probe 1 (Coolroom) Source** | Which sensor feeds coolroom control: RTD RS485, SHT31 I2C, or Unused. | RTD / SHT31 / Unused | RTD RS485 | RS485 boards are not on the current bench — leave RTD until wired, or use SHT31 temporarily for UI/control bring-up. |
 | **Probe 2 (Evaporator) Source** | Evaporator source: RTD RS485 or Unused. Unused disables Probe 2 (and ice detection). | RTD / Unused | RTD RS485 | Same bench note as Probe 1. |
 | **Probe 1 (Coolroom) Calibration Offset** | Adds a fixed correction to the main temperature reading. | -10 – 10 °C | 0.0 °C | Only set this after comparing the probe against a trusted reference thermometer — enter the difference so the displayed reading matches reality. |
@@ -567,7 +575,7 @@ then the snowflake stays amber with the lockout counting down, then turns blue f
 Fallback Compressor ON Time.
 
 > 📷 **Screenshot placeholder — Web Dashboard: Probes & Sensors section**
-> 📷 **Screenshot placeholder — Touchscreen: Settings 7/7**
+> 📷 **Screenshot placeholder — Touchscreen: Settings 7/8**
 
 ---
 
@@ -642,6 +650,7 @@ no-ops (silently skipped) rather than crashing or affecting cooling control.
 | **Temperature Log** | Periodic temperature/humidity samples logged the same way, to one file per day named for that date. Samples taken before the controller has learned the time (briefly at boot, or for longer if it can't reach a time server) go to a single `nodate.csv` file instead, so they aren't filed under a wrong date. It appears in the log browser alongside the dated files. |
 | **Backup All Settings to SD** *(button)* | Saves every setting in this manual to a `backup.json` file on the card. Confirms success in-place — it does **not** force a browser download. Download a copy yourself from the file list below when you want one. Settings themselves live in flash (NVS) and survive reboots without this button; Backup is an off-device copy for factory-reset recovery or cloning to another unit. |
 | **Restore All Settings from SD** *(button)* | Loads settings back from that file — useful after a factory reset or when cloning settings to another unit. If there is no backup on the card, it tells you rather than doing nothing. The card is **never** applied automatically at boot: an old backup on the card used to silently overwrite every change made since the last Backup press, which is why Restore is now operator-only. |
+| **SD Card on Info (touchscreen)** | Mount status, free space, whether `backup.json` is present, plus **Backup SD** / **Restore SD**. Full directory listing stays on the web SD Card tab. |
 | **SD Card browser** | The web dashboard **SD Card** tab lists every managed file (logs + `backup.json`) with size and modified time (local timezone — Australia/Perth on this build), plus card stats: mounted/name, used/free/total space, bus speed, and this-boot read/write counts (for lifespan estimation — consumer cards do not expose wear SMART data). Download and delete are available from the same table; `backup.json` can be downloaded but not deleted. |
 | **Events tab** *(live)* | Web **Events** tab streams the same alarm / fault / defrost / WiFi lines that are appended to `events.csv`, as they happen this boot. Pause or clear the view without touching the SD file. |
 | **Auto-Remount** | If the card fails mid-session (removed, corrupted), the controller checks every 60 seconds and automatically resumes logging/backup the moment a working card is present again — **no reboot needed**. It does *not* automatically restore your settings on reconnect (to avoid overwriting anything you changed while the card was out); it only resumes logging and lets you press Restore manually if you want to. |
@@ -722,9 +731,9 @@ There are **two completely separate locks** on this system — don't confuse the
 
 | | Web Dashboard Login | Touchscreen Settings PIN |
 |---|---|---|
-| **What it protects** | Every web-dashboard setting + admin function | Only the 7 touchscreen settings pages |
+| **What it protects** | Every web-dashboard setting + admin function | Only the 8 touchscreen settings pages |
 | **Credential** | The device's one HTTP username/password (`secrets.yaml`, set at build time) | 4-digit PIN, factory default `0000`, changeable on-device |
-| **How to change it** | Not changeable from the dashboard — requires re-flashing firmware with new `secrets.yaml` values (re-run `scripts/embed_dashboard.py` before compile) | Touchscreen: Settings 1/7 → Change PIN |
+| **How to change it** | Not changeable from the dashboard — requires re-flashing firmware with new `secrets.yaml` values (re-run `scripts/embed_dashboard.py` before compile) | Touchscreen: Settings 1/8 → Change PIN |
 | **Session behavior** | Logs out silently after 2 minutes of inactivity (no banner); never persisted across a page reload | Stays unlocked until you navigate back to Home |
 
 **Web dashboard has exactly two states** — there is no third "admin" or "superadmin" tier
@@ -740,11 +749,10 @@ guests can load live metrics without a password. Treat your site network (or VPN
 actual security perimeter, same as you would for any other network appliance. Full detail:
 `reference/RBAC_USER_GUIDE.md` and `reference/AUTHENTICATION_GUIDE.md`.
 
-This two-tier model is the **intended, permanent design** for this system — not a stopgap
-awaiting a future "real" multi-account/role-based system. A guest can always see everything
-on the main display without logging in; a single operator login elevates to settings and
-administration. Real server-side authorization (separate accounts, enforced permissions)
-would only be worth building if a genuine multi-user need arises later.
+This two-tier model is the **intended, permanent design** for this system — not a stopgap.
+A guest can always see everything on the main display without logging in; a single operator
+login elevates to settings and administration. Real multi-user / multi-account server auth
+is **not required** for this project (closed 2026-08-01).
 
 **Deliberately web-only, never added to the touchscreen** (by explicit design, not an
 oversight): WiFi configuration (§4.10), Home Assistant API enable (§4.10), the web
@@ -764,9 +772,9 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 
 | Item | What it shows |
 |---|---|
-| System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. Wall clock uses the ESP32-P4 internal LP RTC; NTP over Wi‑Fi keeps it accurate. With a cell in the board’s RTC battery holder, time can survive power cuts; without it, expect pending time until first NTP after every hard power loss. |
+| System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. Wall clock uses the ESP32-P4 internal LP RTC; NTP over Wi‑Fi keeps it accurate. With a cell in the board’s RTC battery holder, time can survive power cuts; without it, expect pending time until first NTP after every hard power loss. The Info page **System Time** line shows how long ago the last NTP sync landed — the controller polls every **60 s** until the first sync, then settles to **weekly** once the clock is valid. |
 | Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU is the average busy percentage across both P4 cores over the last sample window (typically a few seconds). The web dashboard EMA-smooths the displayed CPU so a hard page refresh does not briefly flash a reconnect spike; the touchscreen Info page shows the raw windowed value. |
-| SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9) |
+| SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9). The touchscreen Info page shows card total plus used/free in MB **and percent**, and whether a `backup.json` is present. |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
 | System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 = humidity sensors detected on the I2C header. |
 | Sensor Fallback Active | Whether the compressor is currently running the fallback duty cycle from §4.1/§4.7 |
@@ -875,18 +883,18 @@ starts open (fan stays off until Fan Relay Enabled and the compressor call for i
 | Group | Touchscreen page | Web dashboard section |
 |---|---|---|
 | Home icons (status / light / mute) | Home left rail | — (touchscreen only) |
-| Temperature Control & Compressor | Settings 1/7 | Temperature Control, Compressor (incl. Fan Relay Enabled) |
-| Defrost Schedule | Settings 2/7 | Defrost |
-| Defrost — Smart & Drip | Settings 3/7 | Defrost |
-| Alarm Thresholds | Settings 4/7 | Alarms |
-| Alarms — Advanced | Settings 5/7 | Alarms |
-| Audio Alerts (speaker) | — (web only for now) | Audio tab |
-| Door (sensor, light, hold compressor) | Settings 6/7 | Door |
-| Probes & Sensors | Settings 7/7 | Probes & Sensors |
-| Notifications | Alarms & Notify tab | — (web only; push goes to phone) |
-| Data & SD Card | Info (status only) | SD Card tab |
-| Events (live log) | — | Events tab |
-| Wireless | Info (status only) | Wireless tab |
+| Temperature Control & Compressor | Settings 1/8 | Temperature Control, Compressor (incl. Fan Relay Enabled) |
+| Defrost Schedule | Settings 2/8 | Defrost |
+| Defrost — Smart & Drip | Settings 3/8 | Defrost |
+| Alarm Thresholds | Settings 4/8 | Alarms |
+| Alarms — Advanced | Settings 5/8 | Alarms |
+| Audio Alerts (speaker) | Settings 8/8 | Audio tab |
+| Door (sensor, light, hold compressor) | Settings 6/8 | Door |
+| Probes & Sensors | Settings 7/8 | Probes & Sensors |
+| Notifications | — (web only; no keyboard on LVGL) | Alarms & Notify tab |
+| Data & SD Card | Info (status + Backup/Restore) | SD Card tab (full file list) |
+| Events (live log) | — (home alarms cover live status) | Events tab |
+| Wireless | Info (SSID/signal/IP only) | Wireless tab (change Wi‑Fi) |
 | Access Control & Security | Settings PIN entry | Login; PIN on Hardware tab |
 | System & Diagnostics | Info | System, Diagnostics |
 | Hardware & Relay Outputs (coil map / enables) | — | Hardware tab |

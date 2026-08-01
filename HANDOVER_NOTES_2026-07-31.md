@@ -1,4 +1,4 @@
-# Handover Notes — 2026-07-31 (updated 2026-08-01)
+# Handover Notes — 2026-07-31 (updated 2026-08-01 evening)
 
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
 **Closeout:** persistence live-proven; compile + NVS-safe flash mandatory at every
@@ -16,18 +16,23 @@ Verified on hardware 2026-08-01:
 6. ✅ Settings survive **reboot** (live-tested). They do **not** survive a USB factory flash.
 7. ✅ Rotating multi-fault centre status + spoken alerts + ntfy hardware-offline pushes.
 8. ✅ Compressor gated on RS485 relay board online; fallback ON window held while locked out.
+9. ✅ LVGL Settings **1/8–8/8** menu on glass (Cory, evening) — Audio, Comp Min Run,
+   Skip-If-Cold / Force-Max, Frost Rate, Ice enable+dwell, probe sources + calibrate.
+10. ✅ Info page: Memory `|` / System Time `—` glyphs; SD used/free %; NTP sync age.
 
 Still open / hardware-gated:
 - Probes tab Raw / Offset / Corrected (raw stays `--` until RTD online).
 - End-to-end Modbus control once relay/RTD boards are fitted.
-- Manual screenshots still placeholders in USER_MANUAL / Quick Start.
-- Carel control decisions pending: asymmetric hysteresis, min ON-time, fan control,
-  door-open cooling pause (see session_recaps 2026-07-25).
+- Manual screenshots still placeholders in USER_MANUAL / Quick Start (camera only).
+- Dashboard OTA UI.
 
 Already closed (do not re-chase):
+- Carel A–D — `reference/CAREL_CONTROL_DECISIONS.md` (2026-08-01).
 - Door Sensor Mode ≠ light relay (separate Door-Triggered Light switch).
 - `opendir`/`readdir` SD listing — fixed via `esp32.disable_vfs_support_dir: false`.
 - Virtual preview synced to live gauge + Audio / Alarms & Notify (2026-08-01).
+- Web SD log download; multi-user auth not required; mic on hold.
+- LVGL framebuffer screenshot component — declined.
 
 ## Bench (unchanged)
 

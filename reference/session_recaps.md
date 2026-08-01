@@ -4,6 +4,56 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Evening) — Closeout: LVGL 8-page settings glass-confirmed
+
+- Cory confirmed the new LVGL Settings menu (**1/8–8/8**, including Audio) is on glass.
+- Closeout commit bundles: Temperature Display Unit (°C/°F), LVGL settings parity,
+  Info tofu-glyph / SD used% / NTP sync-age latch, manuals + memory-bank.
+- Still open: RS485/RTD bench, Probes live values, manual camera screenshots,
+  dashboard OTA UI. Mic/auth/screenshot-component declined or not required.
+
+## 2026-08-01 (Evening) — Info page: tofu glyphs, SD percentages, NTP status latch
+
+- **Tofu boxes** on Info were missing glyphs: `|` (Memory line) and `—` (System Time
+  line) were absent from `font_small/medium/large`. Added to all three.
+- SD now reports card total plus **used/free in MB and percent** (used % to two
+  decimals), and backup presence.
+- **NTP status bug**: ESP-IDF's `sntp_get_sync_status()` clears `COMPLETED` on the first
+  read, so the Info label and the `NTP Sync Status` text sensor were consuming each
+  other's flag — the panel almost always read "awaiting NTP refresh". Latched the sync
+  in `p4_helpers.h` (`p4_ntp_mark_synced` / `p4_ntp_sync_age_s`, set from `on_time_sync`);
+  Info now shows the age of the last sync.
+- Schedule unchanged: 60 s polling until first sync, then weekly once the clock is valid.
+- Control logic remains `millis()`-only — wall clock is display/logging only.
+
+## 2026-08-01 (Evening) — LVGL settings parity (8 pages)
+
+- Expanded touchscreen settings to **1/8–8/8**. Fixed page-1 Fan Relay vs Fallback OFF
+  overlap; added Comp Min Run, Skip-If-Cold / Force-Max, Frost Rate, Ice enable+dwell,
+  Probe 1/2 sources + Calibrate, and full **Audio** page.
+- Info page: SD status detail + Backup/Restore. Full SD directory, Events, and Wireless
+  *changes* stay web-only (SSID/signal still on Info).
+- ntfy URL/topic/priorities remain web-only (no LVGL keyboard).
+- Coverage OK; compile clean; NVS-safe flash to `/dev/cu.usbmodem213401`. Docs updated.
+  Glass-confirmed later same evening.
+
+## 2026-08-01 (Evening) — Restore Celsius / Fahrenheit display preference
+
+- Added **Temperature Display Unit** (`Celsius` default / `Fahrenheit`) to LVGL
+  Settings 7/7, web Probes & Sensors, and Home Assistant.
+- LVGL home/readings/settings and web gauge/secondary/probe/hardware temperature
+  readouts convert for display; control math, settings, logs, and API sensors stay °C.
+- Added absolute-temperature vs temperature-delta formatters so offsets/hysteresis
+  scale by 9/5 without incorrectly adding 32.
+
+## 2026-08-01 (Evening) — Close deferred product items (Cory)
+
+- Web SD **log download** confirmed working → closed.
+- Real **multi-user server auth** → not required (guest + operator is permanent).
+- **Microphone / voice** → on hold; may not be used (no mic fitted).
+- Still deferred: LVGL audio toggles, dashboard OTA UI.
+- Still open: RS485/RTD on bench, manual screenshots.
+
 ## 2026-08-01 (Evening) — Docs pass for Carel C/D + fan/door-hold
 
 - Updated USER_MANUAL (§2.3 setup, §4.1/§4.6/§4.13, troubleshooting, Document Map),

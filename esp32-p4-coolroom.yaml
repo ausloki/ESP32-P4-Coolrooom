@@ -528,6 +528,7 @@ time:
           // After first sync (or any later correction), settle to the normal
           // interval. If VBAT already held time at boot we may already be on
           // the longer cadence from on_boot — that is fine to keep.
+          p4_ntp_mark_synced();
           if (p4_wall_clock_ok())
             p4_ntp_set_interval(${ntp_with_rtc_sync_ms});
           else
@@ -1752,6 +1753,28 @@ switch:
 ##############################################################################
 
 select:
+  # Display preference only: all control math, persisted values, Modbus data,
+  # logs, and native-API temperature sensors remain canonical Celsius. Home
+  # Assistant applies its own unit-system conversion to temperature sensors;
+  # this select is also published to HA so automations can choose the LVGL/web
+  # presentation unit.
+  - platform: template
+    id: sel_temperature_display_unit
+    name: "Temperature Display Unit"
+    icon: "mdi:temperature-celsius"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Celsius"
+    options: ["Celsius", "Fahrenheit"]
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 0
+    set_action:
+      - lambda: 'ESP_LOGI("config", "Temperature display unit = %s", x.c_str());'
+      - script.execute: refresh_temperature_display
+      - script.execute: refresh_all_settings_labels
+
   - platform: template
     id: sel_ntfy_prio_high_temp
     name: "High Temp Alarm Priority"
@@ -2033,7 +2056,9 @@ sensor:
     on_value:
       - lvgl.label.update:
           id: lbl_coolroom_temp_large
-          text: !lambda 'return p4_fmt_temp(x, false);'
+          text: !lambda |-
+            return p4_fmt_temp(
+                x, id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.arc.update:
           id: home_temp_arc
           value: !lambda |-
@@ -2077,7 +2102,9 @@ sensor:
     on_value:
       - lvgl.label.update:
           id: lbl_evap_temp_large
-          text: !lambda 'return p4_fmt_temp(x, false);'
+          text: !lambda |-
+            return p4_fmt_temp(
+                x, id(sel_temperature_display_unit).current_option() == "Fahrenheit");
 
   # Pre-offset RTD readings for web Probes tab (corrected = probe1/2_temp above).
   - platform: template
@@ -2169,9 +2196,9 @@ sensor:
       - lvgl.label.update:
           id: lbl_int_humidity_large
           text: !lambda |-
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Int %.1f°C\n%.0f%%RH", x, id(probe_internal_humidity).state);
-            return std::string(buf);
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Int " + p4_fmt_temp(x, f) + "\n" +
+                   p4_fmt_humidity(id(probe_internal_humidity).state);
 
   - platform: template
     id: probe_internal_humidity
@@ -2191,9 +2218,9 @@ sensor:
       - lvgl.label.update:
           id: lbl_int_humidity_large
           text: !lambda |-
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Int %.1f°C\n%.0f%%RH", id(probe_internal_temp).state, x);
-            return std::string(buf);
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Int " + p4_fmt_temp(id(probe_internal_temp).state, f) + "\n" +
+                   p4_fmt_humidity(x);
 
   - platform: template
     id: probe_external_temp
@@ -2213,9 +2240,9 @@ sensor:
       - lvgl.label.update:
           id: lbl_ext_humidity_large
           text: !lambda |-
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Ext %.1f°C\n%.0f%%RH", x, id(probe_external_humidity).state);
-            return std::string(buf);
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Ext " + p4_fmt_temp(x, f) + "\n" +
+                   p4_fmt_humidity(id(probe_external_humidity).state);
       - lvgl.arc.update:
           id: home_ambient_arc
           value: !lambda 'return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
@@ -2238,9 +2265,9 @@ sensor:
       - lvgl.label.update:
           id: lbl_ext_humidity_large
           text: !lambda |-
-            char buf[32];
-            snprintf(buf, sizeof(buf), "Ext %.1f°C\n%.0f%%RH", id(probe_external_temp).state, x);
-            return std::string(buf);
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Ext " + p4_fmt_temp(id(probe_external_temp).state, f) + "\n" +
+                   p4_fmt_humidity(x);
 
   # ── Probe staleness diagnostics ────────────────────────────────────────────
   - platform: template
@@ -4657,9 +4684,8 @@ interval:
       - lvgl.label.update:
           id: lbl_setpoint_status
           text: !lambda |-
-            char buf[16];
-            snprintf(buf, sizeof(buf), "Set: %.1f\u00b0C", id(ctl_setpoint));
-            return std::string(buf);
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Set: " + p4_fmt_temp(id(ctl_setpoint), f);
       - lvgl.arc.update:
           id: home_setpoint_arc
           value: !lambda |-
@@ -4852,19 +4878,44 @@ interval:
             float free_mb = id(sd_free_mb).state;
             float total_mb = p4_sd_total_mb();
             if (total_mb > 0)
-              snprintf(buf, sizeof(buf), "SD: mounted  %.0f / %.0f MB free", free_mb, total_mb);
+              snprintf(buf, sizeof(buf), "SD: mounted  %.0f MB total", total_mb);
             else
               snprintf(buf, sizeof(buf), "SD: mounted  %.0f MB free", free_mb);
             return std::string(buf);
       - lvgl.label.update:
+          id: lbl_info_sd_detail
+          text: !lambda |-
+            if (!id(sd_card_ok))
+              return std::string("Logs/files: use web SD tab");
+            char buf[96];
+            const float total_mb = p4_sd_total_mb();
+            const float free_mb = id(sd_free_mb).state;
+            if (total_mb > 0 && free_mb >= 0) {
+              const float used_mb = total_mb - free_mb;
+              snprintf(buf, sizeof(buf),
+                       "Used %.0f MB (%.2f%%)  Free %.0f MB (%.0f%%)  backup: %s",
+                       used_mb, used_mb * 100.0f / total_mb,
+                       free_mb, free_mb * 100.0f / total_mb,
+                       p4_sd_backup_present() ? "yes" : "no");
+            } else {
+              snprintf(buf, sizeof(buf), "Free %.0f MB  backup: %s", free_mb,
+                       p4_sd_backup_present() ? "yes" : "no");
+            }
+            return std::string(buf);
+      - lvgl.label.update:
           id: lbl_info_rtc
           text: !lambda |-
-            if (p4_wall_clock_ok()) {
-              if (p4_ntp_synced())
-                return std::string("Time: valid — SoC LP RTC + NTP");
-              return std::string("Time: valid — SoC LP RTC (awaiting NTP refresh)");
-            }
-            return std::string("Time: pending — waiting for first NTP sync");
+            if (!p4_wall_clock_ok())
+              return std::string("Time: pending — waiting for first NTP sync");
+            const int32_t age_s = p4_ntp_synced() ? p4_ntp_sync_age_s() : -1;
+            if (age_s < 0)
+              return std::string("Time: valid — LP RTC held, no NTP sync yet");
+            char buf[64];
+            if (age_s < 3600)
+              snprintf(buf, sizeof(buf), "Time: valid — NTP synced %d min ago", (int)(age_s / 60));
+            else
+              snprintf(buf, sizeof(buf), "Time: valid — NTP synced %.1f h ago", age_s / 3600.0f);
+            return std::string(buf);
       - lambda: |-
           id(system_time_valid).publish_state(p4_wall_clock_ok());
       - lvgl.led.update:
@@ -5899,15 +5950,17 @@ font:
   - file: "gfonts://Roboto"
     id: font_large
     size: 28
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>"
+    # '|' (memory line) and '—' (info/status text) render as tofu boxes when
+    # missing — keep them in every text font that shows generated strings.
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|—"
   - file: "gfonts://Roboto"
     id: font_medium
     size: 20
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|—"
   - file: "gfonts://Roboto"
     id: font_small
     size: 15
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|—"
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: font_mdi
     size: 28
@@ -6522,7 +6575,7 @@ lvgl:
         # always resets the PIN buffer and forces the lock flag false before
         # showing the keypad — same rule as the old S3 project's single
         # entry point (no per-category tab shortcuts on this project either
-        # any more; PIN gate is the only path into the 7 settings pages).
+        # any more; PIN gate is the only path into the 8 settings pages).
         - button:
             x: 0
             y: 552
@@ -6596,7 +6649,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "1/7 Compressor", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "1/8 Compressor", text_font: font_medium, text_color: col_text}
               - button:
                   id: btn_change_pin
                   x: 820
@@ -6628,7 +6681,7 @@ lvgl:
             scrollable: true
             scrollbar_mode: "AUTO"
             widgets:
-              - label: {x: 0, y: 0, width: 460, text: "Setpoint (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Setpoint", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
                   y: 30
@@ -6681,7 +6734,7 @@ lvgl:
                         on_click:
                           - number.decrement: {id: setpoint, cycle: false}
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 500, y: 0, width: 460, text: "Comp Hysteresis (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Comp Hysteresis", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
                   y: 30
@@ -6824,10 +6877,10 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_fallback_enabled
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 500, y: 216, width: 460, text: "Fan Relay Enable", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 324, width: 460, text: "Fan Relay Enable", text_font: font_medium, text_color: col_text}
               - obj:
-                  x: 500
-                  y: 246
+                  x: 0
+                  y: 354
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -6967,6 +7020,59 @@ lvgl:
                         on_click:
                           - number.decrement: {id: fallback_off_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 324, width: 460, text: "Comp Min Run (min)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_minrun, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: comp_min_run_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: comp_min_run_min, cycle: false}
+                          - script.execute: refresh_all_settings_labels
         - button:
             x: 0
             y: 552
@@ -6977,7 +7083,7 @@ lvgl:
             radius: 0
             widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
-              - lvgl.page.show: page_settings_7
+              - lvgl.page.show: page_settings_8
         - button:
             x: 342
             y: 552
@@ -7016,7 +7122,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "2/7 Defrost Schedule", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "2/8 Defrost Schedule", text_font: font_medium, text_color: col_text}
         - obj:
             x: 12
             y: 64
@@ -7208,7 +7314,7 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_defrost_term_temp
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 216, width: 460, text: "Term Temp (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 216, width: 460, text: "Term Temp", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
                   y: 246
@@ -7324,6 +7430,149 @@ lvgl:
                   widgets: [{label: {align: CENTER, text: "Stop Defrost Now", text_font: font_medium, text_color: col_text}}]
                   on_click:
                     - button.press: btn_manual_defrost_stop
+              - label: {x: 0, y: 432, width: 460, text: "Skip-If-Cold", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_skipcold, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_defrost_skip_cold
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 432, width: 460, text: "Skip-If-Cold Below", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_skipbelow, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: defrost_skip_below_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: defrost_skip_below_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 540, width: 460, text: "Force-Max Interval (min)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 570
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_forcemax, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: defrost_force_max_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: defrost_force_max_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
         - button:
             x: 0
             y: 552
@@ -7373,7 +7622,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "3/7 Defrost Smart", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "3/8 Defrost Smart", text_font: font_medium, text_color: col_text}
         - obj:
             x: 12
             y: 64
@@ -7475,7 +7724,7 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_smart_defrost
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 108, width: 460, text: "Smart Delta (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 108, width: 460, text: "Smart Delta", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
                   y: 138
@@ -7618,6 +7867,149 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_dew_point_trigger
                           - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 324, width: 460, text: "Frost Rate Enable", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_frostrate, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_frost_rate_monitoring
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 324, width: 460, text: "Frost RH Drop (%)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_frostrh, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: frost_rate_rh_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: frost_rate_rh_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 432, width: 460, text: "Frost Window (s)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_frostwin, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: frost_rate_window_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: frost_rate_window_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
         - button:
             x: 0
             y: 552
@@ -7667,7 +8059,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "4/7 Alarm Thresholds", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "4/8 Alarm Thresholds", text_font: font_medium, text_color: col_text}
         - obj:
             x: 12
             y: 64
@@ -7838,7 +8230,7 @@ lvgl:
                         on_click:
                           - number.decrement: {id: alarm_persist_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 500, y: 108, width: 460, text: "Recovery Hyst (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 108, width: 460, text: "Recovery Hyst", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
                   y: 138
@@ -7977,7 +8369,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "5/7 Alarms Advanced", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "5/8 Alarms Advanced", text_font: font_medium, text_color: col_text}
         - obj:
             x: 12
             y: 64
@@ -7989,7 +8381,7 @@ lvgl:
             scrollable: true
             scrollbar_mode: "AUTO"
             widgets:
-              - label: {x: 0, y: 0, width: 460, text: "Ice Alarm Delta (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Ice Alarm Delta", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
                   y: 30
@@ -8201,6 +8593,96 @@ lvgl:
                         on_click:
                           - number.decrement: {id: defrost_grace_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 216, width: 460, text: "Ice Detection Enable", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_iceen, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_ice_detect_enabled
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 216, width: 460, text: "Ice Dwell (min)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_icedwell, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: ice_dwell_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: ice_dwell_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
         - button:
             x: 0
             y: 552
@@ -8250,7 +8732,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "6/7 Door", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "6/8 Door", text_font: font_medium, text_color: col_text}
         - obj:
             x: 12
             y: 64
@@ -8512,7 +8994,7 @@ lvgl:
             radius: 0
             pad_all: 0
             widgets:
-              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "7/7 Probes", text_font: font_medium, text_color: col_text}
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "7/8 Probes", text_font: font_medium, text_color: col_text}
         - obj:
             x: 12
             y: 64
@@ -8524,7 +9006,7 @@ lvgl:
             scrollable: true
             scrollbar_mode: "AUTO"
             widgets:
-              - label: {x: 0, y: 0, width: 460, text: "Probe 1 Offset (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 0, width: 460, text: "Probe 1 Offset", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
                   y: 30
@@ -8577,7 +9059,7 @@ lvgl:
                         on_click:
                           - number.decrement: {id: probe1_offset_c, cycle: false}
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 500, y: 0, width: 460, text: "Probe 2 Offset (°C)", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 0, width: 460, text: "Probe 2 Offset", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
                   y: 30
@@ -8741,6 +9223,137 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_humidity_external_enabled
                           - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 216, width: 460, text: "Temperature Display Unit", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_temp_display_unit, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle °C / °F", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - select.next:
+                              id: sel_temperature_display_unit
+                              cycle: true
+                          - script.execute: refresh_temperature_display
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 324, width: 460, text: "Probe 1 Source", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sel_p1src, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Cycle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - select.next:
+                              id: sel_probe1_type
+                              cycle: true
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 324, width: 460, text: "Probe 2 Source", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sel_p2src, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Cycle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - select.next:
+                              id: sel_probe2_type
+                              cycle: true
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 432, width: 460, text: "Auto Calibrate", text_font: font_medium, text_color: col_text}
+              - button:
+                  x: 0
+                  y: 462
+                  width: 460
+                  height: 56
+                  bg_color: col_blue
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  widgets: [{label: {align: CENTER, text: "Calibrate Probes Now", text_font: font_medium, text_color: col_text}}]
+                  on_click:
+                    - button.press: btn_calibration_start
         - button:
             x: 0
             y: 552
@@ -8752,6 +9365,799 @@ lvgl:
             widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
             on_click:
               - lvgl.page.show: page_settings_6
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Home", text_font: font_medium}}]
+            on_click:
+              - script.execute: switch_to_page_home
+        - button:
+            x: 684
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "Next >", text_font: font_medium}}]
+            on_click:
+              - lvgl.page.show: page_settings_8
+
+    - id: page_settings_8
+      bg_color: col_bg
+      on_load:
+        - script.execute: refresh_all_settings_labels
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 56
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label: {x: 16, y: 0, width: 780, height: 56, align: LEFT_MID, text: "8/8 Audio", text_font: font_medium, text_color: col_text}
+        - obj:
+            x: 12
+            y: 64
+            width: 1000
+            height: 480
+            bg_color: col_bg
+            border_width: 0
+            pad_all: 0
+            scrollable: true
+            scrollbar_mode: "AUTO"
+            widgets:
+              - label: {x: 0, y: 0, width: 460, text: "Audio Alerts Enable", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 30
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_audioen, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alerts_enabled
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 0, width: 460, text: "Speaker Volume (%)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 30
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_vol, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: audio_volume_pct, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: audio_volume_pct, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 108, width: 460, text: "Test Speaker", text_font: font_medium, text_color: col_text}
+              - button:
+                  x: 0
+                  y: 138
+                  width: 460
+                  height: 56
+                  bg_color: col_blue
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  widgets: [{label: {align: CENTER, text: "Test Speaker", text_font: font_medium, text_color: col_text}}]
+                  on_click:
+                    - button.press: btn_audio_test
+              - label: {x: 500, y: 108, width: 460, text: "Speaker Amplifier", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 138
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_pa, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: audio_pa_enable
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 216, width: 460, text: "Speak High Temp", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_ahigh, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_high
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 216, width: 460, text: "Speak Low Temp", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_alow, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_low
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 324, width: 460, text: "Speak Door Alarm", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_adoor, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_door
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 324, width: 460, text: "Speak No-Cool", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_anocool, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_no_cool
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 432, width: 460, text: "Speak Ice", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_aice, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_ice
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 432, width: 460, text: "Speak Probe Fault", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_aprobe, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_probe
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 540, width: 460, text: "Speak Relay Offline", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 570
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_arelay, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_relay_board
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 540, width: 460, text: "Speak Temp Offline", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 570
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_atemp, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_temp_board
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 648, width: 460, text: "Speak Hum Offline", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 678
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_ahum, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_humidity_sensor
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 648, width: 460, text: "Speak Amb Offline", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 678
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_aamb, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_alarm_ambient_sensor
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 756, width: 460, text: "Speak Cool On", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 786
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_acoolon, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_info_cooling_on
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 756, width: 460, text: "Speak Cool Off", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 786
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_acooloff, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_info_cooling_off
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 864, width: 460, text: "Speak Defrost On", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 894
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_adefon, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_info_defrost_on
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 864, width: 460, text: "Speak Defrost Off", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 894
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_adefoff, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_info_defrost_off
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 0, y: 972, width: 460, text: "Speak Door Opened", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 1002
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_adooropen, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_info_door_open
+                          - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 972, width: 460, text: "Speak Door Closed", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 1002
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_adoorclose, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_audio_info_door_closed
+                          - script.execute: refresh_all_settings_labels
+        - button:
+            x: 0
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets: [{label: {align: CENTER, text: "< Prev", text_font: font_medium}}]
+            on_click:
+              - lvgl.page.show: page_settings_7
         - button:
             x: 342
             y: 552
@@ -8834,10 +10240,36 @@ lvgl:
               - label: {id: lbl_info_probes, x: 500, y: 112, width: 470, text: "---", text_font: font_medium, text_color: col_text}
               - label: {x: 500, y: 200, width: 470, text: "SD Card", text_font: font_medium, text_color: col_subtext}
               - label: {id: lbl_info_sd, x: 500, y: 232, width: 470, text: "---", text_font: font_medium, text_color: col_text}
-              - label: {x: 500, y: 280, width: 470, text: "Compressor Lockout", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_lockout_timer_display, x: 500, y: 312, width: 470, text: "Ready", text_font: font_medium, text_color: col_text}
-              - label: {x: 500, y: 360, width: 470, text: "System Time", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_rtc, x: 500, y: 392, width: 470, text: "Pending NTP", text_font: font_small, text_color: col_subtext}
+              - label: {id: lbl_info_sd_detail, x: 500, y: 264, width: 470, text: "---", text_font: font_small, text_color: col_subtext}
+              - button:
+                  x: 500
+                  y: 300
+                  width: 230
+                  height: 48
+                  bg_color: col_blue
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  widgets: [{label: {align: CENTER, text: "Backup SD", text_font: font_small, text_color: col_text}}]
+                  on_click:
+                    - button.press: btn_sd_backup
+              - button:
+                  x: 740
+                  y: 300
+                  width: 230
+                  height: 48
+                  bg_color: col_blue
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  widgets: [{label: {align: CENTER, text: "Restore SD", text_font: font_small, text_color: col_text}}]
+                  on_click:
+                    - button.press: btn_sd_restore
+                    - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 368, width: 470, text: "Compressor Lockout", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_lockout_timer_display, x: 500, y: 400, width: 470, text: "Ready", text_font: font_medium, text_color: col_text}
+              - label: {x: 500, y: 448, width: 470, text: "System Time", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_rtc, x: 500, y: 480, width: 470, text: "Pending NTP", text_font: font_small, text_color: col_subtext}
 
         - button:
             x: 0
@@ -9470,11 +10902,15 @@ script:
       - lvgl.label.update:
           id: lbl_st_setpoint
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_setpoint)); return std::string(b);
+            return p4_fmt_temp(
+                id(ctl_setpoint),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_compdiff
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_comp_diff)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_comp_diff),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_lockout
           text: !lambda |-
@@ -9511,7 +10947,9 @@ script:
       - lvgl.label.update:
           id: lbl_st_defend
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_defrost_end_c)); return std::string(b);
+            return p4_fmt_temp(
+                id(ctl_defrost_end_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_sw_defdripen
           text: !lambda 'return std::string(id(input_defrost_drip_enabled) ? "ON" : "OFF");'
@@ -9528,7 +10966,9 @@ script:
       - lvgl.label.update:
           id: lbl_st_smartdelta
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_smart_delta_c)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_smart_delta_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_smartdwell
           text: !lambda |-
@@ -9541,11 +10981,15 @@ script:
       - lvgl.label.update:
           id: lbl_st_alarmhi
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_alarm_high_delta)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_alarm_high_delta),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_alarmlo
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_alarm_low_delta)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_alarm_low_delta),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_alarmpersist
           text: !lambda |-
@@ -9553,7 +10997,9 @@ script:
       - lvgl.label.update:
           id: lbl_st_alarmhyst
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_alarm_hysteresis_c)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_alarm_hysteresis_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_sw_siren
           text: !lambda 'return std::string(id(input_siren_enabled) ? "ON" : "OFF");'
@@ -9562,7 +11008,9 @@ script:
       - lvgl.label.update:
           id: lbl_st_icedelta
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_ice_delta_c)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_ice_delta_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_nocool
           text: !lambda |-
@@ -9603,11 +11051,15 @@ script:
       - lvgl.label.update:
           id: lbl_st_p1off
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_probe1_offset_c)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_probe1_offset_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_st_p2off
           text: !lambda |-
-            char b[16]; snprintf(b, sizeof(b), "%.1f°C", id(ctl_probe2_offset_c)); return std::string(b);
+            return p4_fmt_temp_delta(
+                id(ctl_probe2_offset_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_sw_probe2
           text: !lambda 'return std::string(id(input_probe2_enabled) ? "ON" : "OFF");'
@@ -9620,6 +11072,173 @@ script:
           id: lbl_sw_shtext
           text: !lambda 'return std::string(id(input_humidity_external_enabled) ? "ON" : "OFF");'
           text_color: !lambda 'return id(input_humidity_external_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_temp_display_unit
+          text: !lambda |-
+            return id(sel_temperature_display_unit).current_option() == "Fahrenheit"
+                ? std::string("°F") : std::string("°C");
+
+      - lvgl.label.update:
+          id: lbl_st_minrun
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_comp_min_run_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_skipcold
+          text: !lambda 'return std::string(id(input_defrost_skip_cold_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_defrost_skip_cold_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_skipbelow
+          text: !lambda |-
+            return p4_fmt_temp(
+                id(ctl_defrost_skip_below_c),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_st_forcemax
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_defrost_force_max_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_frostrate
+          text: !lambda 'return std::string(id(input_frost_rate_monitoring_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_frost_rate_monitoring_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_frostrh
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%.1f %%", id(ctl_frost_rate_humidity_threshold_pct)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_st_frostwin
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d s", (int) id(ctl_frost_rate_window_s)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_iceen
+          text: !lambda 'return std::string(id(input_ice_detect_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_ice_detect_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_icedwell
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_ice_dwell_min)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sel_p1src
+          text: !lambda |-
+            const std::string o = id(sel_probe1_type).current_option();
+            if (o == "SHT31 I2C") return std::string("SHT31");
+            if (o == "Unused") return std::string("Off");
+            return std::string("RTD");
+      - lvgl.label.update:
+          id: lbl_sel_p2src
+          text: !lambda |-
+            return id(sel_probe2_type).current_option() == "Unused"
+                ? std::string("Off") : std::string("RTD");
+      - lvgl.label.update:
+          id: lbl_sw_audioen
+          text: !lambda 'return std::string(id(input_audio_alerts_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alerts_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_vol
+          text: !lambda |-
+            char b[16]; snprintf(b, sizeof(b), "%d %%", (int) id(ctl_audio_volume_pct)); return std::string(b);
+      - lvgl.label.update:
+          id: lbl_sw_pa
+          text: !lambda 'return std::string(id(audio_pa_enable).state ? "ON" : "OFF");'
+          text_color: !lambda 'return id(audio_pa_enable).state ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_ahigh
+          text: !lambda 'return std::string(id(input_audio_alarm_high) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_high) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_alow
+          text: !lambda 'return std::string(id(input_audio_alarm_low) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_low) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_adoor
+          text: !lambda 'return std::string(id(input_audio_alarm_door) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_door) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_anocool
+          text: !lambda 'return std::string(id(input_audio_alarm_no_cool) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_no_cool) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_aice
+          text: !lambda 'return std::string(id(input_audio_alarm_ice) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_ice) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_aprobe
+          text: !lambda 'return std::string(id(input_audio_alarm_probe) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_probe) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_arelay
+          text: !lambda 'return std::string(id(input_audio_alarm_relay_board) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_relay_board) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_atemp
+          text: !lambda 'return std::string(id(input_audio_alarm_temp_board) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_temp_board) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_ahum
+          text: !lambda 'return std::string(id(input_audio_alarm_humidity_sensor) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_humidity_sensor) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_aamb
+          text: !lambda 'return std::string(id(input_audio_alarm_ambient_sensor) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_alarm_ambient_sensor) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_acoolon
+          text: !lambda 'return std::string(id(input_audio_info_cooling_on) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_info_cooling_on) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_acooloff
+          text: !lambda 'return std::string(id(input_audio_info_cooling_off) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_info_cooling_off) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_adefon
+          text: !lambda 'return std::string(id(input_audio_info_defrost_on) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_info_defrost_on) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_adefoff
+          text: !lambda 'return std::string(id(input_audio_info_defrost_off) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_info_defrost_off) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_adooropen
+          text: !lambda 'return std::string(id(input_audio_info_door_open) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_info_door_open) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_adoorclose
+          text: !lambda 'return std::string(id(input_audio_info_door_closed) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_audio_info_door_closed) ? id(col_green) : id(col_grey);'
+
+  # Refresh every temperature readout immediately when the display-unit select
+  # changes. Sensor callbacks will keep these synchronized on later readings.
+  - id: refresh_temperature_display
+    then:
+      - lvgl.label.update:
+          id: lbl_coolroom_temp_large
+          text: !lambda |-
+            return p4_fmt_temp(
+                id(probe1_temp).state,
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_setpoint_status
+          text: !lambda |-
+            return "Set: " + p4_fmt_temp(
+                id(ctl_setpoint),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_evap_temp_large
+          text: !lambda |-
+            return p4_fmt_temp(
+                id(probe2_temp).state,
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_int_humidity_large
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Int " + p4_fmt_temp(id(probe_internal_temp).state, f) + "\n" +
+                   p4_fmt_humidity(id(probe_internal_humidity).state);
+      - lvgl.label.update:
+          id: lbl_ext_humidity_large
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Ext " + p4_fmt_temp(id(probe_external_temp).state, f) + "\n" +
+                   p4_fmt_humidity(id(probe_external_humidity).state);
 
   - id: ntfy_high_alarm_request
     then:
@@ -9939,7 +11558,7 @@ script:
   # the old per-tab switch_to_page_settings_{1,2,3} scripts (each independently
   # PIN-gated with its own target). Same model as the old S3 project: one
   # "Settings" button, one PIN prompt, always land on page 1; Prev/Next then
-  # move freely between pages 1-7 with no re-gating.
+  # move freely between pages 1-8 with no re-gating.
   - id: switch_to_page_home
     then:
       - lambda: |-

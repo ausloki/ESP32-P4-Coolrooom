@@ -63,13 +63,14 @@ on any browser on your network.
 
 | # | Group | Touchscreen | What lives here |
 |---|---|---|---|
-| 1 | Compressor & Fallback | Settings 1/7 | Setpoint, differential, lockout, min run, Fan Relay Enable, sensor-fault fallback |
-| 2 | Defrost Schedule | Settings 2/7 | On/off, fixed interval, max duration, early-stop-by-temp, drip |
-| 3 | Defrost Smart & Drip | Settings 3/7 | Drip time, delta-triggered defrost, dew-point trigger |
-| 4 | Alarm Thresholds | Settings 4/7 | High/low temp alarm deltas, persist time, siren |
-| 5 | Alarms Advanced | Settings 5/7 | Ice alarm, no-cool alarm, startup/defrost grace, hysteresis |
-| 6 | Door | Settings 6/7 | Sensor on/off, NC/NO, door light, hold compressor while open, alarm delay |
-| 7 | Probes | Settings 7/7 | Calibration offsets, probe/humidity sensor enables |
+| 1 | Compressor & Fallback | Settings 1/8 | Setpoint, differential, lockout, min run, Fan Relay Enable, sensor-fault fallback |
+| 2 | Defrost Schedule | Settings 2/8 | On/off, interval, duration, early-stop, drip, Skip-If-Cold, Force-Max |
+| 3 | Defrost Smart & Drip | Settings 3/8 | Drip time, smart delta, dew-point, frost-rate |
+| 4 | Alarm Thresholds | Settings 4/8 | High/low temp alarm deltas, persist time, siren |
+| 5 | Alarms Advanced | Settings 5/8 | Ice enable/dwell/delta, no-cool, startup/defrost grace |
+| 6 | Door | Settings 6/8 | Sensor on/off, NC/NO, door light, hold compressor while open, alarm delay |
+| 7 | Probes | Settings 7/8 | Display unit, sources, offsets, calibrate, probe/humidity enables |
+| 8 | Audio | Settings 8/8 | Master enable, volume, test, speak toggles, amp diagnostic |
 
 WiFi, the web login password, and SD card log-delete are **web-dashboard only** — by design,
 not an oversight. Full explanation: User Manual §4.11. The web dashboard also carries tabs
@@ -84,12 +85,18 @@ toggle the light manually (when Light Relay Enabled is on). Snowflake and flame 
 status-only; tap the bell to soft-mute the siren (bell stays red, stops jiggling; a new
 alarm type re-animates).
 
-**Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/7 — not the
+**Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/8 — not the
 home flame icon. Defrost System Enabled gates automatic starts only. Defrost is always
 **passive** here (compressor held off; any heater is external). **Fan Relay Enabled**
 (coil 0, default **off**) gates the evaporator fan — when on, the fan follows the compressor
-and stops during defrost/drip. Same toggle on touchscreen Settings 1/7, web Compressor, and
+and stops during defrost/drip. Same toggle on touchscreen Settings 1/8, web Compressor, and
 Hardware → Fan.
+
+**Celsius / Fahrenheit:** use **Temperature Display Unit** on touchscreen Settings 7/8
+or web **Probes & Sensors**. Celsius is the default. The choice changes LVGL/web readouts,
+not the controller's Celsius calculations or saved thresholds. It is also available in
+Home Assistant as `select.temperature_display_unit`; HA converts its temperature sensors
+according to HA's own unit-system setting.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before

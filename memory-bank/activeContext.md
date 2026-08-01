@@ -15,24 +15,36 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 - Coverage checker + persist-script staging check green
 - Rotating centre status + matching audio + ntfy hardware-offline
 - Virtual preview aligned with live gauge / Audio / Alarms & Notify (2026-08-01)
+- Temperature Display Unit restored: Celsius default / Fahrenheit, LVGL + web + HA
+- LVGL settings **1/8–8/8** on glass (Cory confirmed 2026-08-01 evening) — Audio page,
+  Comp Min Run, Skip-If-Cold / Force-Max, Frost Rate, Ice enable+dwell, probe sources
+- Info page: glyph fix (`|` / `—`), SD used/free %, NTP sync-age latch
+- Web-only by design: Wireless change, Events, ntfy URL/priorities, SD file list
 - Rule: `.cursor/rules/home-gauge-design.mdc` (always apply)
 
-## Closed this session (can-do-now punch list)
+## Closed this session
 
-1. ✅ Virtual preview sync (no pink strip; rotating fault labels; ADVANCED_SETTINGS parity)
-2. ✅ `opendir`/log listing — already fixed (`disable_vfs_support_dir: false`); noted closed
-3. ✅ Stale handover / activeContext refreshed
-4. ✅ Device spot-check: no `settingsGate` / `alarm-banner`; Status rotates
-   `HUMIDITY SENSOR OFFLINE` (SHT enabled, not fitted); Hardware Offline Priority = urgent
+1. ✅ Virtual preview sync
+2. ✅ SD `opendir`/`readdir` (already fixed; noted closed)
+3. ✅ °C/°F display preference
+4. ✅ LVGL settings parity (8 pages) — glass-confirmed
+5. ✅ Info tofu glyphs / SD percentages / NTP status latch
+6. ✅ Carel A–D (+ manuals)
 
 ## Still open
 
 - Probes tab live Raw/Offset/Corrected (needs RTD on bench)
-- Manual screenshots still placeholders
-- Carel **A** not required; **B** done; **D** + fan relay implemented 2026-08-01
-  (see `reference/CAREL_CONTROL_DECISIONS.md`)
-- Deferred product: mic/voice, LVGL audio toggles, web log download, dashboard OTA UI,
-  multi-user server auth
+- Manual screenshots still placeholders (camera captures only; no FB screenshot tool)
+- Dashboard OTA UI
+- End-to-end Modbus once relay/RTD boards are fitted
+
+## On hold / not required
+
+- Microphone / voice input — no mic fitted; may not be used on this project
+  (see `reference/AUDIO_ALERTS.md`)
+- Real multi-user web auth — not required; guest + single operator login is the
+  permanent model
+- LVGL framebuffer screenshot component — declined
 
 ## Leave for later (bench)
 

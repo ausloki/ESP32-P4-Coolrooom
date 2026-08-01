@@ -1747,6 +1747,7 @@
             'switch-light_relay_enabled': 'relay_en_light',
             'switch-siren_relay_enabled': 'relay_en_siren',
             'switch-home_assistant_api_enabled': 'ha_api_enabled',
+            'select-temperature_display_unit': 'temperature_display_unit',
         };
 
         // Settings → Hardware. Each output pairs its live coil state with the
@@ -1767,7 +1768,10 @@
             'ha_api_enabled',
         ]);
 
-        const TEXT_FIELDS = new Set(['wifi_ssid', 'ip_address', 'psram_status_text', 'controller_status']);
+        const TEXT_FIELDS = new Set([
+            'wifi_ssid', 'ip_address', 'psram_status_text', 'controller_status',
+            'temperature_display_unit',
+        ]);
 
         function parseStates(states) {
             const data = {};
@@ -1860,6 +1864,25 @@
             return Math.max(0, Math.min(100, pct));
         }
 
+        let useFahrenheitDisplay = false;
+
+        function fmtTemp(tempC, fallback = '--') {
+            if (typeof tempC !== 'number' || isNaN(tempC)) {
+                return `${fallback}°${useFahrenheitDisplay ? 'F' : 'C'}`;
+            }
+            const value = useFahrenheitDisplay ? (tempC * 9 / 5 + 32) : tempC;
+            return `${value.toFixed(1)}°${useFahrenheitDisplay ? 'F' : 'C'}`;
+        }
+
+        function fmtTempDelta(deltaC, fallback = '--') {
+            if (typeof deltaC !== 'number' || isNaN(deltaC)) {
+                return `${fallback}°${useFahrenheitDisplay ? 'F' : 'C'}`;
+            }
+            const value = useFahrenheitDisplay ? (deltaC * 9 / 5) : deltaC;
+            const sign = value > 0 ? '+' : '';
+            return `${sign}${value.toFixed(1)}°${useFahrenheitDisplay ? 'F' : 'C'}`;
+        }
+
         function setGaugeArc(id, radius, percent) {
             const el = document.getElementById(id);
             if (!el) return;
@@ -1899,14 +1922,14 @@
             const tempEl = document.getElementById('gaugeTemp');
             if (!tempEl) return;
             const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
-            tempEl.textContent = hasTemp ? `${data.temperature.toFixed(1)}°C` : '--°C';
+            tempEl.textContent = fmtTemp(hasTemp ? data.temperature : NaN);
             tempEl.style.color = temperatureStateColor(data);
 
             const arcOuter = document.getElementById('gaugeArcOuter');
             if (arcOuter) arcOuter.style.stroke = '#0A84FF';
 
             setText('gaugeSetpoint',
-                typeof data.setpoint === 'number' && !isNaN(data.setpoint) ? `Set: ${data.setpoint.toFixed(1)}°C` : 'Set: --°C');
+                `Set: ${fmtTemp(data.setpoint)}`);
 
             const statusEl = document.getElementById('gaugeStatus');
             if (!statusEl) return;
@@ -1950,6 +1973,7 @@
         }
 
         function updateDashboard(data) {
+            useFahrenheitDisplay = data.temperature_display_unit === 'Fahrenheit';
             updateGauge(data);
 
             // Left icon rail — same set, order, and on/off convention as the LVGL
@@ -1990,12 +2014,11 @@
 
             const fmtReading = (temp, rh) =>
                 (typeof temp === 'number' && !isNaN(temp) && typeof rh === 'number' && !isNaN(rh))
-                    ? `${temp.toFixed(1)}°C · ${rh.toFixed(0)}%RH`
-                    : '--°C · --%RH';
+                    ? `${fmtTemp(temp)} · ${rh.toFixed(0)}%RH`
+                    : `${fmtTemp(NaN)} · --%RH`;
             setText('readingInternal', fmtReading(data.int_temp, data.int_humidity));
             setText('readingExternal', fmtReading(data.ext_temp, data.ext_humidity));
-            setText('readingEvaporator',
-                typeof data.evap_temp === 'number' && !isNaN(data.evap_temp) ? `${data.evap_temp.toFixed(1)}°C` : '--°C');
+            setText('readingEvaporator', fmtTemp(data.evap_temp));
 
             let rs485Html = '';
             rs485Html += `Relay: <span class="status-badge ${data.rs485_relay_ok ? 'status-ok' : 'status-error'}">${data.rs485_relay_ok ? '✓' : '✗'}</span>`;
@@ -2055,7 +2078,7 @@
             setHtml('hwSht20', okBadge(data.sht20_ok));
             setHtml('hwSdCard', okBadge(data.sd_card_ok));
             setText('hwChipTemp',
-                typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--');
+                fmtTemp(data.chip_temp));
             setText('hwHeap', data.heap_free_kb ? `${data.heap_free_kb} KB` : '--');
             setText('hwCpu', formatCpuUsagePct(data.cpu_usage_pct));
             setText('hwPsram', data.psram_free_kb ? `${data.psram_free_kb} KB` : '--');
@@ -2444,6 +2467,9 @@
             {
                 title: 'Probe Calibration & Enable',
                 fields: [
+                    { type: 'select', entity: 'temperature_display_unit', name: 'Temperature Display Unit', label: 'Temperature Display Unit',
+                      options: ['Celsius', 'Fahrenheit'],
+                      help: 'Display preference for the LVGL touchscreen and web dashboard temperature readouts. Default Celsius. Control math, stored settings, logs, and API sensor payloads remain Celsius; Home Assistant converts temperature sensors using its own unit system. This select is exposed to HA.' },
                     { type: 'select', entity: 'probe_1__coolroom__source', name: 'Probe 1 (Coolroom) Source', label: 'Probe 1 (Coolroom) Source',
                       options: ['RTD RS485', 'SHT31 I2C', 'Unused'],
                       help: 'Which sensor feeds coolroom control. RTD RS485 is the Modbus board (not connected on the current bench). SHT31 uses the on-board internal humidity sensor as the coolroom temperature source.' },
@@ -2670,13 +2696,11 @@
         }
 
         function fmtProbeTemp(v) {
-            return (typeof v === 'number' && !isNaN(v)) ? `${v.toFixed(1)}°C` : '--';
+            return fmtTemp(v);
         }
 
         function fmtProbeOffset(v) {
-            if (typeof v !== 'number' || isNaN(v)) return '--';
-            const sign = v > 0 ? '+' : '';
-            return `${sign}${v.toFixed(1)}°C`;
+            return fmtTempDelta(v);
         }
 
         function updateProbeLiveReadings(data) {

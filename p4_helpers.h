@@ -57,10 +57,35 @@ inline void p4_log_boot() {
 
 // ─── NTP / Time ────────────────────────────────────────────────────────────
 
-/// True once SNTP has completed at least one successful sync.
+/// Sticky record of the last successful SNTP sync. ESP-IDF's
+/// sntp_get_sync_status() clears COMPLETED back to RESET on the first read
+/// (components/lwip/apps/sntp/sntp.c), so polling it from more than one place
+/// means whichever caller reads first consumes the flag and every other caller
+/// sees "never synced". Latch it here instead.
+inline uint32_t &p4_ntp_last_sync_ms_ref() {
+    static uint32_t last_sync_ms = 0;   // 0 = no sync yet this boot
+    return last_sync_ms;
+}
+
+/// Record a completed sync. Called from the time component's on_time_sync.
+inline void p4_ntp_mark_synced() {
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    p4_ntp_last_sync_ms_ref() = now ? now : 1;
+}
+
+/// True once SNTP has completed at least one successful sync this boot.
 inline bool p4_ntp_synced() {
-    const sntp_sync_status_t s = esp_sntp_get_sync_status();
-    return s == SNTP_SYNC_STATUS_COMPLETED;
+    if (esp_sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED)
+        p4_ntp_mark_synced();
+    return p4_ntp_last_sync_ms_ref() != 0;
+}
+
+/// Seconds since the last successful SNTP sync, or -1 if none this boot.
+inline int32_t p4_ntp_sync_age_s() {
+    const uint32_t last = p4_ntp_last_sync_ms_ref();
+    if (last == 0) return -1;
+    const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    return (int32_t)((now - last) / 1000U);
 }
 
 /// Format wall-clock time into caller-supplied buffer as "DD-MM-YYYY HH:MM:SS".
@@ -159,6 +184,27 @@ inline std::string p4_fmt_temp(float t_c, bool use_fahrenheit,
     } else {
         snprintf(buf, sizeof(buf), "%.1f°C", t_c);
     }
+    return std::string{buf};
+}
+
+/// Format a temperature difference/offset. Fahrenheit deltas scale by 9/5
+/// without the +32 absolute-temperature offset.
+inline std::string p4_fmt_temp_delta(float delta_c, bool use_fahrenheit,
+                                      const char* na_text = "---") {
+    if (!std::isfinite(delta_c)) return std::string{na_text};
+    char buf[16];
+    if (use_fahrenheit) {
+        snprintf(buf, sizeof(buf), "%.1f°F", delta_c * 9.0f / 5.0f);
+    } else {
+        snprintf(buf, sizeof(buf), "%.1f°C", delta_c);
+    }
+    return std::string{buf};
+}
+
+inline std::string p4_fmt_humidity(float rh, const char* na_text = "--%RH") {
+    if (!std::isfinite(rh)) return std::string{na_text};
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%.0f%%RH", rh);
     return std::string{buf};
 }
 

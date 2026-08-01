@@ -619,10 +619,9 @@ set aside for a separate clarification rather than guessed at).
 
 **Build**: RAM 20.1% (+288 B), Flash 20.8% (+1.4 KB). Compile clean.
 
-**Item 8 — resolved by decision, not built**: asked the user to pick (skip / minimal reverse-proxy
-/ wait for ESPHome upstream multi-account support) rather than guess at scope. Answer: skip for
-now, no concrete multi-user need identified. Revisit only if that changes; keep not reintroducing
-fake role tiers meanwhile. See `reference/session_recaps.md`'s matching entry.
+**Item 8 — closed 2026-08-01**: multi-user server auth is **not required**. Guest + single
+operator login is the permanent model. Do not reintroduce fake role tiers.
+See `reference/session_recaps.md` (2026-08-01 evening triage).
 
 **Untested on hardware** — the new countdown sensors and the fixed lockout label haven't been
 observed through a real compressor/defrost cycle yet.

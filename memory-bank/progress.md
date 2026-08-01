@@ -1,5 +1,42 @@
 # Progress Tracking
 
+## 2026-08-01 — Evening closeout (glass confirm + commit)
+
+- Cory confirmed LVGL Settings **1/8–8/8** menu present on glass.
+- Bundled closeout: °C/°F, LVGL settings parity, Info glyphs/SD%/NTP latch, manuals,
+  coverage + compile + NVS-safe flash already done earlier this evening.
+
+## 2026-08-01 — Info page glyphs / SD percent / NTP latch
+
+- Added `|` and `—` to `font_small/medium/large` (were rendering as tofu boxes).
+- Info SD line: total + used/free MB with percentages + backup presence (used % to
+  two decimals so nearly-empty cards show e.g. `0.04%`).
+- Fixed self-clearing `sntp_get_sync_status()` race by latching sync state in
+  `p4_helpers.h`; Info shows last-sync age. Poll cadence: 60 s → weekly after sync.
+
+## 2026-08-01 — LVGL settings parity (8 pages)
+
+- Fixed page-1 Fan Relay / Fallback OFF overlap; added Comp Min Run.
+- Added Skip-If-Cold / Force-Max (p2), Frost Rate (p3), Ice enable+dwell (p5),
+  Probe sources + Calibrate (p7), full Audio page 8/8.
+- Info: SD detail + Backup/Restore; full SD directory stays web-only.
+- Web-only by design: Wireless change, Events, ntfy text/priorities.
+- Coverage OK; compile clean; NVS-safe flash `/dev/cu.usbmodem213401`.
+
+## 2026-08-01 — Celsius / Fahrenheit display preference restored
+
+- Added NVS-restored **Temperature Display Unit** select (Celsius default / Fahrenheit).
+- Published to HA; added to LVGL Settings 7/8 and web Probes & Sensors.
+- LVGL/web temperature readouts convert without changing Celsius control math, logs,
+  stored thresholds, or native-API sensor payloads.
+
+## 2026-08-01 — Outstanding-items triage (log download / auth / mic)
+
+- Closed: web SD log download (confirmed working); multi-user server auth (not required).
+- On hold: microphone / voice input (no mic; may not ship).
+- Still deferred: LVGL audio toggles, dashboard OTA UI.
+- Still open: RS485+RTD bench bring-up, manual screenshot placeholders.
+
 ## 2026-08-01 — Can-do-now punch list closed
 
 - Synced `assets/dashboard_virtual_preview.html` to live Coolroom Status (no pink strip,
@@ -594,14 +631,18 @@
 - [ ] Fit RS485 relay + RTD boards; verify end-to-end cooling + Probes tab Raw/Offset/Corrected
 - [ ] Replace USER_MANUAL / Quick Start screenshot placeholders with real captures
 - [x] Carel follow-ups closed 2026-08-01 (A not required, B already done, C fan relay, D door hold)
-      door-open cooling pause
+- [x] Web SD log download — confirmed working 2026-08-01 (dashboard SD Card tab)
+- [x] Multi-user server auth — **not required**; guest + single operator login is permanent
 
-**Deferred enhancements:**
+**Still deferred:**
 
-- [ ] Microphone / voice input (see `reference/AUDIO_ALERTS.md`)
 - [ ] LVGL toggles for audio (web-only today)
-- [ ] Web log download / dashboard OTA UI
-- [ ] Real multi-user server auth (ESPHome limitation)
+- [ ] Dashboard OTA UI
+
+**On hold (may not ship):**
+
+- [~] Microphone / voice input — no mic on current hardware; may not be used
+      (see `reference/AUDIO_ALERTS.md`)
 
 **Note:** Older Phase 4 “flash and verify home page” checklist items are done — device is
 in daily use on the bench.
