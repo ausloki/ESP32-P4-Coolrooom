@@ -91,6 +91,84 @@ inline bool p4_ui_any_banner_alarm(bool hi, bool lo, bool door, bool no_cool, bo
     return hi || lo || door || no_cool || ice;
 }
 
+// ─── Home centre status (rotating multi-fault) ─────────────────────────────
+
+/// Inputs for the home-gauge centre status line. Hardware offline bits are only
+/// raised when that path is actually in use (RTD expected / SHT enabled).
+struct P4UiHomeStatusIn {
+    bool     relay_ok;
+    bool     rtd_ok;
+    bool     rtd_expected;
+    bool     sht31_enabled;
+    bool     sht31_ok;
+    bool     sht20_enabled;
+    bool     sht20_ok;
+    bool     probe_fault;
+    bool     alarm_hi;
+    bool     alarm_lo;
+    bool     alarm_door;
+    bool     alarm_no_cool;
+    bool     alarm_ice;
+    bool     defrost;
+    bool     compressor_on;
+    bool     lockout;
+    uint32_t rotate_period_ms;  // 0 → 2500 ms
+};
+
+inline size_t p4_ui_home_status_collect_(const P4UiHomeStatusIn &in,
+                                         const char **out, size_t cap) {
+    size_t n = 0;
+    auto push = [&](const char *s) {
+        if (n < cap) out[n++] = s;
+    };
+    if (!in.relay_ok)                              push("RELAY BOARD OFFLINE");
+    if (in.rtd_expected && !in.rtd_ok)              push("TEMP BOARD OFFLINE");
+    if (in.sht31_enabled && !in.sht31_ok)           push("HUMIDITY SENSOR OFFLINE");
+    if (in.sht20_enabled && !in.sht20_ok)           push("AMBIENT SENSOR OFFLINE");
+    if (in.probe_fault)                            push("COOLROOM PROBE BAD");
+    if (in.alarm_hi)                               push("HIGH TEMP");
+    if (in.alarm_lo)                               push("LOW TEMP");
+    if (in.alarm_door)                             push("DOOR OPEN");
+    if (in.alarm_no_cool)                          push("NOT COOLING");
+    if (in.alarm_ice)                              push("ICE ON COIL");
+    return n;
+}
+
+/// True when at least one fault/offline/alarm slot is active (centre text red).
+inline bool p4_ui_home_status_is_fault(const P4UiHomeStatusIn &in) {
+    const char *slots[12];
+    return p4_ui_home_status_collect_(in, slots, 12) > 0;
+}
+
+/// Centre status string. With multiple faults, advances rotate_idx every
+/// rotate_period_ms so the operator sees each one in turn. With none, falls
+/// through to DEFROST / COOLING / LOCKOUT / OK.
+inline std::string p4_ui_home_status_text(const P4UiHomeStatusIn &in,
+                                          uint32_t &rotate_idx,
+                                          uint32_t &rotate_last_ms) {
+    const char *slots[12];
+    const size_t n = p4_ui_home_status_collect_(in, slots, 12);
+    if (n == 0) {
+        rotate_idx = 0;
+        rotate_last_ms = 0;
+        if (in.defrost) return std::string("DEFROST");
+        if (in.compressor_on) return std::string("COOLING");
+        if (in.lockout) return std::string("LOCKOUT");
+        return std::string("OK");
+    }
+    const uint32_t now = millis();
+    const uint32_t period = in.rotate_period_ms ? in.rotate_period_ms : 2500U;
+    if (rotate_last_ms == 0U) {
+        rotate_last_ms = now;
+        if (rotate_idx >= n) rotate_idx = 0;
+    } else if ((now - rotate_last_ms) >= period) {
+        rotate_last_ms = now;
+        rotate_idx = (rotate_idx + 1U) % static_cast<uint32_t>(n);
+    }
+    if (rotate_idx >= n) rotate_idx = 0;
+    return std::string(slots[rotate_idx]);
+}
+
 // ─── Left-rail icon animation (50 ms tick) ─────────────────────────────────
 
 /// Background FX: falling snow while compressor runs (suppressed on alarm/defrost).

@@ -578,9 +578,9 @@
             text-align: center;
             pointer-events: none;
         }
-        .gauge-temp { font-size: 46px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
-        .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
-        .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+        .gauge-temp { font-size: 58px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
+        .gauge-setpoint { font-size: 18px; color: #00BCD4; margin-top: 10px; font-weight: 500; }
+        .gauge-status { font-size: 14px; color: #FF9F0A; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
         /* Humidity/temp reading pills — same idea as the old project's
            .cr-reading side panel, condensed into a row under the gauge. */
         .gauge-readings {
@@ -1331,13 +1331,28 @@
             }
         }
 
-        function scheduleDashboardRefresh() {
-            // Coalesce bursts of SSE events into one render after the stream settles.
+        function scheduleDashboardRefresh(immediate = false) {
+            // Coalesce bursts of SSE events into one render after the stream
+            // settles — BUT the initial state_detail_all flood used to keep
+            // resetting a trailing-only 250ms timer, so the gauge stayed on
+            // "--" until every entity had arrived. Leading edge paints as soon
+            // as we have anything; trailing catch-up follows shortly after.
+            if (immediate) {
+                if (dashboardRefreshTimer) {
+                    clearTimeout(dashboardRefreshTimer);
+                    dashboardRefreshTimer = null;
+                }
+                fetchStatus();
+                return;
+            }
+            if (!dashboardRefreshTimer && liveEntities.size > 0) {
+                fetchStatus();
+            }
             if (dashboardRefreshTimer) clearTimeout(dashboardRefreshTimer);
             dashboardRefreshTimer = setTimeout(() => {
                 dashboardRefreshTimer = null;
                 fetchStatus();
-            }, 250);
+            }, 80);
         }
 
         async function fetchStatus() {
@@ -1381,13 +1396,17 @@
                 sseStatus = 'error';
                 return;
             }
-            const onState = (ev) => {
+            eventSource.addEventListener('state', (ev) => {
                 ingestEntityPayload(ev.data);
                 sseStatus = 'live';
-                scheduleDashboardRefresh();
-            };
-            eventSource.addEventListener('state', onState);
-            eventSource.addEventListener('state_detail_all', onState);
+                scheduleDashboardRefresh(false);
+            });
+            eventSource.addEventListener('state_detail_all', (ev) => {
+                ingestEntityPayload(ev.data);
+                sseStatus = 'live';
+                // Full snapshot — paint now, don't wait for the trickle to end.
+                scheduleDashboardRefresh(true);
+            });
             eventSource.addEventListener('ping', () => {
                 sseStatus = 'live';
                 activeApiUrl = url;
@@ -1713,6 +1732,7 @@
             'binary_sensor-rs485_relay_board_online': 'rs485_relay_ok',
             'binary_sensor-rs485_rtd_board_1_online': 'rs485_rtd_ok',
             'binary_sensor-system_time_valid': 'system_time_ok',
+            'text_sensor-status': 'controller_status',
             'binary_sensor-sht31__internal_humidity__online': 'sht31_ok',
             'binary_sensor-sht20__external_humidity__online': 'sht20_ok',
             'binary_sensor-controller_online': 'controller_online',
@@ -1765,7 +1785,7 @@
             'ha_api_enabled',
         ]);
 
-        const TEXT_FIELDS = new Set(['wifi_ssid', 'ip_address', 'psram_status_text']);
+        const TEXT_FIELDS = new Set(['wifi_ssid', 'ip_address', 'psram_status_text', 'controller_status']);
 
         function parseStates(states) {
             const data = {};
@@ -1908,15 +1928,29 @@
 
             const statusEl = document.getElementById('gaugeStatus');
             if (!statusEl) return;
-            if (data.probe_fault) {
-                statusEl.textContent = '⚠ Probe Fault';
+            // Firmware rotates the home centre status through every active
+            // fault; prefer that string so web and LVGL stay twins.
+            if (typeof data.controller_status === 'string' && data.controller_status.length) {
+                statusEl.textContent = data.controller_status;
+                const faultish = /OFFLINE|PROBE BAD|HIGH TEMP|LOW TEMP|DOOR OPEN|NOT COOLING|ICE ON COIL/.test(
+                    data.controller_status);
+                if (faultish) statusEl.style.color = '#FF453A';
+                else if (data.controller_status === 'DEFROST' || data.controller_status === 'LOCKOUT')
+                    statusEl.style.color = '#FF9F0A';
+                else if (data.controller_status === 'COOLING') statusEl.style.color = '#0A84FF';
+                else statusEl.style.color = '#30D158';
+            } else if (data.rs485_relay_ok === false) {
+                statusEl.textContent = '⚠ Relay Board Offline';
+                statusEl.style.color = '#FF453A';
+            } else if (data.probe_fault) {
+                statusEl.textContent = '⚠ Coolroom Probe Bad';
                 statusEl.style.color = '#FF453A';
             } else if (data.defrost_phase) {
                 statusEl.textContent = 'Defrost Active';
                 statusEl.style.color = '#FF9F0A';
             } else if (data.compressor_on) {
-                statusEl.textContent = 'Running';
-                statusEl.style.color = '#FF9F0A';
+                statusEl.textContent = 'Cooling';
+                statusEl.style.color = '#0A84FF';
             } else {
                 statusEl.textContent = 'Idle';
                 statusEl.style.color = '#8E8E93';
@@ -2328,11 +2362,19 @@
                     { type: 'switch', entity: 'speak_door_open_alarm', name: 'Speak Door Open Alarm', label: 'Speak Door Open Alarm',
                       help: 'Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves.' },
                     { type: 'switch', entity: 'speak_no-cool_alarm', name: 'Speak No-Cool Alarm', label: 'Speak No-Cool Alarm',
-                      help: 'Voice for the no-cooling alarm.' },
+                      help: 'Voice: “Attention. Not cooling.” when that alarm becomes active.' },
                     { type: 'switch', entity: 'speak_ice_alarm', name: 'Speak Ice Alarm', label: 'Speak Ice Alarm',
-                      help: 'Voice for the ice / blocked-coil alarm.' },
+                      help: 'Voice: “Attention. Ice on coil.”' },
                     { type: 'switch', entity: 'speak_probe_fault', name: 'Speak Probe Fault', label: 'Speak Probe Fault',
-                      help: 'Voice when the main coolroom probe fails.' },
+                      help: 'Voice: “Attention. Coolroom probe bad.” when the main coolroom probe fails.' },
+                    { type: 'switch', entity: 'speak_relay_board_offline', name: 'Speak Relay Board Offline', label: 'Speak Relay Board Offline',
+                      help: 'Voice when the Modbus relay board stops responding (matches centre status RELAY BOARD OFFLINE).' },
+                    { type: 'switch', entity: 'speak_temp_board_offline', name: 'Speak Temp Board Offline', label: 'Speak Temp Board Offline',
+                      help: 'Voice when the RS485 temperature-probe board stops responding (TEMP BOARD OFFLINE).' },
+                    { type: 'switch', entity: 'speak_humidity_sensor_offline', name: 'Speak Humidity Sensor Offline', label: 'Speak Humidity Sensor Offline',
+                      help: 'Voice when the enabled cabinet humidity/temp sensor (SHT31) stops answering.' },
+                    { type: 'switch', entity: 'speak_ambient_sensor_offline', name: 'Speak Ambient Sensor Offline', label: 'Speak Ambient Sensor Offline',
+                      help: 'Voice when the enabled ambient sensor (SHT20) stops answering.' },
                     { type: 'switch', entity: 'speak_cooling_started', name: 'Speak Cooling Started', label: 'Speak Cooling Started',
                       help: 'Info voice when the compressor starts.' },
                     { type: 'switch', entity: 'speak_cooling_stopped', name: 'Speak Cooling Stopped', label: 'Speak Cooling Stopped',

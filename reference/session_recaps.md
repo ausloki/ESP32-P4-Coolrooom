@@ -4,6 +4,36 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Audio alerts match rotating fault labels
+
+- Regenerated speech clips to match centre status wording; added four hardware-offline
+  phrases (relay board / temp board / humidity sensor / ambient sensor).
+- Edge-triggered speak + SD event log on rising offline; per-toggle on Audio tab.
+
+---
+
+## 2026-08-01 (Afternoon) — Rotating multi-fault centre status
+
+- Home gauge centre status (and `text_sensor.Status` / web twin) now rotates every 2.5 s
+  through every active fault in plain language: RELAY BOARD OFFLINE, TEMP BOARD OFFLINE,
+  HUMIDITY/AMBIENT SENSOR OFFLINE, COOLROOM PROBE BAD, hi/lo/door/not-cooling/ice.
+- Idle path unchanged: COOLING / DEFROST / LOCKOUT / OK. Helper in `p4_ui.h`.
+
+---
+
+## 2026-08-01 (Afternoon) — Compressor requires relay board; bigger centre fonts; faster web paint
+
+- Compressor start (hysteresis + fallback) and the step-10 force-off now require
+  `hw_rs485_relay_ok`. Without the Modbus RTU module the snowflake stays red, centre
+  status reads RELAY BOARD OFFLINE, and snow FX does not run — no fake "cooling" animation.
+  Fallback ON window is held (same path as the off-delay) while the board is down.
+- Web SSE: trailing-only 250 ms coalesce was reset by every entity in the initial
+  flood; now leading-edge paint + immediate refresh on `state_detail_all`.
+- Home gauge centre fonts enlarged (LVGL font_huge 64→80 with °C glyphs; setpoint
+  uses font_large; status font_medium). Web twin bumped to match.
+
+---
+
 ## 2026-08-01 (Afternoon) — Sensor fallback starved by the compressor off-delay
 
 - Bench symptom: probe fault + fallback enabled + lockout expired, compressor never ran.

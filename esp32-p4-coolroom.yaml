@@ -1414,6 +1414,90 @@ switch:
     lambda: 'return id(input_audio_alarm_probe);'
 
   - platform: template
+    id: sw_audio_alarm_relay_board
+    name: "Speak Relay Board Offline"
+    icon: "mdi:electric-switch"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_audio
+      sorting_weight: 16
+    turn_on_action:
+      - lambda: |-
+          id(input_audio_alarm_relay_board) = true;
+          ESP_LOGI("audio", "Speak Relay Board Offline ENABLED");
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_audio_alarm_relay_board) = false;
+          ESP_LOGI("audio", "Speak Relay Board Offline DISABLED");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_audio_alarm_relay_board);'
+
+  - platform: template
+    id: sw_audio_alarm_temp_board
+    name: "Speak Temp Board Offline"
+    icon: "mdi:thermometer-off"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_audio
+      sorting_weight: 17
+    turn_on_action:
+      - lambda: |-
+          id(input_audio_alarm_temp_board) = true;
+          ESP_LOGI("audio", "Speak Temp Board Offline ENABLED");
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_audio_alarm_temp_board) = false;
+          ESP_LOGI("audio", "Speak Temp Board Offline DISABLED");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_audio_alarm_temp_board);'
+
+  - platform: template
+    id: sw_audio_alarm_humidity_sensor
+    name: "Speak Humidity Sensor Offline"
+    icon: "mdi:water-percent-alert"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_audio
+      sorting_weight: 18
+    turn_on_action:
+      - lambda: |-
+          id(input_audio_alarm_humidity_sensor) = true;
+          ESP_LOGI("audio", "Speak Humidity Sensor Offline ENABLED");
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_audio_alarm_humidity_sensor) = false;
+          ESP_LOGI("audio", "Speak Humidity Sensor Offline DISABLED");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_audio_alarm_humidity_sensor);'
+
+  - platform: template
+    id: sw_audio_alarm_ambient_sensor
+    name: "Speak Ambient Sensor Offline"
+    icon: "mdi:home-thermometer-outline"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_audio
+      sorting_weight: 19
+    turn_on_action:
+      - lambda: |-
+          id(input_audio_alarm_ambient_sensor) = true;
+          ESP_LOGI("audio", "Speak Ambient Sensor Offline ENABLED");
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_audio_alarm_ambient_sensor) = false;
+          ESP_LOGI("audio", "Speak Ambient Sensor Offline DISABLED");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_audio_alarm_ambient_sensor);'
+
+  - platform: template
     id: sw_audio_info_cooling_on
     name: "Speak Cooling Started"
     icon: "mdi:snowflake"
@@ -2469,9 +2553,8 @@ binary_sensor:
       - lvgl.led.update:
           id: led_probe_fault
           brightness: !lambda 'return x ? 100.0f : 0.0f;'
-      - lvgl.label.update:
-          id: lbl_status_text
-          text: !lambda 'return x ? std::string("PROBE FAULT") : std::string("OK");'
+      # Centre status string is owned by the 1s home-screen tick (relay offline /
+      # probe fault / cooling / idle) so this path only drives the LED.
 
   # ── Phase 5: SD card health ──────────────────────────────────────────────
   - platform: template
@@ -3660,6 +3743,13 @@ interval:
           // control path is careful never to.
           const uint32_t lockout_ms = (uint32_t)(id(ctl_comp_lockout_min) * 60000.0f);
           bool locked_out = p4_ctl_comp_locked_out(id(ctl_comp_last_off_ms), lockout_ms);
+          // Compressor is the one output whose control logic must not pretend
+          // to run without the Modbus relay board: coil writes go nowhere,
+          // and the snowflake / snow FX would still animate from local state.
+          // Treat a missing board like the off-delay for start purposes so
+          // the fallback ON window is held, not spent, while the bus is down.
+          const bool relay_board_ok = id(hw_rs485_relay_ok);
+          const bool comp_start_blocked = locked_out || !relay_board_ok;
 
           // ── 4. Sensor fallback duty cycle (when probe is faulted) ───────
           bool fallback_run = p4_ctl_fallback_should_run(
@@ -3667,11 +3757,11 @@ interval:
               id(ctl_fallback_phase_on), id(ctl_fallback_last_toggle_ms),
               (uint32_t)(id(ctl_fallback_on_min)  * 60000.0f),
               (uint32_t)(id(ctl_fallback_off_min) * 60000.0f),
-              locked_out);
+              comp_start_blocked);
           if (fault) {
               id(ctl_sensor_fallback_active) = id(input_fallback_enabled);
               if (!id(ctl_defrost_active)) {
-                  if (fallback_run && !locked_out && !id(relay_compressor).state) {
+                  if (fallback_run && !comp_start_blocked && !id(relay_compressor).state) {
                       id(relay_compressor).turn_on();
                       id(ctl_comp_on_since_ms) = now_ms;
                   } else if (!fallback_run && id(relay_compressor).state) {
@@ -3893,7 +3983,7 @@ interval:
                               cmd = 0;
                           }
                       }
-                      if (cmd == 1) {
+                      if (cmd == 1 && relay_board_ok) {
                           id(relay_compressor).turn_on();
                           if (id(ctl_comp_on_since_ms) == 0) id(ctl_comp_on_since_ms) = now_ms;
                       }
@@ -4089,6 +4179,53 @@ interval:
                   id(ctl_ice_alarm_logged) = false;
                   p4_sd_log_event("ICE_ALARM_CLEAR", "delta recovered");
               }
+
+              // Hardware offline — matches the rotating centre-status labels.
+              // Speak once on the rising edge; clear the latch when the bus /
+              // sensor comes back (same pattern as probe fault).
+              if (!id(hw_rs485_relay_ok) && !id(ctl_relay_board_offline_logged)) {
+                  id(ctl_relay_board_offline_logged) = true;
+                  p4_sd_log_event("RELAY_BOARD_OFFLINE", "modbus relay no response");
+                  id(speak_alarm_relay_board).execute();
+              } else if (id(hw_rs485_relay_ok) && id(ctl_relay_board_offline_logged)) {
+                  id(ctl_relay_board_offline_logged) = false;
+                  p4_sd_log_event("RELAY_BOARD_ONLINE", "modbus relay recovered");
+              }
+
+              const bool rtd_expected =
+                  (id(input_probe1_type) == 0) ||
+                  (id(input_probe2_enabled) && id(input_probe2_type) == 0);
+              const bool rtd_offline = rtd_expected && !id(hw_rs485_rtd1_ok);
+              if (rtd_offline && !id(ctl_temp_board_offline_logged)) {
+                  id(ctl_temp_board_offline_logged) = true;
+                  p4_sd_log_event("TEMP_BOARD_OFFLINE", "modbus rtd no response");
+                  id(speak_alarm_temp_board).execute();
+              } else if (!rtd_offline && id(ctl_temp_board_offline_logged)) {
+                  id(ctl_temp_board_offline_logged) = false;
+                  p4_sd_log_event("TEMP_BOARD_ONLINE", "modbus rtd recovered");
+              }
+
+              const bool humidity_offline = id(input_humidity_internal_enabled) &&
+                  isnan(id(sht31_internal_temp_raw).state);
+              if (humidity_offline && !id(ctl_humidity_sensor_offline_logged)) {
+                  id(ctl_humidity_sensor_offline_logged) = true;
+                  p4_sd_log_event("HUMIDITY_SENSOR_OFFLINE", "sht31 no response");
+                  id(speak_alarm_humidity_sensor).execute();
+              } else if (!humidity_offline && id(ctl_humidity_sensor_offline_logged)) {
+                  id(ctl_humidity_sensor_offline_logged) = false;
+                  p4_sd_log_event("HUMIDITY_SENSOR_ONLINE", "sht31 recovered");
+              }
+
+              const bool ambient_offline = id(input_humidity_external_enabled) &&
+                  isnan(id(sht20_external_temp_raw).state);
+              if (ambient_offline && !id(ctl_ambient_sensor_offline_logged)) {
+                  id(ctl_ambient_sensor_offline_logged) = true;
+                  p4_sd_log_event("AMBIENT_SENSOR_OFFLINE", "sht20 no response");
+                  id(speak_alarm_ambient_sensor).execute();
+              } else if (!ambient_offline && id(ctl_ambient_sensor_offline_logged)) {
+                  id(ctl_ambient_sensor_offline_logged) = false;
+                  p4_sd_log_event("AMBIENT_SENSOR_ONLINE", "sht20 recovered");
+              }
           }
 
           // ── 8. SD temperature logging (Phase 5) ─────────────────────────
@@ -4187,7 +4324,11 @@ interval:
           // whether a coil may be energised — a disabled relay cannot be
           // energised by any path, including ones added later. Alarms, logging
           // and notifications are untouched: only the physical output stops.
-          if (!id(ctl_relay_compressor_enabled) && id(relay_compressor).state) {
+          // Compressor also requires the RS485 relay board online: without it
+          // there is nowhere for the coil write to go, so local "ON" would only
+          // drive the UI animation.
+          if ((!id(ctl_relay_compressor_enabled) || !id(hw_rs485_relay_ok)) &&
+              id(relay_compressor).state) {
               id(relay_compressor).turn_off();
               id(ctl_comp_last_off_ms) = now_ms;
               id(ctl_comp_on_since_ms) = 0;
@@ -4365,10 +4506,48 @@ interval:
           id: ui_compressor_icon
           text_color: !lambda |-
             if (id(relay_compressor).state) return id(col_blue);
-            if (!id(ctl_relay_compressor_enabled)) return id(col_red);
+            if (!id(hw_rs485_relay_ok) || !id(ctl_relay_compressor_enabled))
+                return id(col_red);
             float remaining_s = id(comp_lockout_remaining_sec).state;
             if (!isnan(remaining_s) && remaining_s > 0.0f) return id(col_orange);
             return id(col_grey);
+      - lambda: |-
+          // Centre status: rotate through every active fault/offline bit so
+          // RTU / RTD / SHT / probe / temp / door alarms are all visible when
+          // several are latched at once. Mirrored to text_sensor.status for
+          // the web gauge twin.
+          float remaining_s = id(comp_lockout_remaining_sec).state;
+          const bool rtd_expected =
+              (id(input_probe1_type) == 0) ||
+              (id(input_probe2_enabled) && id(input_probe2_type) == 0);
+          P4UiHomeStatusIn st_in{};
+          st_in.relay_ok        = id(hw_rs485_relay_ok);
+          st_in.rtd_ok          = id(hw_rs485_rtd1_ok);
+          st_in.rtd_expected    = rtd_expected;
+          st_in.sht31_enabled   = id(input_humidity_internal_enabled);
+          st_in.sht31_ok        = !isnan(id(sht31_internal_temp_raw).state);
+          st_in.sht20_enabled   = id(input_humidity_external_enabled);
+          st_in.sht20_ok        = !isnan(id(sht20_external_temp_raw).state);
+          st_in.probe_fault     = id(ctl_probe_fault);
+          st_in.alarm_hi        = id(ctl_alarm_high_active);
+          st_in.alarm_lo        = id(ctl_alarm_low_active);
+          st_in.alarm_door      = id(ctl_door_alarm_active);
+          st_in.alarm_no_cool   = id(ctl_no_cool_alarm_active);
+          st_in.alarm_ice       = id(ctl_ice_alarm_active);
+          st_in.defrost         = id(ctl_defrost_active) || id(ctl_defrost_dripping);
+          st_in.compressor_on   = id(relay_compressor).state;
+          st_in.lockout         = !isnan(remaining_s) && remaining_s > 0.0f;
+          st_in.rotate_period_ms = 2500;
+          std::string st = p4_ui_home_status_text(
+              st_in, id(ui_status_rotate_idx), id(ui_status_rotate_ms));
+          lv_label_set_text(id(lbl_status_text), st.c_str());
+          const bool faultish = p4_ui_home_status_is_fault(st_in);
+          lv_color_t col = id(col_green);
+          if (faultish) col = id(col_red);
+          else if (st_in.defrost || st_in.lockout) col = id(col_orange);
+          else if (st_in.compressor_on) col = id(col_blue);
+          lv_obj_set_style_text_color(id(lbl_status_text), col, 0);
+          if (id(status_text).state != st) id(status_text).publish_state(st);
       # Home setpoint readout. Previously updated only inside the Setpoint
       # number's set_action, so it kept its "Set: --°C" placeholder after every
       # reboot and ignored any change made from the web dashboard until someone
@@ -4862,6 +5041,17 @@ globals:
     restore_value: no
     initial_value: "0"
 
+  # Home centre status rotation when multiple faults/offline bits are active.
+  - id: ui_status_rotate_idx
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ui_status_rotate_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
   - id: ctl_defrost_on_since_ms
     type: uint32_t
     restore_value: no
@@ -4951,6 +5141,26 @@ globals:
     initial_value: "false"
 
   - id: ctl_ice_alarm_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_relay_board_offline_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_temp_board_offline_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_humidity_sensor_offline_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ambient_sensor_offline_logged
     type: bool
     restore_value: no
     initial_value: "false"
@@ -5379,6 +5589,22 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+  - id: input_audio_alarm_relay_board
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: input_audio_alarm_temp_board
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: input_audio_alarm_humidity_sensor
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: input_audio_alarm_ambient_sensor
+    type: bool
+    restore_value: yes
+    initial_value: "true"
 
   - id: input_audio_info_cooling_on
     type: bool
@@ -5539,9 +5765,10 @@ light:
 font:
   - file: "gfonts://Roboto"
     id: font_huge
-    size: 64
+    size: 80
     # Include '*' so PIN masking (p4_pin_masked) actually draws.
-    glyphs: "0123456789.-+NA *"
+    # °C required by p4_fmt_temp() on the home centre readout.
+    glyphs: "0123456789.-+NA *°C"
   - file: "gfonts://Roboto"
     id: font_large
     size: 28
@@ -6043,7 +6270,7 @@ lvgl:
                   id: lbl_coolroom_temp_large
                   text: "--°C"
                   align: CENTER
-                  y: -22
+                  y: -28
                   text_font: font_huge
                   text_color: col_blue
 
@@ -6052,17 +6279,17 @@ lvgl:
                   id: lbl_setpoint_status
                   text: "Set: --°C"
                   align: CENTER
-                  y: 44
-                  text_font: font_medium
+                  y: 48
+                  text_font: font_large
                   text_color: col_cyan
 
               # Status text (Running/Fault)
               - label:
                   id: lbl_status_text
-                  text: "Running"
+                  text: "OK"
                   align: CENTER
-                  y: 74
-                  text_font: font_small
+                  y: 86
+                  text_font: font_medium
                   text_color: col_orange
 
               # RIGHT PANEL: Secondary Readings — nudged out so the larger
@@ -9010,6 +9237,10 @@ script:
           input_audio_alarm_no_cool->update();
           input_audio_alarm_ice->update();
           input_audio_alarm_probe->update();
+          input_audio_alarm_relay_board->update();
+          input_audio_alarm_temp_board->update();
+          input_audio_alarm_humidity_sensor->update();
+          input_audio_alarm_ambient_sensor->update();
           input_audio_info_cooling_on->update();
           input_audio_info_cooling_off->update();
           input_audio_info_defrost_on->update();

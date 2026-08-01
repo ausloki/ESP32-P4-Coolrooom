@@ -385,8 +385,9 @@ inline float p4_ctl_calibration_offset(float sht31_ref_c, float probe_avg_c) {
 /// on a timed duty cycle (on_ms ON, off_ms OFF).
 /// Mutates phase_on and last_toggle_ms in-place; returns true if compressor should run.
 ///
-/// compressor_locked_out is the off-delay state from p4_ctl_comp_locked_out().
-/// The ON window must not burn down while the off-delay still forbids a start —
+/// compressor_locked_out is any reason the compressor must not start yet
+/// (off-delay from p4_ctl_comp_locked_out(), or the RS485 relay board offline).
+/// The ON window must not burn down while a start is still forbidden —
 /// the boot off-delay and the default ON time are both 3 min, so an unaware
 /// timer spent the whole ON phase locked out and the room got no run at all
 /// before flipping to the 27 min OFF phase.

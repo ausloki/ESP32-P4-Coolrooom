@@ -24,7 +24,14 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
    compressor off-delay (both default to 3 min, and boot seeds the off-delay), so the
    compressor never ran under probe fault. `p4_ctl_fallback_should_run()` now takes
    `compressor_locked_out` and holds the ON window instead of spending it.
-3. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
+3. ✅ Compressor gated on RS485 relay board online (2026-08-01): no coil → no start, red
+   snowflake, centre status **RELAY BOARD OFFLINE**, no snow FX. Fallback ON window held while
+   board is down. Web SSE first-paint fixed (leading edge + `state_detail_all`). Centre
+   fonts enlarged (LVGL 80 / web twin).
+4. ✅ Rotating multi-fault centre status + matching speech (2026-08-01): plain-language
+   labels (RELAY/TEMP BOARD OFFLINE, HUMIDITY/AMBIENT SENSOR OFFLINE, COOLROOM PROBE BAD,
+   …); audio clips + Audio-tab toggles edge-triggered with the status.
+5. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 
 ## Leave for later
 

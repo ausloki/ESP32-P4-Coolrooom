@@ -51,6 +51,22 @@ legal setpoint has a visible position on the cyan arc.
 | Light | Yes | Manual on/off for the cabinet light **when Light Relay Enabled** is on (§4.11). Ignored if that hardware enable is off. Door-Triggered Light (§4.6) can still drive the same relay from the door switch. |
 | Bell | Yes | Soft-mutes the siren and speech for the *current* set of alarms. Bell stops jiggling but stays red until those conditions clear. Banners and phone notifications keep going. Mute lifts when every alarm is gone, or immediately if a *new* alarm type appears (bell re-animates). |
 
+**Centre status line** (under the setpoint on the home gauge, and mirrored on the web
+gauge) shows one condition at a time. When several faults or offline sensors are active
+together, it **rotates** through them about every 2½ seconds so none are hidden behind a
+single priority string. Typical fault labels:
+
+| Label | Meaning |
+|---|---|
+| **RELAY BOARD OFFLINE** | Modbus relay board not responding (compressor cannot run) |
+| **TEMP BOARD OFFLINE** | RS485 temperature-probe board not responding (only when an RTD probe source is selected) |
+| **HUMIDITY SENSOR OFFLINE** | Internal cabinet humidity/temp sensor (SHT31) is enabled but not answering |
+| **AMBIENT SENSOR OFFLINE** | External/ambient sensor (SHT20) is enabled but not answering |
+| **COOLROOM PROBE BAD** | Coolroom control probe missing, stale, or implausible (§4.7) |
+| **HIGH TEMP** / **LOW TEMP** / **DOOR OPEN** / **NOT COOLING** / **ICE ON COIL** | Active alarms (§4.4–§4.6) |
+
+With nothing wrong it shows **COOLING**, **DEFROST**, **LOCKOUT**, or **OK**.
+
 > 📷 **Screenshot placeholder — Web Dashboard, guest view**
 > *(to be added once hardware is connected)*
 
@@ -201,10 +217,20 @@ against pressure that hasn't equalised is what the off-delay exists to prevent �
 room stays uncooled for up to the full Compressor Off-Delay after every restart. The
 countdown is shown under the snowflake on the touchscreen home screen and as *Compressor
 Lockout Remaining* on the web dashboard, and the snowflake is **amber** while it runs
-(grey = idle, blue = running, red = the relay has been disabled in §4.13). This applies to
-the fallback duty cycle in §4.7 as well — its ON window is **held**, not spent, while the
-off-delay is counting, so a fallback cycle that comes due during the lockout still gets its
-full ON Time once the lockout clears rather than being skipped.
+(grey = idle, blue = running, red = the relay has been disabled in §4.13 **or** the
+RS485 relay board is offline). This applies to the fallback duty cycle in §4.7 as
+well — its ON window is **held**, not spent, while the off-delay is counting **or**
+the relay board is unreachable, so a fallback cycle that comes due during either
+condition still gets its full ON Time once both clear rather than being skipped.
+
+**No relay board = no compressor run (and no cooling animation).** Compressor
+control is the one loop that requires the Modbus RTU relay module to be online.
+Without it, coil writes go nowhere: the compressor stays off, the snowflake stays
+red, the home centre status reads **RELAY BOARD OFFLINE**, and the falling-snow FX does
+not run. Other diagnostics (probe fault, Wi-Fi, system time) continue as usual.
+When the board comes online the normal off-delay / fallback / hysteresis path
+resumes. If other faults are active at the same time, the centre status rotates
+through them (§0).
 
 > 📷 **Screenshot placeholder — Web Dashboard: Temperature Control & Compressor sections**
 > 📷 **Screenshot placeholder — Touchscreen: Settings 1/7**
@@ -379,7 +405,10 @@ Spoken phrases use a pre-recorded female English voice on the on-board ES8311 sp
 | **Speaker Amplifier (diagnostic)** | Raw power control for the amplifier itself. Playback switches it on and off automatically, so leave it alone in normal use — it is there to test the amplifier in isolation or force it quiet. Returns to off after every reboot. | Off |
 | **Speak High / Low Temp Alarm** | Alarm voice when that temperature alarm becomes active. | On |
 | **Speak Door Open Alarm** | Alarm voice when the *delayed* door alarm fires (§4.6). | On |
-| **Speak No-Cool / Ice / Probe Fault** | Alarm voice for those conditions. | On |
+| **Speak No-Cool / Ice / Probe Fault** | Alarm voice for those conditions (phrases match the centre status: *Not cooling*, *Ice on coil*, *Coolroom probe bad*). | On |
+| **Speak Relay Board Offline** | Voice when the Modbus relay board stops responding. | On |
+| **Speak Temp Board Offline** | Voice when the RS485 temperature-probe board stops responding (only when an RTD source is selected). | On |
+| **Speak Humidity / Ambient Sensor Offline** | Voice when the enabled SHT31 or SHT20 stops answering. | On |
 | **Speak Cooling Started / Stopped** | Info voice when the compressor starts or stops. | Started On / Stopped **Off** |
 | **Speak Defrost Started / Complete** | Info voice for defrost cycle edges. | On |
 | **Speak Door Opened / Closed** | Info voice when the reed sees the door move (immediate). | Opened On / Closed **Off** |
@@ -773,6 +802,7 @@ starts open.
 | Repeated SD failure/recovery pushes for a card that is physically fine | Expected to be gone: this was a firmware fault where an unwritable filename was misread as a dead card. If it still happens, the card really is dropping writes — try a different card | §4.9 |
 | Touchscreen readings don't match a reference thermometer | Set a Calibration Offset after comparing against a trusted reference | §4.7 |
 | Compressor won't start after a power cut | Normal — the off-delay counts from power-up. Watch the amber countdown under the snowflake | §4.1 |
+| Snowflake red, status says RELAY BOARD OFFLINE, no cooling animation | RS485 relay board not responding — compressor control will not pretend to run without it | §4.1, Hardware |
 | An output never energises, no matter what the logic does | Its relay enable is off — a disabled output is held open | §4.13 |
 | External siren sounds on alarms you'd rather it didn't | Turn off Siren Relay Enabled; alarms, pushes and logging continue | §4.13 |
 | Controller vanished after a WiFi change | It reverts by itself after 45 s, and falls back to the firmware's network after 5 min without a connection | §4.10 |
