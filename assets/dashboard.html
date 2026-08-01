@@ -1147,6 +1147,29 @@
         const EVENTS_PATH = '/events';
         let activeApiUrl = null;
         const liveEntities = new Map(); // ESPHome id ("sensor-…") → latest payload
+
+        // CPU % spikes on hard refresh / SSE reconnect (device busy serving the
+        // page). EMA on the client keeps System Health / Hardware readouts calm
+        // without changing the firmware sensor. First sample only seeds so we
+        // don't flash a 90%+ reconnect blip; big jumps use a slower alpha.
+        let cpuUsageEma = NaN;
+        function smoothCpuUsagePct(raw) {
+            if (typeof raw !== 'number' || isNaN(raw)) {
+                return Number.isFinite(cpuUsageEma) ? cpuUsageEma : NaN;
+            }
+            if (!Number.isFinite(cpuUsageEma)) {
+                cpuUsageEma = raw;
+                return NaN;
+            }
+            const jump = Math.abs(raw - cpuUsageEma);
+            const alpha = jump > 30 ? 0.1 : 0.28;
+            cpuUsageEma = alpha * raw + (1 - alpha) * cpuUsageEma;
+            return cpuUsageEma;
+        }
+        function formatCpuUsagePct(raw) {
+            const v = smoothCpuUsagePct(raw);
+            return Number.isFinite(v) ? `${Math.round(v)}%` : '--';
+        }
         let eventSource = null;
         let dashboardRefreshTimer = null;
         let lastFetchErrorAt = 0;
@@ -1964,9 +1987,7 @@
             rs485Html += `Time: <span class="status-badge ${data.system_time_ok ? 'status-ok' : 'status-error'}">${data.system_time_ok ? '✓' : '✗'}</span>`;
             setHtml('rs485Status', rs485Html);
 
-            const cpuTxt = (typeof data.cpu_usage_pct === 'number' && !isNaN(data.cpu_usage_pct))
-                ? `${Math.round(data.cpu_usage_pct)}%`
-                : '--';
+            const cpuTxt = formatCpuUsagePct(data.cpu_usage_pct);
             const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>CPU: ${cpuTxt}<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
             setHtml('memoryStatus', memHtml);
 
@@ -2020,8 +2041,7 @@
             setText('hwChipTemp',
                 typeof data.chip_temp === 'number' && !isNaN(data.chip_temp) ? `${data.chip_temp.toFixed(1)}°C` : '--');
             setText('hwHeap', data.heap_free_kb ? `${data.heap_free_kb} KB` : '--');
-            setText('hwCpu', (typeof data.cpu_usage_pct === 'number' && !isNaN(data.cpu_usage_pct))
-                ? `${Math.round(data.cpu_usage_pct)}%` : '--');
+            setText('hwCpu', formatCpuUsagePct(data.cpu_usage_pct));
             setText('hwPsram', data.psram_free_kb ? `${data.psram_free_kb} KB` : '--');
             if (typeof data.uptime_seconds === 'number' && !isNaN(data.uptime_seconds)) {
                 const d = Math.floor(data.uptime_seconds / 86400);
