@@ -113,8 +113,8 @@ to your phone.
 2. Once connected to your network, find the device's IP address (your router's device list,
    or the touchscreen's Info page) and open `http://<device-ip>/` — that is the Coolroom
    dashboard (not ESPHome's stock entity list). Main status, timers, and system health load
-   **without** a password. Settings stay hidden until **🔐 Login** with
-   `web_server_username` / `web_server_password` from `secrets.yaml`.
+   **without** a password. Settings stay hidden until **🔐 Login** in the page header
+   with `web_server_username` / `web_server_password` from `secrets.yaml`.
 3. After **🔐 Login**, settings and administration unlock. See §4.11.
 4. To change WiFi network later, or reconnect after a network change, use the **New WiFi
    SSID / Password** fields in the web dashboard's Network section — this is deliberately

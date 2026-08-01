@@ -457,18 +457,6 @@
             border-radius: 4px;
             cursor: pointer;
         }
-        .settings-gate {
-            text-align: center;
-            padding: 28px 20px;
-            border: 1px dashed #555;
-            border-radius: 8px;
-            background: #252528;
-            margin: 16px 0 8px;
-        }
-        .settings-gate p {
-            margin: 0 0 14px;
-            color: #bbb;
-        }
         .guest-only { }
         .operator-only.hidden, .guest-only.hidden, .hidden { display: none !important; }
 
@@ -550,7 +538,7 @@
         .gauge-wrap {
             grid-column: 2;
             position: relative;
-            width: min(300px, 72vw);
+            width: min(420px, 88vw);
             margin: 0 auto;
         }
         @media (max-width: 440px) {
@@ -578,9 +566,9 @@
             text-align: center;
             pointer-events: none;
         }
-        .gauge-temp { font-size: 58px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
-        .gauge-setpoint { font-size: 18px; color: #00BCD4; margin-top: 10px; font-weight: 500; }
-        .gauge-status { font-size: 14px; color: #FF9F0A; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+        .gauge-temp { font-size: 68px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
+        .gauge-setpoint { font-size: 20px; color: #00BCD4; margin-top: 12px; font-weight: 500; }
+        .gauge-status { font-size: 15px; color: #FF9F0A; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
         /* Humidity/temp reading pills — same idea as the old project's
            .cr-reading side panel, condensed into a row under the gauge. */
         .gauge-readings {
@@ -640,12 +628,12 @@
                 </div>
                 <div class="gauge-wrap">
                     <svg viewBox="0 0 300 300">
-                        <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="10"></path>
-                        <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="10"></path>
-                        <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="10"></path>
-                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="10"></path>
-                        <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="10"></path>
-                        <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="10"></path>
+                        <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="12"></path>
+                        <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="12"></path>
+                        <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="12"></path>
+                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="12"></path>
+                        <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="12"></path>
+                        <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="12"></path>
                     </svg>
                     <div class="gauge-center">
                         <div class="gauge-temp" id="gaugeTemp">--°C</div>
@@ -713,14 +701,7 @@
         </div>
 
 
-        <!-- Settings gated behind Login — guests see main status + health/timers only. -->
-        <div id="settingsGate" class="settings-gate guest-only">
-            <p>Main display and system info are available without login. Settings and administration require operator login.</p>
-            <button type="button" class="primary" onclick="openLoginModal()">🔐 Login to access settings</button>
-        </div>
-
-
-        <!-- Settings + Admin: operator only, tabbed so groups stay readable -->
+        <!-- Settings + Admin: operator only (header 🔐 Login). Guests see status/health only. -->
         <div id="settingsSection" class="chart-section operator-only hidden">
             <div class="card-header-row">
                 <h2>⚙️ Settings &amp; Administration</h2>
@@ -1854,7 +1835,7 @@
         const GAUGE_SWEEP = 240;
         const GAUGE_DIAL_MIN = -10;
         const GAUGE_DIAL_MAX = 30;
-        const GAUGE_RADII = { outer: 135, middle: 117, inner: 99 };
+        const GAUGE_RADII = { outer: 140, middle: 120, inner: 100 };
 
         function gaugePoint(radius, angleDeg) {
             const rad = (angleDeg * Math.PI) / 180;

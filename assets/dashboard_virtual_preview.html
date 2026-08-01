@@ -110,7 +110,7 @@
     .gauge-info { position: absolute; top: 0; right: 0; text-align: right; }
     .gauge-info-line { font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.6); white-space: nowrap; }
     .gauge-info-line + .gauge-info-line { margin-top: 4px; }
-    .gauge-wrap { grid-column: 2; position: relative; width: min(300px, 72vw); margin: 0 auto; }
+    .gauge-wrap { grid-column: 2; position: relative; width: min(420px, 88vw); margin: 0 auto; }
     .gauge-wrap svg { width: 100%; height: auto; display: block; }
     /* Dim track + bright fill — matches LVGL / dashboard.html (no ticks/plate). */
     .gauge-track { fill: none; stroke-linecap: round; }
@@ -123,8 +123,8 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; pointer-events: none;
     }
-    .gauge-temp { font-size: 56px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; }
-    .gauge-setpoint { font-size: 18px; color: #00BCD4; margin-top: 10px; font-weight: 500; }
+    .gauge-temp { font-size: 68px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; }
+    .gauge-setpoint { font-size: 20px; color: #00BCD4; margin-top: 12px; font-weight: 500; }
     .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
     .gauge-readings { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
     .gauge-reading { flex: 1 1 160px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
@@ -315,12 +315,12 @@
         </div>
         <div class="gauge-wrap">
           <svg viewBox="0 0 300 300">
-            <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="10"></path>
-            <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="10"></path>
-            <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="10"></path>
-            <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="10"></path>
-            <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="10"></path>
-            <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="10"></path>
+            <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="12"></path>
+            <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="12"></path>
+            <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="12"></path>
+            <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="12"></path>
+            <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="12"></path>
+            <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="12"></path>
           </svg>
           <div class="gauge-center">
             <div class="gauge-temp" id="gaugeTemp">3.8°C</div>
@@ -769,7 +769,7 @@
     const GAUGE_SWEEP = 240;
     const GAUGE_DIAL_MIN = -10;
     const GAUGE_DIAL_MAX = 30;
-    const GAUGE_RADII = { outer: 135, middle: 117, inner: 99 };
+    const GAUGE_RADII = { outer: 140, middle: 120, inner: 100 };
 
     function gaugePoint(radius, angleDeg) {
       const rad = (angleDeg * Math.PI) / 180;

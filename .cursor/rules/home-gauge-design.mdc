@@ -26,8 +26,11 @@ aligned**. Change one → update the other in the same change.
   horseshoe **150° → 30°** (240° sweep, gap at 6 o’clock). Web SVG should keep
   the same sweep and proportional radii / equal stroke widths.
 - **Centre**: opaque `col_bg` disc (masks ambient ring stub) with no border; big
-  readout (`font_huge` 80 / web ~58px), cyan setpoint (`font_large` / ~18px),
-  status (`font_medium` / ~14px).
+  readout (`font_huge` 80 / web ~68px), cyan setpoint (`font_large` / ~20px),
+  status (`font_medium` / ~15px).
+- **Web gauge size**: wrap `min(420px, 88vw)`; SVG radii **140 / 120 / 100**,
+  stroke 12 (same sweep as LVGL). No bottom guest login banner — header **🔐 Login**
+  unlocks settings.
 
 ## Hard rule — do not reintroduce translucent chrome
 
