@@ -25,3 +25,7 @@ logs/*.log
 logs/*.jsonl
 logs/*.txt
 logs/**/*.log
+# Pulled controller SD CSVs / analysis reports (can be large / site-specific)
+logs/controller/
+# Lightweight venv for log pull / recommend launchers
+tools/.venv-log-tuning/

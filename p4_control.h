@@ -348,24 +348,19 @@ inline bool p4_ctl_ice_alarm(float coolroom_c, float evap_c, float ice_delta_c) 
 // ─── Probe source profiles ──────────────────────────────────────────────────
 
 /// Probe source enum (matches Precision / LCD labels).
-enum P4ProbeSource : int {
-    P4_PROBE_RTD_RS485 = 0,
-    P4_PROBE_SHT31_I2C = 1,
-    P4_PROBE_UNUSED    = 2,
-};
+/// Fixed probe roles for this controller:
+///   Probe 1 (RTD CH1) = coolroom air temperature — always.
+///   Probe 2 (RTD CH2) = evaporator coil temperature — always (when enabled).
+/// There is no operator setting to swap or reassign these sources.
 
-/// Resolve the coolroom control temperature from the selected source.
-/// Returns NAN when the source is unused or the reading is invalid.
-inline float p4_ctl_resolve_coolroom_c(int probe1_type, float rtd_c, float sht31_c) {
-    if (probe1_type == P4_PROBE_SHT31_I2C) return p4_rtd_valid(sht31_c) ? sht31_c : NAN;
-    if (probe1_type == P4_PROBE_UNUSED) return NAN;
+/// Coolroom control temperature from Probe 1 RTD. Returns NAN if invalid.
+inline float p4_ctl_resolve_coolroom_c(float rtd_c) {
     return p4_rtd_valid(rtd_c) ? rtd_c : NAN;
 }
 
-/// Resolve evaporator temperature. Unused / non-RTD → NAN (evap_ok false).
-inline float p4_ctl_resolve_evap_c(int probe2_type, bool probe2_enabled, float rtd_c) {
-    if (!probe2_enabled || probe2_type == P4_PROBE_UNUSED) return NAN;
-    // Evap coil is always an RTD on this board; SHT31 as probe2 is rejected.
+/// Evaporator temperature from Probe 2 RTD when Probe 2 is enabled.
+inline float p4_ctl_resolve_evap_c(bool probe2_enabled, float rtd_c) {
+    if (!probe2_enabled) return NAN;
     return p4_rtd_valid(rtd_c) ? rtd_c : NAN;
 }
 

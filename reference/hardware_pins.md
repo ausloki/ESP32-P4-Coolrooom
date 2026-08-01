@@ -243,6 +243,122 @@ This project uses two DIN-mounted power supplies:
 | 5V DIN PSU | ESP32-P4 controller via PH2.0 12PIN header (`Core_5V` + `GND`) |
 | 12V DIN PSU | RS485 RTU-4 relay module and RS485 RTD PT100 modules |
 
+### Modbus RTD hardware — 2-channel PT100 → RS485 (coolroom build)
+
+**Canonical product sheets (operator photos of the module label):**
+
+| File | Contents |
+| --- | --- |
+| `reference/PT100-RS485-2CH-terminals.png` | Specs + 12-terminal pinout + 2/3-wire PT100 wiring |
+| `reference/PT100-RS485-2CH-modbus.png` | Modbus RTU register map + CH1 read example |
+| `reference/PT100-RS485-2CH-modbus-correction.png` | CH2 read + on-module temp correction (regs 03/04) |
+| `reference/PT100-RS485-2CH-modbus-addr-baud.png` | Change device address (reg 05) + baud code (reg 06) |
+
+This is a **two-channel** DIN-rail transmitter: one Modbus slave, **RT1 + RT2**.
+Firmware already matches that model (`rtd_board_1` addr **100**, holding regs **1** / **2**,
+scale **0.1**, universal addr **249**).
+
+Related PDFs under `reference/` (`RTD.pdf`, `BRT-PT100AD-…pdf`) describe Brightwin
+**BRT PT100AD**-family converters (often **single**-channel, 8-terminal). Prefer the
+**2CH photos** for this coolroom board.
+
+| Spec | Value (from product sheet) |
+| --- | --- |
+| Input | **2-wire or 3-wire PT100** (3-wire recommended) — **two channels** |
+| Range | Typical **−199 … +600 °C**; max **−199 … +650 °C** |
+| Accuracy | **±0.2 °C** (marketing sheet also cites max error ±0.5 °C) |
+| Supply | **7–30 VDC**, operating current **&lt;50 mA**; **5V** terminal can power the module if DC unused |
+| Bus | RS485 **Modbus RTU**, baud **2400–115200** (default **9600**), **8 data / 1 stop / no parity** |
+| Address | **1–247**; default **100** (0x64); universal **249** (terminals sheet) |
+| Nodes | **&gt;100** |
+| Size / env | **95 × 36 × 47 mm**; operating **−25 … +65 °C** |
+| OUT (term 10) | Isolation type: RS485 signal GND. Non-isolation: 5V out ON/OFF via **reg 07** |
+
+**Holding registers** (function **03** read / **06** write where R/W; sheet wording “byte” ≈ bit width):
+
+| Reg | Function | Access | Notes |
+| --- | --- | --- | --- |
+| **00** | Broadcast / discover | R | With FC 03 returns device address |
+| **01** | Channel **1** temperature | R | Signed 16-bit; **÷10 → °C** |
+| **02** | Channel **2** temperature | R | Signed 16-bit; **÷10 → °C** |
+| **03** | Channel **1** temp correction | R/W | Default **65** (0x41); range **0–99** |
+| **04** | Channel **2** temp correction | R/W | Same scale as reg 03 (sheet page 3). Earlier overview labelled this “data check” — treat **04** as CH2 correction per the worked example |
+| **05** | Device address | R/W | Default **100** / 0x64; range **1–255**; takes effect immediately (no reboot). Unknown addr → inquire via broadcast **0** |
+| **06** | Baud rate code | R/W | Default **03** = **9600**; takes effect immediately (no reboot). See baud table below |
+| **07** | 5V OUT control | R/W | Non-isolation type only; default 0 = off |
+
+**Baud codes (write to reg 06):**
+
+| Code | Baud |
+| --- | --- |
+| 01 | 2400 |
+| 02 | 4800 |
+| **03** | **9600** (default) |
+| 04 | 19200 |
+| 05 | 38400 |
+| 06 | 57600 |
+| 07 | 115200 |
+
+**Config write examples** (FC **06**, current addr 100): set address → **1**:
+`64 06 00 05 00 01 51 FE`; set baud → **2400**: `64 06 00 06 00 01 A1 FE`.
+Echo reply = success. Coolroom keeps module at **addr 100 / 9600** to match
+`modbus_rtd1_address` and the RS485 UART — only change these if the UART is updated
+in lockstep (sheet note “register address is 03” under baud is a typo; the command uses
+**reg 06**).
+
+**Read examples** (addr 100, same ÷10 decode):
+
+| Channel | Send | Temp payload |
+| --- | --- | --- |
+| CH1 | `64 03 00 01 00 01 DC 3F` | e.g. `01 0C` → 26.8 °C |
+| CH2 | `64 03 00 02 00 01 2C 3F` | same decode |
+
+Firmware uses the same scale (`rtd_temp_scale: "0.1"`).
+
+**On-module correction** (write FC **06**): e.g. CH1 → `64 06 00 03 00 41 B0 0F`
+(sets correction **65**). Higher correction → **lower** reported °C; lower → higher.
+Coolroom firmware leaves module correction at factory default and applies operator
+offsets in software (`probe1_offset_c` / `probe2_offset_c`) — do not write regs 03/04
+from the controller unless deliberately migrating calibration into the module.
+
+**Terminals (12-screw module — see terminals photo):**
+
+| # | Mark | Use |
+| --- | --- | --- |
+| 1 | RT1+ | Channel 1 PT100 + |
+| 2 / 3 | RT1− | Channel 1 PT100 − (pair for 3-wire) |
+| 4 | RT2+ | Channel 2 PT100 + |
+| 5 / 6 | RT2− | Channel 2 PT100 − (pair for 3-wire) |
+| 7 / 8 | DC+ / DC− | 7–30 VDC supply |
+| 9 | 5V | 5V output (or 5V **input** if 7–30 V unused) |
+| 10 | OUT | See table above (GND vs controllable 5V out) |
+| 11 | A/D+ | RS485 **A** |
+| 12 | B/D− | RS485 **B** |
+
+**3-wire (preferred):** same-colour pair → both RT− screws of that channel (e.g. #2+#3 for
+CH1); different-colour lead → RT+ (e.g. #1).  
+**2-wire:** one lead to RT+, one to RT−; **short the two RT− screws** of that channel
+(e.g. jump #2–#3 for CH1, #5–#6 for CH2).
+
+### Modbus RTD probe roles (firmware) — fixed, do not swap
+
+One 2CH module at slave address **100**:
+
+| Channel / role | Physical placement | Firmware |
+| --- | --- | --- |
+| **Probe 1 — Coolroom room air** | Air probe in the coolroom → **RT1** | Holding reg **1** → `rtd1_ch1_raw` |
+| **Probe 2 — Evaporator coil** | On / in the evaporator coil → **RT2** | Holding reg **2** → `rtd1_ch2_raw` |
+
+These **roles** are fixed (do not swap air and coil in software). Wire the correct PT100
+to the correct channel terminals.
+
+- **Probe 2 Enabled** (settings) can turn the evaporator channel off for sites that only
+  fit one RTD — that disables ice / smart-defrost features that need coil temp; it does
+  **not** remake CH2 into the room sensor.
+- SHT31 (I2C) remains the **cabinet humidity / auxiliary temp** sensor (dew-point /
+  frost-rate / auto-cal reference). SHT20 is **ambient** outside the room. Neither
+  replaces Probe 1 or Probe 2.
+
 ### Modbus relay coil roles (firmware)
 
 Waveshare Modbus RTU Relay 4-CH, slave address **1**:

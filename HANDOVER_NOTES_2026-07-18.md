@@ -1,14 +1,24 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-07-30 (late night)  
-**Status**: On real hardware. Branch `cursor/wifi-sdmmc-slot-fix` — WiFi/SDMMC slot split
-committed as `dd53feb`. Later web + LVGL work flashed as config hash `0x9b1da7d5` (commit with
-this session). External RTC still unconfirmed (SNTP-only).  
-**Last known good WiFi commit**: `dd53feb`. Latest flash: `0x9b1da7d5`. See addendum below.
+**Resume State Updated**: 2026-08-01 (evening closeout)  
+**Status**: On real hardware. Branch `cursor/wifi-sdmmc-slot-fix`. Canonical resume:
+`memory-bank/activeContext.md`. Flash with `./tools/esphome_flash.sh` only (NVS-safe).
 
 > Resume note: historical sections below preserve earlier phase wording; treat the latest
 > addendum + `memory-bank/activeContext.md` as the current resume point.
+
+---
+
+## 2026-08-01 Addendum (Evening) — Fixed probes, 2CH RTD docs, log-tuning tools
+
+- Probe 1/2 roles fixed (CH1 air / CH2 evaporator); Probe Source UI/entities removed.
+- Coolroom RTD is a **2-channel** PT100 Modbus module at addr **100** — sheets in
+  `reference/PT100-RS485-2CH-*.png`; digest in `reference/hardware_pins.md`.
+- Offline/LAN tools: `tools/recommend_settings.py` (+ pull/analyze) and Win/mac launchers
+  `tools/CoolroomLogTools.cmd` / `.command`. Needs live RTD samples for full tuning.
+- Still open: RS485 relay+RTD on bench, Probes live values, manual camera screenshots,
+  dashboard OTA UI.
 
 ---
 

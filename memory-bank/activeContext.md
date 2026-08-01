@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-01  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** Home gauge design locked (LVGL + web twins). Closeout requires embed +
-compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome upload`).
+**Status:** Closeout complete this evening — fixed Probe 1/2 roles, 2CH RTD docs,
+log-tuning tools + Win/mac launchers. Next: RS485/RTD bench bring-up.
 
 ## Working well
 
@@ -16,9 +16,11 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 - Rotating centre status + matching audio + ntfy hardware-offline
 - Virtual preview aligned with live gauge / Audio / Alarms & Notify (2026-08-01)
 - Temperature Display Unit restored: Celsius default / Fahrenheit, LVGL + web + HA
-- LVGL settings **1/8–8/8** on glass (Cory confirmed 2026-08-01 evening) — Audio page,
-  Comp Min Run, Skip-If-Cold / Force-Max, Frost Rate, Ice enable+dwell, probe sources
+- LVGL settings **1/8–8/8** on glass (Cory confirmed 2026-08-01 evening)
 - Info page: glyph fix (`|` / `—`), SD used/free %, NTP sync-age latch
+- Probe roles fixed: **CH1 room air / CH2 evaporator** (no source swaps)
+- 2CH PT100 Modbus sheets in `reference/PT100-RS485-2CH-*.png` + `hardware_pins.md`
+- Log tools: `tools/recommend_settings.py` + `CoolroomLogTools.cmd/.command`
 - Web-only by design: Wireless change, Events, ntfy URL/priorities, SD file list
 - Rule: `.cursor/rules/home-gauge-design.mdc` (always apply)
 
@@ -30,6 +32,8 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 4. ✅ LVGL settings parity (8 pages) — glass-confirmed
 5. ✅ Info tofu glyphs / SD percentages / NTP status latch
 6. ✅ Carel A–D (+ manuals)
+7. ✅ Fixed Probe 1/2 roles; removed source toggles
+8. ✅ 2CH RTD product-sheet digest + log pull/recommend tools + OS launchers
 
 ## Still open
 
@@ -37,6 +41,7 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 - Manual screenshots still placeholders (camera captures only; no FB screenshot tool)
 - Dashboard OTA UI
 - End-to-end Modbus once relay/RTD boards are fitted
+- Richer log-based tuning once Probe 1 has real coolroom samples
 
 ## On hold / not required
 

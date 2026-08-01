@@ -4,6 +4,27 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Evening) — Closeout: fixed probes, 2CH RTD docs, log-tuning tools
+
+- **Probe roles fixed:** Probe 1 = coolroom air (RTD CH1), Probe 2 = evaporator (RTD CH2);
+  removed Probe Source selects/globals from LVGL/web/preview/control.
+- **RTD hardware:** operator sheets for the **2-channel** PT100→RS485 module saved under
+  `reference/PT100-RS485-2CH-*.png` (+ `RTD.pdf`); `hardware_pins.md` updated (addr **100**,
+  regs 01/02 temps, 03/04 correction, 05 addr, 06 baud). Firmware CH1/CH2 model matches.
+- **Log tuning tools:** `pull_controller_logs.py` / `analyze_coolroom_logs.py` /
+  `recommend_settings.py` + Win/mac launchers (`CoolroomLogTools.*`, `run_*.cmd/.command`).
+  Live pull confirmed; analyzer correctly reports empty coolroom while RTD offline.
+- Manuals/Quick Start probe-source wording cleaned. Coverage + embed + compile + NVS flash
+  in this closeout.
+
+## 2026-08-01 (Evening) — Fixed Probe 1/2 RTD roles; remove source toggles
+
+- Probe 1 (RTD CH1) = coolroom **room air**; Probe 2 (RTD CH2) = **evaporator** —
+  fixed in firmware, documented in `reference/hardware_pins.md`.
+- Removed Probe Source selects from LVGL Settings 7/8, web Probes, virtual preview,
+  and the underlying template selects / NVS globals (no SHT31-as-coolroom path).
+- Probe 2 Enabled remains (disable evap features without reassigning channels).
+
 ## 2026-08-01 (Evening) — Closeout: LVGL 8-page settings glass-confirmed
 
 - Cory confirmed the new LVGL Settings menu (**1/8–8/8**, including Audio) is on glass.

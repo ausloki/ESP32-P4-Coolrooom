@@ -1,0 +1,3 @@
+# Coolroom log pull / settings-recommend tools.
+# Stdlib only (urllib, csv, json, argparse) — no third-party packages required.
+# This file exists so launchers can run `pip install -r` safely on Windows and macOS.

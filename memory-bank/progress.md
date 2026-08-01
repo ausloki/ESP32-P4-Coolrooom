@@ -1,5 +1,18 @@
 # Progress Tracking
 
+## 2026-08-01 — Closeout: probes fixed, 2CH RTD sheets, log recommend tools
+
+- Removed Probe Source toggles; CH1/CH2 roles fixed in firmware + manuals.
+- Digested 2CH PT100 Modbus sheets into `hardware_pins.md` + `reference/PT100-RS485-2CH-*`.
+- Added LAN log pull/analyze/recommend scripts and Win/mac double-click launchers.
+- Closeout: coverage, embed, compile, NVS-safe flash, graph, push.
+
+## 2026-08-01 — Fixed Probe 1/2 RTD roles (no source swaps)
+
+- CH1 = coolroom room air, CH2 = evaporator — documented in `hardware_pins.md`.
+- Removed Probe Source selects from LVGL/web/preview and firmware entities/globals.
+- Probe 2 Enabled remains. Coverage OK; NVS-safe flash done.
+
 ## 2026-08-01 — Evening closeout (glass confirm + commit)
 
 - Cory confirmed LVGL Settings **1/8–8/8** menu present on glass.

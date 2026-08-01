@@ -67,7 +67,7 @@ single priority string. Typical fault labels:
 | Label | Meaning |
 |---|---|
 | **RELAY BOARD OFFLINE** | Modbus relay board not responding (compressor cannot run) |
-| **TEMP BOARD OFFLINE** | RS485 temperature-probe board not responding (only when an RTD probe source is selected) |
+| **TEMP BOARD OFFLINE** | RS485 temperature-probe board not responding |
 | **HUMIDITY SENSOR OFFLINE** | Internal cabinet humidity/temp sensor (SHT31) is enabled but not answering |
 | **AMBIENT SENSOR OFFLINE** | External/ambient sensor (SHT20) is enabled but not answering |
 | **COOLROOM PROBE BAD** | Coolroom control probe missing, stale, or implausible (§4.7) |
@@ -99,8 +99,8 @@ notification to your phone.
 
 | Component | Role |
 |---|---|
-| Probe 1 (RTD) | Main coolroom air temperature — everything is measured against this |
-| Probe 2 (RTD) | Evaporator coil temperature — used for smart defrost and ice detection |
+| Probe 1 (RTD CH1) | Main coolroom **room air** temperature — everything is measured against this (fixed role) |
+| Probe 2 (RTD CH2) | **Evaporator coil** temperature — used for smart defrost and ice detection (fixed role) |
 | Internal humidity sensor (SHT31) | Cabinet humidity, informational (see §4.7 — no automatic humidity control) |
 | External humidity sensor (SHT20) | Room/ambient humidity, informational |
 | Compressor relay | Turns cooling on/off |
@@ -534,14 +534,17 @@ Probe 2, and the internal SHT31 (SHT31 has no offset — raw and corrected match
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
 | **Temperature Display Unit** | Chooses Celsius or Fahrenheit for LVGL and web dashboard temperature readouts. Published to Home Assistant as a select. | Celsius / Fahrenheit | **Celsius** | Change for operator preference. This does not alter control math or stored values; HA temperature sensors follow HA's own unit system. |
-| **Probe 1 (Coolroom) Source** | Which sensor feeds coolroom control: RTD RS485, SHT31 I2C, or Unused. | RTD / SHT31 / Unused | RTD RS485 | RS485 boards are not on the current bench — leave RTD until wired, or use SHT31 temporarily for UI/control bring-up. |
-| **Probe 2 (Evaporator) Source** | Evaporator source: RTD RS485 or Unused. Unused disables Probe 2 (and ice detection). | RTD / Unused | RTD RS485 | Same bench note as Probe 1. |
-| **Probe 1 (Coolroom) Calibration Offset** | Adds a fixed correction to the main temperature reading. | -10 – 10 °C | 0.0 °C | Only set this after comparing the probe against a trusted reference thermometer — enter the difference so the displayed reading matches reality. |
-| **Probe 2 (Evaporator) Calibration Offset** | Same idea, for the evaporator probe. | -10 – 10 °C | 0.0 °C | Same approach — compare against a reference thermometer first. |
+| **Probe 1 (Coolroom) Calibration Offset** | Adds a fixed correction to the main coolroom-air RTD reading (CH1). | -10 – 10 °C | 0.0 °C | Only set this after comparing the probe against a trusted reference thermometer — enter the difference so the displayed reading matches reality. |
+| **Probe 2 (Evaporator) Calibration Offset** | Same idea, for the evaporator RTD (CH2). | -10 – 10 °C | 0.0 °C | Same approach — compare against a reference thermometer first. |
 | **Calibrate Probes Now** *(button)* | Auto-calibrate RTD offsets against the internal SHT31 reference (averages samples, writes offsets). | — | — | Needs SHT31 + at least one RTD online. Refuses until RS485 boards are connected on the bench. |
-| **Evaporator Probe (Probe 2) Enabled** | Master switch for the evaporator probe. | On/Off | On | Smart Defrost (§4.3) and the Ice Alarm (§4.5) both need Probe 2 to function — disabling it disables those features too, even if their own switches are on. |
-| **Internal SHT31 Sensor Enabled** | Cabinet humidity/temperature sensor. | On/Off | On | Informational only — see note below. |
+| **Evaporator Probe (Probe 2) Enabled** | Master switch for the evaporator RTD. | On/Off | On | Smart Defrost (§4.3) and the Ice Alarm (§4.5) both need Probe 2 — disabling it disables those features too, even if their own switches are on. Does **not** reassign which physical sensor is Probe 1 or Probe 2. |
+| **Internal SHT31 Sensor Enabled** | Cabinet humidity/temperature sensor. | On/Off | On | Informational + dew-point / frost-rate / auto-cal — see note below. Not a substitute for Probe 1. |
 | **External SHT20 Sensor Enabled** | Room/ambient humidity/temperature sensor. | On/Off | On | Informational only — see note below. |
+
+> **Probe wiring is fixed.** Probe 1 (RTD CH1) is always coolroom **room air** temperature;
+> Probe 2 (RTD CH2) is always the **evaporator coil** sensor. Do not swap the sensors on the
+> converter channels, and there is no settings option to swap them in software. See
+> `reference/hardware_pins.md` (Modbus RTD probe roles).
 
 > **Humidity is monitored, not controlled.** This controller has no humidifier or
 > dehumidifier relay — the SHT31/SHT20 sensors report humidity for your information and for

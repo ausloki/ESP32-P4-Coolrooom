@@ -69,7 +69,7 @@ on any browser on your network.
 | 4 | Alarm Thresholds | Settings 4/8 | High/low temp alarm deltas, persist time, siren |
 | 5 | Alarms Advanced | Settings 5/8 | Ice enable/dwell/delta, no-cool, startup/defrost grace |
 | 6 | Door | Settings 6/8 | Sensor on/off, NC/NO, door light, hold compressor while open, alarm delay |
-| 7 | Probes | Settings 7/8 | Display unit, sources, offsets, calibrate, probe/humidity enables |
+| 7 | Probes | Settings 7/8 | Display unit, calibration offsets, calibrate, probe/humidity enables (Probe1=room air RTD CH1, Probe2=evap RTD CH2 — fixed) |
 | 8 | Audio | Settings 8/8 | Master enable, volume, test, speak toggles, amp diagnostic |
 
 WiFi, the web login password, and SD card log-delete are **web-dashboard only** — by design,

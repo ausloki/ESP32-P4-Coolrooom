@@ -14,20 +14,18 @@
 # Schematic: https://files.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-7B/
 #
 # TEMPERATURE SENSOR ARCHITECTURE
-# Coolroom + evaporator temperature are RS485 RTD (Waveshare BRT-PT100AD or
-# equivalent) — that decision is unchanged from Phase 2. External/ambient
-# temperature and all humidity readings come from I2C sensors instead (RS485
-# RTD has no humidity capability at all, and the second RTD board that used
-# to cover ambient has been decommissioned in favor of the I2C SHT20 — one
-# less RS485 board to wire/maintain, and humidity comes along for free). I2C
-# also carries the GT911 touch controller. Wall-clock time uses the ESP32-P4
-# internal 48-bit LP RTC + SNTP (Waveshare FAQ) — no on-board I2C RTC chip in
-# the published docs. See reference/hardware_pins.md and
-# reference/RTC_Configuration.md.
+# Coolroom + evaporator temperature are one RS485 2-channel PT100 Modbus module
+# (see reference/PT100-RS485-2CH-terminals.png + hardware_pins.md) — CH1 room air,
+# CH2 evaporator, slave addr 100. External/ambient temperature and all humidity
+# readings come from I2C sensors (RS485 RTD has no humidity; the old second RTD
+# board for ambient was decommissioned in favor of the I2C SHT20). I2C also
+# carries the GT911 touch controller. Wall-clock time uses the ESP32-P4 internal
+# 48-bit LP RTC + SNTP (Waveshare FAQ) — no on-board I2C RTC chip in the
+# published docs. See reference/hardware_pins.md and reference/RTC_Configuration.md.
 #
 # PROBE MAP
-#   Probe 1 (coolroom primary)   — RTD board 1, CH1, addr 100
-#   Probe 2 (evaporator/defrost) — RTD board 1, CH2, addr 100
+#   Probe 1 (coolroom room air)  — 2CH RTD module, CH1 (RT1), addr 100  [FIXED]
+#   Probe 2 (evaporator coil)    — 2CH RTD module, CH2 (RT2), addr 100  [FIXED]
 #   Ambient (external reference) — I2C SHT20 @ 0x40 (probe_external_temp)
 #   Internal (secondary/humidity)— I2C SHT31 @ 0x44 (probe_internal_temp)
 #
@@ -93,7 +91,7 @@ substitutions:
   # ── Relay board ───────────────────────────────────────────────────────────
   modbus_relay_address: "1"
 
-  # ── RTD board 1: Coolroom (CH1) + Evaporator (CH2), addr 100 ─────────────
+  # ── RTD board 1: CH1 = coolroom air, CH2 = evaporator (FIXED roles) ───────
   modbus_rtd1_address:          "100"
   modbus_rtd_universal_address: "249"
   rtd_temp_reg_ch1:             "1"
@@ -170,8 +168,6 @@ substitutions:
   default_fallback_off_min:    "27"   # sensor fallback compressor off-time (min)
   default_smart_delta_c:       "8.0"  # delta threshold for smart defrost trigger
   default_smart_dwell_min:     "30"   # delta must hold N min before smart defrost
-  default_probe1_type:         "0"    # 0=RTD RS485, 1=SHT31 I2C, 2=Unused
-  default_probe2_type:         "0"
   default_cal_samples_min:     "10"
   default_cal_samples_max:     "20"
   # Speaker volume as percent of the ES8311 register scale (50–90). 85 matches
@@ -1892,55 +1888,6 @@ select:
     web_server:
       sorting_group_id: group_alarms
       sorting_weight: 38
-
-  # Probe source profiles (Precision-compatible). Physical RTD boards are not
-  # on the bench yet — selects still persist so wiring-up day is one toggle.
-  - platform: template
-    id: sel_probe1_type
-    name: "Probe 1 (Coolroom) Source"
-    icon: "mdi:thermometer"
-    entity_category: config
-    restore_value: true
-    initial_option: "RTD RS485"
-    options:
-      - "RTD RS485"
-      - "SHT31 I2C"
-      - "Unused"
-    web_server:
-      sorting_group_id: group_probes
-      sorting_weight: 1
-    set_action:
-      - lambda: |-
-          if (x == "SHT31 I2C") id(input_probe1_type) = 1;
-          else if (x == "Unused") id(input_probe1_type) = 2;
-          else id(input_probe1_type) = 0;
-          ESP_LOGI("config", "Probe 1 source = %d", id(input_probe1_type));
-      - script.execute: persist_config_to_nvs
-
-  - platform: template
-    id: sel_probe2_type
-    name: "Probe 2 (Evaporator) Source"
-    icon: "mdi:thermometer-lines"
-    entity_category: config
-    restore_value: true
-    initial_option: "RTD RS485"
-    options:
-      - "RTD RS485"
-      - "Unused"
-    web_server:
-      sorting_group_id: group_probes
-      sorting_weight: 2
-    set_action:
-      - lambda: |-
-          if (x == "Unused") {
-            id(input_probe2_type) = 2;
-            id(input_probe2_enabled) = false;
-            id(input_ice_detect_enabled) = false;
-          } else {
-            id(input_probe2_type) = 0;
-          }
-          ESP_LOGI("config", "Probe 2 source = %d", id(input_probe2_type));
-      - script.execute: persist_config_to_nvs
 
 ##############################################################################
 # Sensors — all temperature probes are RS485 RTD
@@ -3758,14 +3705,12 @@ interval:
     then:
       - lambda: |-
           const uint32_t now_ms = millis();
-          // Resolve coolroom / evap from probe-source selects (Precision-compatible).
+          // Fixed roles: Probe1 RTD = coolroom air, Probe2 RTD = evaporator.
           float rtd1 = id(probe1_temp).state;
           float rtd2 = id(probe2_temp).state;
-          float sht31_t = id(probe_internal_temp).state;
-          float t = p4_ctl_resolve_coolroom_c(id(input_probe1_type), rtd1, sht31_t);
-          float evap = p4_ctl_resolve_evap_c(id(input_probe2_type), id(input_probe2_enabled), rtd2);
+          float t = p4_ctl_resolve_coolroom_c(rtd1);
+          float evap = p4_ctl_resolve_evap_c(id(input_probe2_enabled), rtd2);
           bool evap_ok = p4_rtd_valid(evap) &&
-                         (id(input_probe2_type) != 2) &&
                          p4_sample_fresh(id(rtd1_ch2_last_ms), ${probe_stale_ms} * 3);
           // Captured up front so a single check at the end of this tick can
           // log exactly one COMPRESSOR_ON/OFF event per actual transition,
@@ -3774,16 +3719,7 @@ interval:
           bool sd_was_ready = p4_sd_is_ready();
 
           // ── 1. Probe fault detection ────────────────────────────────────
-          // When Probe1 is SHT31, freshness comes from the internal sensor
-          // being finite rather than the Modbus RTD last-ms stamp.
-          bool fault;
-          if (id(input_probe1_type) == 1) {
-            fault = !p4_rtd_valid(t);
-          } else if (id(input_probe1_type) == 2) {
-            fault = true;
-          } else {
-            fault = p4_ctl_probe_fault(t, id(rtd1_ch1_last_ms), ${probe_stale_ms});
-          }
+          bool fault = p4_ctl_probe_fault(t, id(rtd1_ch1_last_ms), ${probe_stale_ms});
           id(ctl_probe_fault) = fault;
 
           // ── 2. Grace periods ────────────────────────────────────────────
@@ -4045,9 +3981,7 @@ interval:
                       int cmd = p4_ctl_compressor_eval(
                           t, id(ctl_setpoint), id(ctl_comp_diff),
                           id(relay_compressor).state,
-                          // When Probe1 is SHT31, pass a fresh stamp so eval
-                          // doesn't treat Modbus silence as a probe fault.
-                          (id(input_probe1_type) == 1) ? now_ms : id(rtd1_ch1_last_ms),
+                          id(rtd1_ch1_last_ms),
                           ${probe_stale_ms});
                       // Min-run hold: refuse cut-out until min ON time elapsed
                       if (cmd == -1 && id(relay_compressor).state && p4_rtd_valid(t)) {
@@ -4268,9 +4202,8 @@ interval:
                   p4_sd_log_event("RELAY_BOARD_ONLINE", "modbus relay recovered");
               }
 
-              const bool rtd_expected =
-                  (id(input_probe1_type) == 0) ||
-                  (id(input_probe2_enabled) && id(input_probe2_type) == 0);
+              // Probe 1 is always RTD coolroom; Probe 2 is RTD evap when enabled.
+              const bool rtd_expected = true;
               const bool rtd_offline = rtd_expected && !id(hw_rs485_rtd1_ok);
               if (rtd_offline && !id(ctl_temp_board_offline_logged)) {
                   id(ctl_temp_board_offline_logged) = true;
@@ -4385,9 +4318,7 @@ interval:
               // Hardware offline — same conditions as step 7b speak/SD edges and
               // rotating centre status. Recovery uses the shared All-Clear priority.
               const bool ntfy_relay_off = !id(hw_rs485_relay_ok);
-              const bool ntfy_rtd_expected =
-                  (id(input_probe1_type) == 0) ||
-                  (id(input_probe2_enabled) && id(input_probe2_type) == 0);
+              const bool ntfy_rtd_expected = true;
               const bool ntfy_temp_off = ntfy_rtd_expected && !id(hw_rs485_rtd1_ok);
               const bool ntfy_hum_off = id(input_humidity_internal_enabled) &&
                   isnan(id(sht31_internal_temp_raw).state);
@@ -4645,9 +4576,7 @@ interval:
           // several are latched at once. Mirrored to text_sensor.status for
           // the web gauge twin.
           float remaining_s = id(comp_lockout_remaining_sec).state;
-          const bool rtd_expected =
-              (id(input_probe1_type) == 0) ||
-              (id(input_probe2_enabled) && id(input_probe2_type) == 0);
+          const bool rtd_expected = true;
           P4UiHomeStatusIn st_in{};
           st_in.relay_ok        = id(hw_rs485_relay_ok);
           st_in.rtd_ok          = id(hw_rs485_rtd1_ok);
@@ -5075,17 +5004,6 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
-
-  # Probe source profiles: 0=RTD RS485, 1=SHT31 I2C, 2=Unused
-  - id: input_probe1_type
-    type: int
-    restore_value: yes
-    initial_value: ${default_probe1_type}
-
-  - id: input_probe2_type
-    type: int
-    restore_value: yes
-    initial_value: ${default_probe2_type}
 
   - id: input_humidity_internal_enabled
     type: bool
@@ -9263,88 +9181,10 @@ lvgl:
                               cycle: true
                           - script.execute: refresh_temperature_display
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 324, width: 460, text: "Probe 1 Source", text_font: font_medium, text_color: col_text}
-              - obj:
-                  x: 0
-                  y: 354
-                  width: 460
-                  height: 64
-                  bg_color: col_bg
-                  border_width: 0
-                  pad_all: 0
-                  widgets:
-                    - obj:
-                        x: 0
-                        y: 4
-                        width: 180
-                        height: 56
-                        bg_color: col_panel
-                        radius: 8
-                        border_width: 0
-                        pad_all: 0
-                        widgets:
-                          - label: {id: lbl_sel_p1src, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
-                    - button:
-                        x: 196
-                        y: 4
-                        width: 240
-                        height: 56
-                        bg_color: col_blue
-                        radius: 8
-                        border_width: 0
-                        pad_top: 0
-                        pad_bottom: 0
-                        pad_left: 0
-                        pad_right: 0
-                        widgets: [{label: {align: CENTER, text: "Cycle", text_font: font_medium, text_color: col_text}}]
-                        on_click:
-                          - select.next:
-                              id: sel_probe1_type
-                              cycle: true
-                          - script.execute: refresh_all_settings_labels
-              - label: {x: 500, y: 324, width: 460, text: "Probe 2 Source", text_font: font_medium, text_color: col_text}
-              - obj:
-                  x: 500
-                  y: 354
-                  width: 460
-                  height: 64
-                  bg_color: col_bg
-                  border_width: 0
-                  pad_all: 0
-                  widgets:
-                    - obj:
-                        x: 0
-                        y: 4
-                        width: 180
-                        height: 56
-                        bg_color: col_panel
-                        radius: 8
-                        border_width: 0
-                        pad_all: 0
-                        widgets:
-                          - label: {id: lbl_sel_p2src, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
-                    - button:
-                        x: 196
-                        y: 4
-                        width: 240
-                        height: 56
-                        bg_color: col_blue
-                        radius: 8
-                        border_width: 0
-                        pad_top: 0
-                        pad_bottom: 0
-                        pad_left: 0
-                        pad_right: 0
-                        widgets: [{label: {align: CENTER, text: "Cycle", text_font: font_medium, text_color: col_text}}]
-                        on_click:
-                          - select.next:
-                              id: sel_probe2_type
-                              cycle: true
-                          - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 432, width: 460, text: "Auto Calibrate", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 324, width: 460, text: "Auto Calibrate", text_font: font_medium, text_color: col_text}
               - button:
                   x: 0
-                  y: 462
+                  y: 354
                   width: 460
                   height: 56
                   bg_color: col_blue
@@ -10855,8 +10695,6 @@ script:
           input_defrost_skip_cold_enabled->update();
           input_frost_rate_monitoring_enabled->update();
           input_ice_detect_enabled->update();
-          input_probe1_type->update();
-          input_probe2_type->update();
           ctl_calibration_samples_min->update();
           ctl_calibration_samples_max->update();
           input_door_sensor_enabled->update();
@@ -11116,18 +10954,6 @@ script:
           id: lbl_st_icedwell
           text: !lambda |-
             char b[16]; snprintf(b, sizeof(b), "%d min", (int) id(ctl_ice_dwell_min)); return std::string(b);
-      - lvgl.label.update:
-          id: lbl_sel_p1src
-          text: !lambda |-
-            const std::string o = id(sel_probe1_type).current_option();
-            if (o == "SHT31 I2C") return std::string("SHT31");
-            if (o == "Unused") return std::string("Off");
-            return std::string("RTD");
-      - lvgl.label.update:
-          id: lbl_sel_p2src
-          text: !lambda |-
-            return id(sel_probe2_type).current_option() == "Unused"
-                ? std::string("Off") : std::string("RTD");
       - lvgl.label.update:
           id: lbl_sw_audioen
           text: !lambda 'return std::string(id(input_audio_alerts_enabled) ? "ON" : "OFF");'
