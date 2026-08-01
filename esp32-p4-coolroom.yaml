@@ -3907,6 +3907,22 @@ interval:
               }
           }
 
+          // ── Door open alarm (with configurable delay) ────────────────────
+          // Evaluated every tick, outside the probe-fault / grace branches:
+          // the reed and the delay do not depend on any temperature probe, so
+          // a failed probe must not silently disable the door alarm (it also
+          // used to block the soft-mute lift, since the door bit could never
+          // appear while a probe fault was latched).
+          // Gated on input_door_sensor_enabled as a safety net — the reed
+          // sensor's on_state already refuses to start the timer while
+          // disabled, but this catches a stale timestamp from the switch being
+          // turned off mid-open.
+          if (id(input_door_sensor_enabled) && id(ctl_door_open_since_ms) > 0) {
+              const uint32_t door_delay_ms = (uint32_t)(id(ctl_door_alarm_delay_s) * 1000.0f);
+              if ((now_ms - id(ctl_door_open_since_ms)) >= door_delay_ms)
+                  id(ctl_door_alarm_active) = true;
+          }
+
           // ── 7. Alarm evaluation (with grace + persist + hysteresis) ──────
           if (!fault && !in_grace) {
               bool raw_hi = p4_ctl_alarm_high(t, id(ctl_setpoint), id(ctl_alarm_high_delta));
@@ -3939,17 +3955,6 @@ interval:
                   id(ctl_ice_since_ms) = 0;
               }
               id(ctl_ice_alarm_active) = ice;
-              // ── Door open alarm (with configurable delay) ────────────
-              // Gated on input_door_sensor_enabled as a safety net — the
-              // reed sensor's on_state already refuses to start the timer
-              // while disabled, but this catches the edge case of the
-              // switch being turned off mid-open before that fix existed
-              // in an already-running session, or a stale timestamp.
-              if (id(input_door_sensor_enabled) && id(ctl_door_open_since_ms) > 0) {
-                  const uint32_t door_delay_ms = (uint32_t)(id(ctl_door_alarm_delay_s) * 1000.0f);
-                  if ((now_ms - id(ctl_door_open_since_ms)) >= door_delay_ms)
-                      id(ctl_door_alarm_active) = true;
-              }
               // Siren: any active alarm drives it unless the operator muted
               // from the home-screen bell. Soft-mute is lifted below when the
               // alarm set is empty or a *new* condition appears.

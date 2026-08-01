@@ -440,6 +440,10 @@ place updates the other.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
+The door alarm depends only on the reed and the delay, so it still fires during a
+probe fault or the start-up grace period — a failed temperature probe does not
+disable it.
+
 ---
 
 ### 4.7 Probes & Sensors

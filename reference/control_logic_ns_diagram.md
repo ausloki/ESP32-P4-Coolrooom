@@ -39,7 +39,10 @@ Network behavior is optional:
 │  │ relay_compressor → ON    │  │ relay_compressor → OFF│  │  (hold state)  ││
 │  └──────────────────────────┘  └──────────────────────┘  └────────────────┘│
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  ALARM EVALUATION                                                           │
+│  DOOR ALARM  (every tick — independent of probe_fault / grace)              │
+│  door_sensor_enabled AND door open >= door_alarm_delay → ctl_door_alarm_active│
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ALARM EVALUATION  (temperature-derived only; skipped on probe_fault/grace) │
 │  hi = p4_ctl_alarm_high(t, setpoint, alarm_high_delta)                     │
 │  lo = p4_ctl_alarm_low(t, setpoint, alarm_low_delta)                       │
 │  ┌────────── hi OR lo OR probe_fault ─────────────┐  ┌───── all clear ────┐│

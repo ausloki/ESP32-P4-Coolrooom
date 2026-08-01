@@ -17,13 +17,10 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 
 ## Still to verify / open
 
-1. Optional: second alarm type while muted → jiggle resumes (door reed is enough)
+1. ✅ Soft-mute + second alarm jiggle (2026-08-01): door alarm was gated behind
+   `!fault`, so probe fault blocked mute-lift; door eval now runs every tick.
+   Confirmed on glass: mute → hold reed open → bell jiggling again.
 2. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
-3. ✅ Web gauge twin matches LVGL (Cory, 2026-08-01)
-4. ✅ SD Backup works (Cory); full sensor coverage in backup.json still unverified without RTD/I2C probes
-5. ✅ I2C/RTC: **dropped PCF8563** (2026-08-01). Waveshare FAQ = SoC 48-bit LP RTC +
-   NTP; no I2C RTC chip in docs. Diagnostics: **System Time Valid**. Optional 1220 in
-   holder item 11 backs VBAT.
 
 ## Leave for later
 

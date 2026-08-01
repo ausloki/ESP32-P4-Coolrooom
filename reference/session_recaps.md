@@ -4,6 +4,15 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Door alarm independent of probe fault
+
+- Soft-mute re-jiggle failed on bench: door alarm lived inside `!fault && !in_grace`,
+  so probe fault (expected without RTD) blocked the door bit and mute never lifted.
+- Moved door-open delay eval outside that gate; USER_MANUAL §4.6 + NS diagram updated.
+- Live: mute on probe fault → hold reed → bell jiggling again.
+
+---
+
 ## 2026-08-01 (Afternoon) — Drop PCF8563; SoC LP RTC + NTP only
 
 - Waveshare FAQ + schematic: no I2C RTC chip; item 11 is battery holder for SoC VBAT.
