@@ -35,6 +35,8 @@ web as **Speaker Volume (%)** (50–90, default 85). The same value is what HA s
 ## Follow-up — microphone / voice input
 
 Not started. Board has I2S DIN (`audio_i2s_din_pin` / GPIO11) and ES8311 ADC.
+Web **Audio** tab (and virtual preview) already expose speak toggles including hardware-offline
+phrases; LVGL audio toggles remain web-only until settings-page budget allows.
 
 Suggested next steps when picking this up:
 

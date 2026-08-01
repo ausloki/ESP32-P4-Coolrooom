@@ -1,5 +1,15 @@
 # Progress Tracking
 
+## 2026-08-01 — Can-do-now punch list closed
+
+- Synced `assets/dashboard_virtual_preview.html` to live Coolroom Status (no pink strip,
+  rotating fault labels, full Audio + Alarms & Notify ADVANCED_SETTINGS incl. Hardware
+  Offline Priority).
+- Confirmed SD `opendir`/`readdir` already fixed via `disable_vfs_support_dir: false`.
+- Refreshed `HANDOVER_NOTES_2026-07-31.md` + `activeContext.md`; device spot-check OK
+  (Status rotating humidity offline; no guest gate / alarm strip in embedded page).
+- Manual screenshots and Carel control decisions left open (need photos / product choice).
+
 ## 2026-08-01 — Hardware-offline ntfy + afternoon closeout
 
 - ntfy now covers RELAY/TEMP BOARD and HUMIDITY/AMBIENT SENSOR OFFLINE (rising edge)
@@ -579,24 +589,22 @@
 
 ### Pending Tasks ⏳
 
-**Device Testing:**
+**Device / product (current):**
 
-- [ ] Flash firmware.factory.bin to ESP32-P4
-- [ ] Verify home page layout and rendering
-- [ ] Test arc gauge animations
-- [ ] Verify icon color changes
-- [ ] Test light icon touch toggle
-- [ ] Test alarm icon touch reset
-- [ ] Extended operation stability test
+- [ ] Fit RS485 relay + RTD boards; verify end-to-end cooling + Probes tab Raw/Offset/Corrected
+- [ ] Replace USER_MANUAL / Quick Start screenshot placeholders with real captures
+- [ ] Decide Carel follow-ups: asymmetric hysteresis, min compressor ON-time, fan control,
+      door-open cooling pause
 
-**Potential Enhancements:**
+**Deferred enhancements:**
 
-- [ ] Arc animation/easing effects
-- [ ] Setpoint needle (alternative pointer widget)
-- [ ] Icon pulse animations on alarm
-- [ ] Secondary pages (settings, diagnostics)
-- [ ] Nighttime theme
+- [ ] Microphone / voice input (see `reference/AUDIO_ALERTS.md`)
+- [ ] LVGL toggles for audio (web-only today)
+- [ ] Web log download / dashboard OTA UI
+- [ ] Real multi-user server auth (ESPHome limitation)
 
+**Note:** Older Phase 4 “flash and verify home page” checklist items are done — device is
+in daily use on the bench.
 ## Phase 5 Roadmap
 
 **Planned Features:**

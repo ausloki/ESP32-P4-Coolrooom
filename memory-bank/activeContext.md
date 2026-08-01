@@ -13,42 +13,37 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 - Home gauge: rings only on flat `#1C1C1E`, dial −10…+30, setpoint floor clamped
 - Settings persistence across **reboot** confirmed live
 - Coverage checker + persist-script staging check green
+- Rotating centre status + matching audio + ntfy hardware-offline
+- Virtual preview aligned with live gauge / Audio / Alarms & Notify (2026-08-01)
 - Rule: `.cursor/rules/home-gauge-design.mdc` (always apply)
 
-## Still to verify / open
+## Closed this session (can-do-now punch list)
 
-1. ✅ Soft-mute + second alarm jiggle (2026-08-01): door alarm was gated behind
-   `!fault`, so probe fault blocked mute-lift; door eval now runs every tick.
-   Confirmed on glass: mute → hold reed open → bell jiggling again.
-2. ✅ Sensor fallback duty cycle (2026-08-01): the ON window used to burn down inside the
-   compressor off-delay (both default to 3 min, and boot seeds the off-delay), so the
-   compressor never ran under probe fault. `p4_ctl_fallback_should_run()` now takes
-   `compressor_locked_out` and holds the ON window instead of spending it.
-3. ✅ Compressor gated on RS485 relay board online (2026-08-01): no coil → no start, red
-   snowflake, centre status **RELAY BOARD OFFLINE**, no snow FX. Fallback ON window held while
-   board is down. Web SSE first-paint fixed (leading edge + `state_detail_all`). Centre
-   fonts enlarged (LVGL 80 / web twin).
-4. ✅ Rotating multi-fault centre status + matching speech (2026-08-01): plain-language
-   labels (RELAY/TEMP BOARD OFFLINE, HUMIDITY/AMBIENT SENSOR OFFLINE, COOLROOM PROBE BAD,
-   …); audio clips + Audio-tab toggles edge-triggered with the status.
-5. ✅ Hardware-offline ntfy pushes (2026-08-01): same four rising edges + ONLINE
-   recoveries; shared Hardware Offline Priority (urgent); All-Clear for recoveries.
-6. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
+1. ✅ Virtual preview sync (no pink strip; rotating fault labels; ADVANCED_SETTINGS parity)
+2. ✅ `opendir`/log listing — already fixed (`disable_vfs_support_dir: false`); noted closed
+3. ✅ Stale handover / activeContext refreshed
+4. ✅ Device spot-check: no `settingsGate` / `alarm-banner`; Status rotates
+   `HUMIDITY SENSOR OFFLINE` (SHT enabled, not fitted); Hardware Offline Priority = urgent
 
-## Leave for later
+## Still open
 
-- RS485 / external I2C not on bench
+- Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 - Manual screenshots still placeholders
-- CPU % spike on hard browser refresh is expected (SSE full reconnect); web UI
-  now EMA-smooths the displayed value (firmware sensor unchanged)
+- Carel decisions: asymmetric hysteresis, min compressor ON-time, fan control,
+  door-open cooling pause
+- Deferred product: mic/voice, LVGL audio toggles, web log download, dashboard OTA UI,
+  multi-user server auth
+
+## Leave for later (bench)
+
+- RS485 / external I2C not on bench — offline faults expected
+- CPU % spike on hard browser refresh expected (SSE full reconnect); EMA-smoothed in UI
 
 ## Key commands
 
 ```bash
 python3 scripts/embed_dashboard.py
 ./tools/esphome_compile.sh esp32-p4-coolroom.yaml
-# Settings-preserving flash. `esphome upload` over USB writes factory.bin from
-# 0x0 and ERASES NVS (0x9000-0x15000) — that is why settings "came back".
 ./tools/esphome_flash.sh --device /dev/cu.usbmodem213401
 .venv/bin/python tools/check_dashboard_coverage.py
 .venv/bin/python tools/test_settings_persistence.py --host 192.168.37.237

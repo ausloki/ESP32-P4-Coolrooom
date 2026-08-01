@@ -4,6 +4,17 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Evening) — Close can-do-now punch list
+
+- Virtual preview: dropped pink alarm strip; centre status rotates firmware fault labels;
+  ADVANCED_SETTINGS regenerated from live (Audio + Alarms & Notify + Hardware Offline).
+- Confirmed `opendir` listing fix already in yaml; refreshed handover/activeContext.
+- Live spot-check: embedded page has no settingsGate/alarm-banner; Status =
+  HUMIDITY SENSOR OFFLINE (expected on bench); Hardware Offline Priority urgent.
+- Screenshots + Carel decisions still deferred.
+
+---
+
 ## 2026-08-01 (Afternoon) — Hardware-offline alerts on ntfy
 
 - Four new rising-edge ntfy pushes (relay board / temp board / humidity / ambient offline)

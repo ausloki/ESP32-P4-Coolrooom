@@ -123,9 +123,9 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; pointer-events: none;
     }
-    .gauge-temp { font-size: 68px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; }
+    .gauge-temp { font-size: 68px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
     .gauge-setpoint { font-size: 20px; color: #00BCD4; margin-top: 12px; font-weight: 500; }
-    .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .gauge-status { font-size: 15px; color: #FF9F0A; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
     .gauge-readings { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
     .gauge-reading { flex: 1 1 160px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
     .gauge-reading-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.5); }
@@ -134,29 +134,6 @@
     .gauge-reading.external span:last-child { color: #FF1493; }
     .gauge-reading.evaporator span:last-child { color: #FF9F0A; }
 
-    /* Named alarm banner — visible, pulsing; only rendered when a named
-       alarm (high/low temp, door, no-cool, ice) is active. Distinct from
-       the generic fault/connectivity alerts, which stay plain boxes. */
-    .alarm-banner {
-      background: rgba(255, 69, 58, 0.14);
-      border: 1px solid #FF453A;
-      color: #FF453A;
-      border-radius: 10px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      animation: alarm-pulse 1.6s ease-in-out infinite;
-    }
-    @keyframes alarm-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.35); }
-      50% { box-shadow: 0 0 0 8px rgba(255, 69, 58, 0); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .alarm-banner { animation: none; }
-    }
     @media (max-width: 440px) {
       .gauge-panel { grid-template-columns: 1fr; }
       .gauge-icons { grid-column: 1; flex-direction: row; justify-content: center; }
@@ -299,19 +276,15 @@
       </div>
     </header>
 
-    <!-- Named alarm banner demo — shown active here so the preview
-         demonstrates the feature; the live dashboard only renders this
-         when a named alarm (high/low temp, door, no-cool, ice) is active. -->
-    <div class="alarm-banner">🚨 HIGH TEMPERATURE &nbsp;·&nbsp; DOOR OPEN</div>
-
+    <!-- Alarms live on the centre status + bell chip (no pink strip above the gauge). -->
     <div class="gauge-section">
       <h2 class="gauge-title">Coolroom Status</h2>
       <div class="gauge-panel">
         <div class="gauge-icons">
-          <div class="gauge-icon-chip is-on" title="Compressor">❄️</div>
+          <div class="gauge-icon-chip" title="Compressor (relay board offline in this mock)">❄️</div>
           <div class="gauge-icon-chip" title="Defrost">🔥</div>
           <button class="gauge-icon-chip clickable" id="iconLight" title="Toggle light (login required)" onclick="toggleLight()">💡</button>
-          <div class="gauge-icon-chip" title="No active alarms">🔔</div>
+          <div class="gauge-icon-chip is-alert" id="iconBell" title="Active fault">🔔</div>
         </div>
         <div class="gauge-wrap">
           <svg viewBox="0 0 300 300">
@@ -325,7 +298,7 @@
           <div class="gauge-center">
             <div class="gauge-temp" id="gaugeTemp">3.8°C</div>
             <div class="gauge-setpoint" id="gaugeSetpoint">Set: 2.0°C</div>
-            <div class="gauge-status" id="gaugeStatus">Running</div>
+            <div class="gauge-status" id="gaugeStatus">RELAY BOARD OFFLINE</div>
           </div>
         </div>
         <div class="gauge-info">
@@ -379,7 +352,7 @@
           <div id="help-alarm-high" class="help-popover hidden">
             How far <strong>above Setpoint</strong> the room can drift, held for 5 minutes straight, before the
             <strong>High Temperature</strong> alarm fires. Example: Setpoint 2.0°C + 3.0°C = alarm above 5.0°C.
-            Drives the pulsing "HIGH TEMPERATURE" banner and the 🔔 alarm icon.
+            Shows on the centre status (HIGH TEMP) and the 🔔 alarm icon — no pink strip above the gauge.
           </div>
         </div>
         <div class="field">
@@ -582,81 +555,100 @@
       }
     }
 
-    // Same field set/help text as the live dashboard's ADVANCED_SETTINGS_GROUPS,
-    // with a `def` (demo) value added per field since this static page has no
-    // device to poll — rendered once as disabled/non-interactive mock content.
+    // Same field set/help text as the live dashboard ADVANCED_SETTINGS_GROUPS,
+    // with a `def` (demo) value per field — static page has no device to poll.
     const ADVANCED_SETTINGS_GROUPS = [
-      { title: 'Compressor & Fallback', fields: [
-        { type: 'number', entity: 'comp_lockout_min', label: 'Compressor Off-Delay (min)', def: 3,
-          help: 'Minimum time the compressor must stay off after switching off before it’s allowed to run again — protects the compressor motor from rapid on/off cycling ("short cycling").' },
-        { type: 'switch', entity: 'sw_fallback_enabled', label: 'Sensor Fallback Enabled', def: true,
-          help: 'When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle so cooling continues, degraded, until the probe recovers.' },
-        { type: 'number', entity: 'fallback_on_min', label: 'Fallback Compressor ON Time (min)', def: 3,
-          help: 'While the sensor fallback duty cycle is active, how long the compressor runs during each ON phase.' },
-        { type: 'number', entity: 'fallback_off_min', label: 'Fallback Compressor OFF Time (min)', def: 27,
-          help: 'While the sensor fallback duty cycle is active, how long the compressor rests during each OFF phase.' },
+      { title: "Compressor & Fallback", fields: [
+        { type: "number", entity: "compressor_off-delay__min_", label: "Compressor Off-Delay (min)", def: 300, help: "Minimum time the compressor must stay off after switching off before it’s allowed to run again — protects the compressor motor from rapid on/off cycling (\"short cycling\").", min: 0, max: 10, step: 1 },
+        { type: "number", entity: "compressor_min_run_time__min_", label: "Compressor Min Run Time (min)", def: 0, help: "Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. Complements Off-Delay. Set 0 to disable.", min: 0, max: 30, step: 1 },
+        { type: "switch", entity: "sensor_fallback_duty-cycle_enabled", label: "Sensor Fallback Enabled", def: true, help: "When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle (the two settings below) so cooling continues, degraded, until the probe recovers." },
+        { type: "number", entity: "sensor_fallback_compressor_on_time__min_", label: "Fallback Compressor ON Time (min)", def: 3, help: "While the sensor fallback duty cycle is active, how long the compressor runs during each ON phase.", min: 1, max: 30, step: 1 },
+        { type: "number", entity: "sensor_fallback_compressor_off_time__min_", label: "Fallback Compressor OFF Time (min)", def: 27, help: "While the sensor fallback duty cycle is active, how long the compressor rests during each OFF phase.", min: 1, max: 60, step: 1 },
       ]},
-      { title: 'Defrost', fields: [
-        { type: 'switch', entity: 'sw_defrost_enabled', label: 'Defrost System Enabled', def: true,
-          help: 'Master switch for the whole defrost system. Turning this off disables scheduled, smart-delta, and dew-point defrost cycles entirely.' },
-        { type: 'number', entity: 'defrost_interval_num', label: 'Defrost Interval (min)', def: 480,
-          help: 'How often a scheduled defrost cycle runs, measured from the end of the last defrost.' },
-        { type: 'number', entity: 'defrost_duration_num', label: 'Defrost Max Duration (min)', def: 30,
-          help: 'The hard time limit on a defrost cycle — it always ends by this point regardless.' },
-        { type: 'switch', entity: 'sw_defrost_term_temp', label: 'Defrost Early Termination by Temperature', def: true,
-          help: 'When enabled, a defrost cycle can end early once the evaporator reaches the termination temperature below.' },
-        { type: 'number', entity: 'defrost_end_temp', label: 'Defrost Termination Temp (°C)', def: 5.0,
-          help: 'The evaporator temperature that ends a defrost cycle early.' },
-        { type: 'switch', entity: 'sw_defrost_drip', label: 'Defrost Drip-Drain Phase', def: true,
-          help: 'When enabled, the compressor stays off for a hold period after defrost ends to let meltwater drain.' },
-        { type: 'number', entity: 'defrost_drip_num', label: 'Defrost Drip Time (min)', def: 5,
-          help: 'How long the compressor is held off after a defrost cycle ends.' },
-        { type: 'switch', entity: 'sw_smart_defrost', label: 'Smart Defrost (Delta-Triggered)', def: false,
-          help: 'When enabled, a growing temperature gap between the coolroom and evaporator probes can trigger an early defrost.' },
-        { type: 'number', entity: 'smart_delta_c', label: 'Smart Defrost Delta Threshold (°C)', def: 8.0,
-          help: 'How large the coolroom-to-evaporator gap must get before it counts toward triggering smart defrost.' },
-        { type: 'number', entity: 'smart_dwell_min', label: 'Smart Defrost Dwell Time (min)', def: 30,
-          help: 'How long that gap must hold above the threshold before smart defrost actually triggers.' },
-        { type: 'switch', entity: 'sw_dew_point_trigger', label: 'Dew Point Early Defrost Trigger', def: false,
-          help: 'When enabled, defrost can also start early if the evaporator drops below both freezing and the surrounding air’s dew point.' },
+      { title: "Defrost", fields: [
+        { type: "switch", entity: "defrost_system_enabled", label: "Defrost System Enabled", def: true, help: "Master switch for automatic defrost. Off disables scheduled, smart-delta, dew-point, frost-rate, and force-max starts. Start Defrost Now still works for service (and Stop ends any cycle, including drip). Separate from Defrost Relay Enabled on the Hardware tab, which only gates the heater coil." },
+        { type: "button", entity: "start_manual_defrost", label: "Start Defrost Now", help: "Begin a defrost cycle immediately. Resets the interval timer from this cycle. Works even when Defrost System Enabled is off (service override). If Defrost Relay Enabled is off, the cycle still runs as a passive defrost (compressor held off, no heater)." },
+        { type: "button", entity: "stop_manual_defrost", label: "Stop Defrost Now", help: "Abort the current defrost or drip phase immediately and return to normal cooling rules (subject to compressor off-delay)." },
+        { type: "number", entity: "defrost_interval__min_", label: "Defrost Interval (min)", def: 480, help: "How often a scheduled defrost cycle runs, measured from the end of the last defrost. The triggers below can start one earlier if conditions call for it.", min: 60, max: 1440, step: 30 },
+        { type: "number", entity: "defrost_max_duration__min_", label: "Defrost Max Duration (min)", def: 30, help: "The hard time limit on a defrost cycle — it always ends by this point even if the evaporator hasn’t reached the termination temperature yet.", min: 5, max: 60, step: 5 },
+        { type: "switch", entity: "defrost_early_termination_by_temperature", label: "Defrost Early Termination by Temperature", def: true, help: "When enabled, a defrost cycle can end early once the evaporator (Probe 2) reaches the termination temperature below, instead of always running the full max duration." },
+        { type: "number", entity: "defrost_termination_temp____c_", label: "Defrost Termination Temp (°C)", def: 5, help: "The evaporator temperature that ends a defrost cycle early — only takes effect if \"Defrost Early Termination by Temperature\" above is enabled.", min: 0, max: 15, step: 0.5 },
+        { type: "switch", entity: "defrost_drip-drain_phase", label: "Defrost Drip-Drain Phase", def: true, help: "When enabled, the compressor stays off for a hold period after defrost ends (the time below) to let meltwater drain before cooling resumes." },
+        { type: "number", entity: "defrost_drip_time__min_", label: "Defrost Drip Time (min)", def: 5, help: "How long the compressor is held off after a defrost cycle ends, if the drip/drain phase above is enabled.", min: 0, max: 30, step: 1 },
+        { type: "switch", entity: "smart_defrost__delta-triggered_", label: "Smart Defrost (Delta-Triggered)", def: true, help: "When enabled, a growing temperature gap between the coolroom and evaporator probes (ice build-up narrows heat transfer) can trigger an early defrost, on top of the fixed interval." },
+        { type: "number", entity: "smart_defrost_delta_threshold____c_", label: "Smart Defrost Delta Threshold (°C)", def: 5, help: "How large the coolroom-to-evaporator temperature gap must get, while the compressor runs, before it counts toward triggering smart defrost.", min: 1, max: 20, step: 0.5 },
+        { type: "number", entity: "smart_defrost_dwell_time__min_", label: "Smart Defrost Dwell Time (min)", def: 30, help: "How long that temperature gap must hold above the threshold continuously before smart defrost actually triggers — avoids reacting to a brief spike.", min: 1, max: 120, step: 1 },
+        { type: "switch", entity: "dew_point_early_defrost_trigger", label: "Dew Point Early Defrost Trigger", def: true, help: "When enabled, defrost can also start early if the evaporator drops below both freezing and the surrounding air’s dew point (calculated from the internal SHT31) — the actual physical condition under which frost forms on the coil." },
+        { type: "switch", entity: "defrost_skip-if-cold", label: "Defrost Skip-If-Cold", def: true, help: "When a scheduled interval is due but the evaporator is already at or below the Skip-If-Cold Below temperature, skip that cycle and roll the interval clock forward. Manual, smart, dew-point, frost-rate, and force-max starts are never skipped." },
+        { type: "number", entity: "defrost_skip-if-cold_below____c_", label: "Skip-If-Cold Below (°C)", def: -5, help: "Evaporator temperature at or below which a due scheduled defrost is skipped (coil already cold). Requires Probe 2.", min: -30, max: 0, step: 0.5 },
+        { type: "number", entity: "defrost_max_interval_override__min_", label: "Force-Max Interval (min)", def: 480, help: "Safety net: force a defrost if this many minutes have passed since the last cycle, even when Skip-If-Cold would otherwise keep postponing. Range 12–24 hours.", min: 720, max: 1440, step: 30 },
+        { type: "switch", entity: "frost_rate_monitoring", label: "Frost Rate Monitoring", def: true, help: "Early defrost when humidity drops sharply over the sample window while room temperature stays nearly stable (frost forming on the coil). Needs the internal SHT31 humidity sensor." },
+        { type: "number", entity: "frost_rate_humidity_drop____", label: "Frost Rate Humidity Drop (%)", def: 5, help: "How large a humidity drop over the frost-rate window must be to trigger an early defrost.", min: 1, max: 20, step: 0.5 },
+        { type: "number", entity: "frost_rate_window__s_", label: "Frost Rate Window (s)", def: 300, help: "Length of the humidity/temperature sample window used by frost-rate monitoring.", min: 60, max: 3600, step: 30 },
       ]},
-      { title: 'Alarms', fields: [
-        { type: 'number', entity: 'alarm_persist_num', label: 'Alarm Persist Time (min)', def: 5,
-          help: 'How long a high or low temperature condition must hold before the alarm actually fires.' },
-        { type: 'number', entity: 'alarm_hysteresis_c', label: 'Alarm Recovery Hysteresis (°C)', def: 0.5,
-          help: 'How far the room must recover past Setpoint before an active alarm clears.' },
-        { type: 'number', entity: 'ice_delta_num', label: 'Ice Alarm Delta (°C)', def: 2.0,
-          help: 'If the coolroom-evaporator gap shrinks below this, it likely means ice is blocking the coil.' },
-        { type: 'number', entity: 'no_cool_alarm_num', label: 'No-Cool Alarm Timeout (min)', def: 60,
-          help: 'If the compressor runs this long without the room cooling below Setpoint, it likely means a refrigeration failure.' },
-        { type: 'switch', entity: 'sw_siren_enabled', label: 'Alarm Siren Enabled', def: true,
-          help: 'Whether the physical siren relay sounds when any alarm is active.' },
-        { type: 'number', entity: 'startup_grace_min', label: 'Startup Alarm Grace Floor (min)', def: 15,
-          help: 'Alarms are suppressed for at least this long after boot, extending further if the room hasn’t reached Setpoint yet.' },
-        { type: 'number', entity: 'defrost_grace_min', label: 'Post-Defrost Alarm Grace (min)', def: 20,
-          help: 'Alarms are suppressed for this long after each defrost cycle ends.' },
+      { title: "Audio Alerts", fields: [
+        { type: "switch", entity: "audio_alerts_enabled", label: "Audio Alerts Enabled", def: true, help: "Master switch for spoken announcements over the on-board speaker. Off silences every phrase below. The home-screen bell also mutes speech for the current alarm event (same soft mute as the siren)." },
+        { type: "number", entity: "speaker_volume____", label: "Speaker Volume (%)", def: 85, help: "Loudness of spoken alerts on the on-board speaker. 85% is the measured clear level; the range is capped at 50–90% so alarms cannot be silenced or driven into distortion. Use Test Speaker after changing it.", min: 50, max: 90, step: 5 },
+        { type: "button", entity: "test_audio_alert", label: "Test Speaker", help: "Play a short test phrase. Ignores the master toggle so you can verify the speaker even when alerts are off. Requires the ES8311 codec on I2C." },
+        { type: "switch", entity: "speaker_amplifier", label: "Speaker Amplifier (diagnostic)", def: true, help: "Raw power control for the on-board amplifier. Playback normally switches this on and off by itself, so leave it alone during normal use — it is here to test the amplifier in isolation, or to force it quiet. It returns to off after every reboot." },
+        { type: "switch", entity: "speak_high_temp_alarm", label: "Speak High Temp Alarm", def: true, help: "Voice: “Attention. High temperature alarm.” when that alarm becomes active." },
+        { type: "switch", entity: "speak_low_temp_alarm", label: "Speak Low Temp Alarm", def: true, help: "Voice for the low-temperature alarm." },
+        { type: "switch", entity: "speak_door_open_alarm", label: "Speak Door Open Alarm", def: true, help: "Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves." },
+        { type: "switch", entity: "speak_no-cool_alarm", label: "Speak No-Cool Alarm", def: true, help: "Voice: “Attention. Not cooling.” when that alarm becomes active." },
+        { type: "switch", entity: "speak_ice_alarm", label: "Speak Ice Alarm", def: true, help: "Voice: “Attention. Ice on coil.”" },
+        { type: "switch", entity: "speak_probe_fault", label: "Speak Probe Fault", def: true, help: "Voice: “Attention. Coolroom probe bad.” when the main coolroom probe fails." },
+        { type: "switch", entity: "speak_relay_board_offline", label: "Speak Relay Board Offline", def: true, help: "Voice when the Modbus relay board stops responding (matches centre status RELAY BOARD OFFLINE)." },
+        { type: "switch", entity: "speak_temp_board_offline", label: "Speak Temp Board Offline", def: true, help: "Voice when the RS485 temperature-probe board stops responding (TEMP BOARD OFFLINE)." },
+        { type: "switch", entity: "speak_humidity_sensor_offline", label: "Speak Humidity Sensor Offline", def: true, help: "Voice when the enabled cabinet humidity/temp sensor (SHT31) stops answering." },
+        { type: "switch", entity: "speak_ambient_sensor_offline", label: "Speak Ambient Sensor Offline", def: true, help: "Voice when the enabled ambient sensor (SHT20) stops answering." },
+        { type: "switch", entity: "speak_cooling_started", label: "Speak Cooling Started", def: true, help: "Info voice when the compressor starts." },
+        { type: "switch", entity: "speak_cooling_stopped", label: "Speak Cooling Stopped", def: false, help: "Info voice when the compressor stops. Off by default (can be chatty)." },
+        { type: "switch", entity: "speak_defrost_started", label: "Speak Defrost Started", def: true, help: "Info voice when a defrost cycle begins." },
+        { type: "switch", entity: "speak_defrost_complete", label: "Speak Defrost Complete", def: true, help: "Info voice when a defrost cycle ends." },
+        { type: "switch", entity: "speak_door_opened", label: "Speak Door Opened", def: true, help: "Info voice the moment the door reed sees open (immediate, not the delayed alarm)." },
+        { type: "switch", entity: "speak_door_closed", label: "Speak Door Closed", def: false, help: "Info voice when the door closes. Off by default." },
       ]},
-      { title: 'Door', fields: [
-        { type: 'switch', entity: 'sw_door_sensor_enabled', label: 'Door Sensor Enabled', def: false,
-          help: 'Master for door alarm and door-triggered light. Off also turns Door-Triggered Light off.' },
-        { type: 'switch', entity: 'door_sensor_mode_nc_no', label: 'Door Sensor Mode: NC (on) / NO (off)', def: true,
-          help: 'Matches the reed switch’s wiring — Normally Closed or Normally Open.' },
-        { type: 'switch', entity: 'sw_door_light_enabled', label: 'Door-Triggered Light Enabled', def: false,
-          help: 'Requires Door Sensor Enabled. Opening the door turns the cabinet light on; closing turns it off.' },
-        { type: 'number', entity: 'door_alarm_delay_num', label: 'Door Alarm Delay (s)', def: 300,
-          help: 'How long the door can stay open before the Door Open alarm fires.' },
+      { title: "Alarms & Notifications", fields: [
+        { type: "number", entity: "high_temp_alarm_delta____c_", label: "High Temp Alarm Delta (°C)", def: 5, help: "How far above Setpoint the room can drift before the High Temperature alarm can fire (still subject to Persist Time below).", min: 0.5, max: 20, step: 0.1 },
+        { type: "number", entity: "low_temp_alarm_delta____c_", label: "Low Temp Alarm Delta (°C)", def: 5, help: "How far below Setpoint before the Low Temperature alarm can fire.", min: 0.5, max: 20, step: 0.1 },
+        { type: "number", entity: "alarm_persist_time__min_", label: "Alarm Persist Time (min)", def: 5, help: "How long a high or low temperature condition must hold continuously before the alarm actually fires — filters out brief spikes (e.g. a door opening) from triggering a false alarm.", min: 0, max: 30, step: 1 },
+        { type: "number", entity: "alarm_recovery_hysteresis____c_", label: "Alarm Recovery Hysteresis (°C)", def: 0.5, help: "Once a high/low temperature alarm is active, the room must recover back past Setpoint by this many extra degrees before the alarm clears — prevents the alarm flickering on and off right at the threshold.", min: 0.1, max: 5, step: 0.1 },
+        { type: "switch", entity: "ice_detection_enabled", label: "Ice Detection Enabled", def: true, help: "Master switch for the evaporator ice alarm. Off disables ice detection entirely." },
+        { type: "number", entity: "ice_alarm_delta____c_", label: "Ice Alarm Delta (°C)", def: 15, help: "Alarm when (coolroom − evaporator) stays at or above this gap while the compressor runs — a large gap means the coil is iced / starved of airflow (Precision polarity). Default 15°C.", min: 5, max: 30, step: 0.5 },
+        { type: "number", entity: "ice_alarm_dwell_time__min_", label: "Ice Alarm Dwell Time (min)", def: 30, help: "How long the ice condition must hold continuously before the Ice alarm fires. Any break resets the dwell timer.", min: 1, max: 60, step: 1 },
+        { type: "number", entity: "no-cool_alarm_timeout__min_", label: "No-Cool Alarm Timeout (min)", def: 60, help: "If the compressor has been running continuously for this long but the room still hasn’t cooled below Setpoint + half the Compressor Hysteresis, it likely means the refrigeration system has failed — triggers the No-Cooling alarm.", min: 15, max: 240, step: 15 },
+        { type: "switch", entity: "alarm_siren_enabled", label: "Alarm Siren Enabled", def: true, help: "Whether the physical siren relay sounds when any alarm is active. Alarms and the dashboard/touchscreen banners still work either way — this only controls the audible siren." },
+        { type: "number", entity: "startup_alarm_grace_floor__min_", label: "Startup Alarm Grace Floor (min)", def: 15, help: "Alarms are always suppressed for at least this long after boot, to give sensors and the control loop time to settle. If the room hasn’t reached Setpoint by then, the grace period actually extends further (up to a fixed 4-hour safety ceiling) rather than false-alarming mid-pulldown.", min: 0, max: 60, step: 1 },
+        { type: "number", entity: "post-defrost_alarm_grace__min_", label: "Post-Defrost Alarm Grace (min)", def: 15, help: "Alarms are suppressed for this long after each defrost cycle ends, since the room is briefly warmer than usual while it re-cools — avoids a false High Temperature alarm every defrost cycle.", min: 0, max: 60, step: 1 },
+        { type: "switch", entity: "ntfy_notifications_enabled", label: "ntfy Push Notifications Enabled", def: true, help: "Master switch for phone/computer push alerts via ntfy. Local alarms, banners and the siren still work when this is off — only the HTTP push is gated." },
+        { type: "text", entity: "ntfy_server", label: "ntfy Server URL", def: "https://ntfy.sh", help: "Push server base URL, e.g. https://ntfy.sh or your self-hosted ntfy instance. Must start with http:// or https://." },
+        { type: "text", entity: "ntfy_topic", label: "ntfy Topic", def: "sacor-coolroom", help: "Topic name to subscribe to in the ntfy app (or browser). Changing this does not migrate old subscribers — tell staff the new topic." },
+        { type: "button", entity: "send_test_ntfy_notification", label: "Send Test Notification", help: "Fires one test push to the configured server/topic so you can confirm the phone is subscribed before relying on real alarms. Sent at the High Temp Alarm priority, so it also proves a real alarm would get through." },
+        { type: "select", entity: "high_temp_alarm_priority", label: "Priority: High Temp Alarm", def: "high", help: "ntfy priority for the 🌡️ HIGH TEMP push. \"urgent\" breaks through Do Not Disturb on most phones; \"min\" arrives silently with no banner." },
+        { type: "select", entity: "low_temp_alarm_priority", label: "Priority: Low Temp Alarm", def: "high", help: "ntfy priority for the ❄️ LOW TEMP push." },
+        { type: "select", entity: "door_alarm_priority", label: "Priority: Door Open Alarm", def: "high", help: "ntfy priority for the 🚪 DOOR OPEN push. Often set lower than the temperature alarms, since a door left open is usually noticed on site first." },
+        { type: "select", entity: "no-cool_alarm_priority", label: "Priority: No-Cool Alarm", def: "high", help: "ntfy priority for the 🥶 NO-COOL push — compressor running but the room is not cooling. Defaults to urgent: this is the failure that spoils stock." },
+        { type: "select", entity: "ice_alarm_priority", label: "Priority: Ice Alarm", def: "high", help: "ntfy priority for the ❄️ ICE ALARM push — evaporator coil likely iced up." },
+        { type: "select", entity: "probe_fault_priority", label: "Priority: Probe Fault", def: "high", help: "ntfy priority for the ⚠️ PROBE FAULT push. Defaults to urgent: with the main probe out, temperature alarms cannot protect the room." },
+        { type: "select", entity: "hardware_offline_priority", label: "Priority: Hardware Offline", def: "urgent", help: "ntfy priority for RELAY BOARD / TEMP BOARD / HUMIDITY SENSOR / AMBIENT SENSOR OFFLINE pushes. Defaults to urgent — these match the rotating centre-status faults and spoken alerts." },
+        { type: "select", entity: "sd_card_alert_priority", label: "Priority: SD Card Failure", def: "high", help: "ntfy priority for the ⚠️ SD CARD FAILURE push. Cooling is unaffected by a dead card — only logging and backup stop — so this is a fair one to turn down." },
+        { type: "select", entity: "all-clear_message_priority", label: "Priority: All-Clear Messages", def: "high", help: "ntfy priority for recovery pushes: Alarm CLEARED, SD Card Recovered, and hardware ONLINE (relay/temp/humidity/ambient). Low by default so good news does not wake anyone." },
       ]},
-      { title: 'Probe Calibration & Enable', fields: [
-        { type: 'number', entity: 'probe1_offset_c', label: 'Probe 1 (Coolroom) Calibration Offset (°C)', def: 0.0,
-          help: 'Manual fine-tuning offset added to the Coolroom Temperature reading, for correcting against a reference thermometer.' },
-        { type: 'number', entity: 'probe2_offset_c', label: 'Probe 2 (Evaporator) Calibration Offset (°C)', def: 0.0,
-          help: 'Same idea as the Probe 1 offset, but for the Evaporator Temperature reading.' },
-        { type: 'switch', entity: 'sw_probe2_enabled', label: 'Evaporator Probe (Probe 2) Enabled', def: true,
-          help: 'Whether the evaporator RTD probe is read at all.' },
-        { type: 'switch', entity: 'sw_humidity_internal_enabled', label: 'Internal SHT31 Sensor Enabled', def: true,
-          help: 'Whether the internal (in-coolroom) SHT31 sensor is read.' },
-        { type: 'switch', entity: 'sw_humidity_external_enabled', label: 'External SHT20 Sensor Enabled', def: true,
-          help: 'Whether the external (ambient) SHT20 sensor is read.' },
+      { title: "Door", fields: [
+        { type: "switch", entity: "door_sensor_enabled", label: "Door Sensor Enabled", def: true, help: "Master switch for the door reed. Enables the Door Open alarm (and is required for Door-Triggered Light). Turning this off also turns Door-Triggered Light off. Disable only if the sensor is disconnected or faulty." },
+        { type: "switch", entity: "door_sensor_mode__nc_or_no_", label: "Door Sensor Mode: NC (on) / NO (off)", def: true, help: "Matches the reed switch’s wiring: Normally Closed (reads closed when the door is shut) or Normally Open (opposite). Set this wrong and open/closed will read backwards." },
+        { type: "switch", entity: "door-triggered_light_enabled", label: "Door-Triggered Light Enabled", def: true, help: "When enabled, opening the door turns the cabinet light on and closing it turns the light off. Requires Door Sensor Enabled — turning this on auto-enables the sensor; turning the sensor off turns this off." },
+        { type: "number", entity: "door_alarm_delay__s_", label: "Door Alarm Delay (s)", def: 300, help: "How long the door can stay open before the Door Open alarm fires — a short grace window for normal staff access.", min: 0, max: 300, step: 10 },
+      ]},
+      { title: "Probe Calibration & Enable", fields: [
+        { type: "select", entity: "probe_1__coolroom__source", label: "Probe 1 (Coolroom) Source", def: "high", help: "Which sensor feeds coolroom control. RTD RS485 is the Modbus board (not connected on the current bench). SHT31 uses the on-board internal humidity sensor as the coolroom temperature source." },
+        { type: "select", entity: "probe_2__evaporator__source", label: "Probe 2 (Evaporator) Source", def: "high", help: "Evaporator coil source. Unused disables probe 2 (and ice detection). Requires the RS485 RTD board when set to RTD." },
+        { type: "number", entity: "probe_1__coolroom__calibration_offset____c_", label: "Probe 1 (Coolroom) Calibration Offset (°C)", def: 0, help: "Manual fine-tuning offset added to the Coolroom Temperature reading. Also written by Calibrate Probes Now when auto-cal succeeds.", min: -10, max: 10, step: 0.1 },
+        { type: "number", entity: "probe_2__evaporator__calibration_offset____c_", label: "Probe 2 (Evaporator) Calibration Offset (°C)", def: 0, help: "Same idea as the Probe 1 offset, but for the Evaporator Temperature reading.", min: -10, max: 10, step: 0.1 },
+        { type: "button", entity: "calibrate_probes_now", label: "Calibrate Probes Now", help: "Auto-calibrate RTD offsets against the internal SHT31 reference (needs SHT31 + at least one RTD online). Refuses on the bench until RS485 boards are connected." },
+        { type: "switch", entity: "evaporator_probe__probe_2__enabled", label: "Evaporator Probe (Probe 2) Enabled", def: true, help: "Whether the evaporator RTD probe is read at all. Several features depend on it — smart defrost, ice alarm, temperature-based defrost termination — and fall back to time-based behavior alone when this is off." },
+        { type: "switch", entity: "internal_sht31_sensor_enabled", label: "Internal SHT31 Sensor Enabled", def: true, help: "Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point / frost-rate triggers and auto-calibrate need this enabled." },
+        { type: "switch", entity: "external_sht20_sensor_enabled", label: "External SHT20 Sensor Enabled", def: true, help: "Whether the external (ambient) SHT20 temperature/humidity sensor is read." },
       ]},
     ];
 
@@ -666,11 +658,32 @@
         const fieldsHtml = group.fields.map((f) => {
           const helpId = `help-adv-${f.entity}`;
           const helpIcon = `<button type="button" class="help-icon" onclick="toggleHelp(event, '${helpId}')" aria-label="What does ${f.label} do?">i</button>`;
-          const helpPopover = `<div id="${helpId}" class="help-popover hidden">${f.help}</div>`;
+          const helpPopover = `<div id="${helpId}" class="help-popover hidden">${f.help || ''}</div>`;
           if (f.type === 'number') {
             return `<div class="adv-field">
               <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
               <input type="number" value="${f.def}" disabled>
+              ${helpPopover}
+            </div>`;
+          }
+          if (f.type === 'text') {
+            return `<div class="adv-field">
+              <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
+              <input type="text" value="${f.def || ''}" disabled>
+              ${helpPopover}
+            </div>`;
+          }
+          if (f.type === 'select') {
+            return `<div class="adv-field">
+              <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
+              <span class="status-badge status-ok">${f.def || 'default'}</span>
+              ${helpPopover}
+            </div>`;
+          }
+          if (f.type === 'button') {
+            return `<div class="adv-field">
+              <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
+              <button class="btn" disabled>${f.label}</button>
               ${helpPopover}
             </div>`;
           }
@@ -683,6 +696,7 @@
         return `<div class="adv-group"><h3>${group.title}</h3><div class="adv-field-grid">${fieldsHtml}</div></div>`;
       }).join('');
     }
+
 
     function applyRole() {
       const roleBadge = document.getElementById('roleBadge');
@@ -796,17 +810,44 @@
       document.getElementById('gaugeTrackMiddle').setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
       document.getElementById('gaugeTrackInner').setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
 
-      // Mock: coolroom 3.8°C (blue arc), setpoint 2.0°C, ambient 22.4°C.
-      // Label stays green when in band (matches LVGL / dashboard.html).
+      // Mock: coolroom 3.8°C (blue arc), setpoint 2.0°C, ambient 18.6°C (matches pill).
       setGaugeArc('gaugeArcOuter', GAUGE_RADII.outer, tempToPercent(3.8));
       setGaugeArc('gaugeArcMiddle', GAUGE_RADII.middle, tempToPercent(2.0));
-      setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(22.4));
+      setGaugeArc('gaugeArcInner', GAUGE_RADII.inner, tempToPercent(18.6));
       document.getElementById('gaugeTemp').style.color = '#30D158';
+    }
+
+    // Rotate through the same plain-language centre-status labels as firmware (p4_ui.h).
+    const STATUS_SAMPLES = [
+      'RELAY BOARD OFFLINE', 'TEMP BOARD OFFLINE', 'HUMIDITY SENSOR OFFLINE',
+      'AMBIENT SENSOR OFFLINE', 'COOLROOM PROBE BAD', 'HIGH TEMP', 'LOW TEMP',
+      'DOOR OPEN', 'NOT COOLING', 'ICE ON COIL', 'COOLING', 'DEFROST', 'LOCKOUT', 'OK',
+    ];
+    let statusIdx = 0;
+    function paintStatus(text) {
+      const el = document.getElementById('gaugeStatus');
+      const bell = document.getElementById('iconBell');
+      el.textContent = text;
+      const fault = /OFFLINE|BAD|HIGH TEMP|LOW TEMP|DOOR OPEN|NOT COOLING|ICE ON COIL/.test(text);
+      if (fault) el.style.color = '#FF453A';
+      else if (text === 'DEFROST' || text === 'LOCKOUT') el.style.color = '#FF9F0A';
+      else if (text === 'COOLING') el.style.color = '#0A84FF';
+      else el.style.color = '#30D158';
+      if (bell) {
+        bell.classList.toggle('is-alert', fault);
+        bell.title = fault ? 'Active fault' : 'No active alarms';
+      }
+    }
+    function rotateStatus() {
+      paintStatus(STATUS_SAMPLES[statusIdx % STATUS_SAMPLES.length]);
+      statusIdx += 1;
     }
 
     renderAdvancedSettings();
     applyRole();
     drawMockGauge();
+    rotateStatus();
+    setInterval(rotateStatus, 2500);
   </script>
 </body>
 </html>
