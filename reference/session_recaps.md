@@ -4,6 +4,22 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Outer Grey Ring Removed from Home Gauge
+
+Two elements drew outside the coolroom arc and together read as a grey ring:
+
+- **448 glass rim arc** — `col_glass_rim` (#FFFFFF) at 22% over `col_bg` (#1C1C1E)
+  composites to roughly **#4E4E4E**, i.e. mid-grey, not the intended white highlight.
+  Deleted.
+- **430 frosted plate** — a full circle protruding ~9 px past the 412 outer arc, with a
+  1 px 18% white border (~#454545) closing the horseshoe at the bottom. Shrunk to **412**
+  (radius 206) so it stops exactly at the outer arc edge, and `border_width: 0`.
+
+The frosted backdrop behind the rings is kept; only its protruding band is gone. Centre
+disc still uses `col_glass_rim`, so the colour definition stays. Flash 2.531 → 2.530 MB.
+
+---
+
 ## 2026-08-01 (Afternoon) — Setpoint Floor Clamped to Dial Min (−10 °C)
 
 Cory: clamp the setpoint so it cannot sit below the home-gauge dial.

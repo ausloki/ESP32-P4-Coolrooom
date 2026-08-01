@@ -5947,8 +5947,8 @@ lvgl:
             widgets:
               # Glass horseshoe gauge (2026-08-01)
               #   - Orientation unchanged: 150→30 (gap at 6 o'clock).
-              #   - Glassmorphism without blur: frosted plate + soft white
-              #     rim + dim tracks with bright value indicators.
+              #   - Glassmorphism without blur: frosted plate behind dim
+              #     tracks with bright value indicators.
               #   - Ring colours match their sensor: blue coolroom, cyan
               #     setpoint, pink ambient (same as the text readouts).
               #   - Left rail + touch targets untouched (container stays
@@ -5956,37 +5956,20 @@ lvgl:
               #   - No real Gaussian blur (too expensive on P4 full-refresh).
               #   - A radial tick scale (LVGL meter) was tried over the rings
               #     and dropped — too busy against the glass look.
+              #   - Nothing draws outside the coolroom arc: the old 448 rim
+              #     arc and the 430 plate both read as a grey ring around the
+              #     gauge (white at ~20% over col_bg lands near #4E4E4E).
+              #     The plate now stops exactly at the outer arc edge.
 
-              # Soft white glass rim (outer highlight edge)
-              - arc:
-                  align: CENTER
-                  y: 0
-                  width: 448
-                  height: 448
-                  bg_opa: TRANSP
-                  arc_color: col_glass_rim
-                  arc_opa: 22%
-                  arc_width: 5
-                  arc_rounded: true
-                  rotation: 0
-                  start_angle: 150
-                  end_angle: 30
-                  value: 100
-                  indicator:
-                    arc_opa: TRANSP
-                  knob:
-                    bg_opa: TRANSP
-
-              # Frosted glass underlay plate (fake depth behind the rings)
+              # Frosted glass underlay plate (fake depth behind the rings).
+              # Width matches the outer arc so it never protrudes as a ring.
               - obj:
                   align: CENTER
                   y: 0
-                  width: 430
-                  height: 430
-                  radius: 215
-                  border_width: 1
-                  border_color: col_glass_rim
-                  border_opa: 18%
+                  width: 412
+                  height: 412
+                  radius: 206
+                  border_width: 0
                   bg_color: col_panel
                   bg_opa: 42%
                   clickable: false
