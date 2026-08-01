@@ -5942,38 +5942,24 @@ lvgl:
             # should reach the left icon rail near x≈80.
             clickable: false
             widgets:
-              # Glass horseshoe gauge (2026-08-01)
+              # Home gauge (2026-08-01)
               #   - Orientation unchanged: 150→30 (gap at 6 o'clock).
-              #   - Glassmorphism without blur: frosted plate behind dim
-              #     tracks with bright value indicators.
+              #   - Rings only: dim track + bright value indicator, drawn
+              #     straight onto col_bg. Every decorative layer that was
+              #     tried here has been removed — the 448 white rim arc and
+              #     the frosted underlay plate both composited to grey over
+              #     col_bg (#FFFFFF at 22% → ~#4E4E4E; col_panel at 42% →
+              #     ~#232325) and read as a ring / disc behind the arcs.
+              #     A radial tick scale (LVGL meter) was tried and dropped
+              #     as too busy. Don't reintroduce translucent backdrops.
               #   - Ring colours match their sensor: blue coolroom, cyan
               #     setpoint, pink ambient (same as the text readouts).
+              #   - Ring stack 440 / 396 / 352, arc_width 14 → 8px daylight
+              #     between rings. 440 leaves 20px top+bottom margin in the
+              #     480-tall container, and the outer edge (centre+220) still
+              #     clears the right-hand labels (centred at centre+328).
               #   - Left rail + touch targets untouched (container stays
               #     x:80, clickable false).
-              #   - No real Gaussian blur (too expensive on P4 full-refresh).
-              #   - A radial tick scale (LVGL meter) was tried over the rings
-              #     and dropped — too busy against the glass look.
-              #   - Nothing draws outside the coolroom arc: the old 448 rim
-              #     arc and the 430 plate both read as a grey ring around the
-              #     gauge (white at ~20% over col_bg lands near #4E4E4E).
-              #     The plate now stops exactly at the outer arc edge.
-              #   - Ring stack 440 / 396 / 352, arc_width 14 → 8px daylight
-              #     between rings (was 4px at 412/376/340). 440 leaves 20px
-              #     top+bottom margin in the 480-tall container, and the outer
-              #     edge (centre+220) still clears the right-hand labels.
-
-              # Frosted glass underlay plate (fake depth behind the rings).
-              # Width matches the outer arc so it never protrudes as a ring.
-              - obj:
-                  align: CENTER
-                  y: 0
-                  width: 440
-                  height: 440
-                  radius: 220
-                  border_width: 0
-                  bg_color: col_panel
-                  bg_opa: 42%
-                  clickable: false
 
               # Arc 1: Coolroom temp — dim blue track + bright fill
               - arc:

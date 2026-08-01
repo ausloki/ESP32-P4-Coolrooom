@@ -4,6 +4,19 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Frosted Plate Deleted; Gauge Is Rings Only
+
+Removed the 440px underlay `obj` behind the arcs. `col_panel` at 42% over `col_bg`
+composites to ~#232325 — a grey disc showing through the ring gaps and closing the
+horseshoe across the bottom. Arcs now draw straight onto `col_bg`.
+
+That retires the last of the glassmorphism layers (rim arc → plate → centre-disc border →
+plate). The YAML comment block now records why each was dropped, so a future pass doesn't
+reintroduce translucent backdrops: anything semi-opaque over `col_bg` reads as grey, not
+as frost. `col_panel` is still used by the header and cards, so the colour stays.
+
+---
+
 ## 2026-08-01 (Afternoon) — Bigger Rings, Wider Gaps, No Centre Border
 
 - Centre disc border removed (`border_width: 0`); disc grown 318 → **330** (radius 165) to
