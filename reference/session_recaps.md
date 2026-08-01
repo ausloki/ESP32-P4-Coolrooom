@@ -4,6 +4,20 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Morning) — Glass Horseshoe Gauge (Bigger Center Arcs)
+
+Home gauge visual pass 1 (before C-helper extraction):
+
+- Outer stack ~377 → **448** rim / **412** coolroom / **376** setpoint / **340** ambient
+- Frosted underlay plate + soft white glass rim; solid dark donut removed
+- Value arcs now use dim track + bright indicator (fills actually follow temp/setpoint)
+- Center readout on translucent glass disc; right labels nudged to `x:328`
+- Left icon rail + touch targets unchanged (`x:80` container, `clickable: false`)
+
+Compile `0x56f0b855`, NVS-safe flash. Tune on glass if spacing/opa need a nudge.
+
+---
+
 ## 2026-08-01 (Morning) — Drop Web Session/Load Toast Banners
 
 Removed the yellow/blue `#alerts` strips for inactivity logout ("Session expired…") and

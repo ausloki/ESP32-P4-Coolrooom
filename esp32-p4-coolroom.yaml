@@ -5656,6 +5656,8 @@ color:
     hex: "FFFFFF"
   - id: col_subtext    # Secondary text
     hex: "8E8E93"
+  - id: col_glass_rim  # Soft white edge for glassmorphism arcs
+    hex: "FFFFFF"
 
 lvgl:
   displays:
@@ -5993,131 +5995,134 @@ lvgl:
             # should reach the left icon rail near x≈80.
             clickable: false
             widgets:
-              # Outer decorative arc (light grey reference ring)
-              #
-              # Gauge geometry, tuned live against real hardware on
-              # 2026-07-30 across several operator feedback passes:
-              #   - Orientation: start_angle/end_angle 150/30 (not
-              #     330/210 as an earlier pass mislabeled -- LVGL angles
-              #     run clockwise from 0=3 o'clock, so 330/210 actually
-              #     centers the gap at the TOP, not the bottom; 150/30
-              #     centers it at 6 o'clock as intended. See
-              #     reference/DISPLAY_ARCHITECTURE_VISUAL.md for the full
-              #     writeup).
-              #   - Diameter: three shrink passes (~3.5mm, ~2mm, ~2mm)
-              #     brought all four rings down from their initial size,
-              #     then blue+cyan grew back +1mm each on request --
-              #     final values below aren't on a single clean formula,
-              #     they're the result of live iteration, not a
-              #     recomputed scheme.
-              #   - Spacing: each ring should have daylight between it and
-              #     its neighbor (no more touching/zero-gap bands, which
-              #     read as "too big" on-device) -- verify this holds
-              #     before changing any single ring in isolation.
+              # Glass horseshoe gauge (2026-08-01)
+              #   - Orientation unchanged: 150→30 (gap at 6 o'clock).
+              #   - ~18% larger than the 377px stack; left rail + touch
+              #     targets untouched (container stays x:80, clickable false).
+              #   - Glassmorphism without blur: frosted plate + soft white
+              #     rim + dim tracks with bright value indicators.
+              #   - Daylight between rings ~16–20px; arc_width 14.
+              #   - No real Gaussian blur (too expensive on P4 full-refresh).
+
+              # Soft white glass rim (outer highlight edge)
               - arc:
                   align: CENTER
                   y: 0
-                  width: 377
-                  height: 377
+                  width: 448
+                  height: 448
                   bg_opa: TRANSP
-                  arc_color: col_subtext
-                  arc_opa: 20%
-                  arc_width: 12
+                  arc_color: col_glass_rim
+                  arc_opa: 22%
+                  arc_width: 5
+                  arc_rounded: true
                   rotation: 0
                   start_angle: 150
                   end_angle: 30
-                  value: 50
+                  value: 100
                   indicator:
                     arc_opa: TRANSP
                   knob:
                     bg_opa: TRANSP
 
-              # Inner dark donut ring (visual separator)
+              # Frosted glass underlay plate (fake depth behind the rings)
               - obj:
                   align: CENTER
                   y: 0
-                  width: 357
-                  height: 357
-                  radius: 179
-                  border_width: 60
-                  border_color: col_panel
-                  bg_color: col_bg
+                  width: 430
+                  height: 430
+                  radius: 215
+                  border_width: 1
+                  border_color: col_glass_rim
+                  border_opa: 18%
+                  bg_color: col_panel
+                  bg_opa: 42%
+                  clickable: false
 
-              # Arc 1: Current Coolroom Temperature (Outer, Blue)
+              # Arc 1: Coolroom temp — dim blue track + bright fill
               - arc:
                   id: home_temp_arc
                   align: CENTER
                   y: 0
-                  width: 350
-                  height: 350
+                  width: 412
+                  height: 412
                   bg_opa: TRANSP
                   arc_color: col_blue
-                  arc_width: 12
+                  arc_opa: 28%
+                  arc_width: 14
+                  arc_rounded: true
                   rotation: 0
                   start_angle: 150
                   end_angle: 30
                   value: 50
                   indicator:
-                    arc_opa: TRANSP
+                    arc_color: col_blue
+                    arc_opa: 92%
+                    arc_width: 14
+                    arc_rounded: true
                   knob:
                     bg_opa: TRANSP
 
-              # Arc 2: Setpoint Temperature (Middle, Cyan)
+              # Arc 2: Setpoint — dim cyan track + bright fill
               - arc:
                   id: home_setpoint_arc
                   align: CENTER
                   y: 0
-                  width: 316
-                  height: 316
+                  width: 376
+                  height: 376
                   bg_opa: TRANSP
                   arc_color: col_cyan
-                  arc_width: 12
+                  arc_opa: 28%
+                  arc_width: 14
+                  arc_rounded: true
                   rotation: 0
                   start_angle: 150
                   end_angle: 30
                   value: 50
                   indicator:
-                    arc_opa: TRANSP
+                    arc_color: col_cyan
+                    arc_opa: 92%
+                    arc_width: 14
+                    arc_rounded: true
                   knob:
                     bg_opa: TRANSP
 
-              # Arc 3: Ambient Temperature (Inner, Pink)
-              # Innermost ring -- its inner edge (284-12=272) has to clear
-              # the inner cover below (a fixed 270px box; LVGL draws
-              # border_width inside the box, so 270 is its true outer
-              # edge too), currently leaving a slim ~2px gap. This ring
-              # can't shrink much further without also shrinking the
-              # inner cover (which holds the temp-readout text, so that's
-              # a layout change, not just a resize -- flag it rather than
-              # guess if more headroom is needed here).
+              # Arc 3: Ambient — dim pink track + bright fill
               - arc:
                   id: home_ambient_arc
                   align: CENTER
                   y: 0
-                  width: 284
-                  height: 284
+                  width: 340
+                  height: 340
                   bg_opa: TRANSP
                   arc_color: col_pink
-                  arc_width: 12
+                  arc_opa: 28%
+                  arc_width: 14
+                  arc_rounded: true
                   rotation: 0
                   start_angle: 150
                   end_angle: 30
                   value: 50
                   indicator:
-                    arc_opa: TRANSP
+                    arc_color: col_pink
+                    arc_opa: 92%
+                    arc_width: 14
+                    arc_rounded: true
                   knob:
                     bg_opa: TRANSP
 
-              # Inner cover (hides arc hubs)
+              # Glass center disc (readout sits on frosted glass)
               - obj:
                   align: CENTER
                   y: 0
-                  width: 270
-                  height: 270
-                  radius: 135
-                  border_width: 18
-                  border_color: col_panel
-                  bg_color: col_bg
+                  width: 318
+                  height: 318
+                  radius: 159
+                  border_width: 1
+                  border_color: col_glass_rim
+                  border_opa: 22%
+                  bg_color: col_panel
+                  bg_opa: 78%
+                  clickable: false
 
               # CENTER: Large temperature display
               - label:
@@ -6146,17 +6151,13 @@ lvgl:
                   text_font: font_small
                   text_color: col_orange
 
-              # RIGHT PANEL: Secondary Readings
-              # 4 items — the old dedicated "Ambient" RTD reading is gone
-              # (RTD board 2 decommissioned); lbl_ext_humidity_large below
-              # already shows the SHT20 external/ambient temp + humidity, so
-              # there's no separate ambient-only label anymore. Spaced at
-              # 116px steps across the 496px-tall container.
+              # RIGHT PANEL: Secondary Readings — nudged out so the larger
+              # outer rim (~448) keeps ~80px clearance from these labels.
               - label:
                   id: lbl_evap_temp_large
                   text: "Evap\n--°C"
                   align: CENTER
-                  x: 310
+                  x: 328
                   y: 80
                   text_font: font_small
                   text_color: col_text
@@ -6165,7 +6166,7 @@ lvgl:
                   id: lbl_int_humidity_large
                   text: "Int --°C\n--%RH"
                   align: CENTER
-                  x: 310
+                  x: 328
                   y: 196
                   text_font: font_small
                   text_color: col_text
@@ -6174,7 +6175,7 @@ lvgl:
                   id: lbl_ext_humidity_large
                   text: "Ext --°C\n--%RH"
                   align: CENTER
-                  x: 310
+                  x: 328
                   y: 312
                   text_font: font_small
                   text_color: col_pink
@@ -6183,7 +6184,7 @@ lvgl:
                   id: lbl_power_info
                   text: "Heap: ---"
                   align: CENTER
-                  x: 310
+                  x: 328
                   y: 428
                   text_font: font_small
                   text_color: col_subtext
