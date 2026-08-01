@@ -4,6 +4,18 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Evening) — Closeout: per-phrase audio preview (speaker icon)
+
+- **New `preview_*` scripts** in `p4_audio.yaml` (one per alert/info clip) + `btn_preview_*`
+  template buttons. Like Test Speaker they bypass master enable, the per-phrase toggle and
+  soft-mute, so a phrase can be auditioned before it is switched on.
+- **LVGL Settings 8/8:** each Speak row's Toggle button narrowed 240 → 150 px and a 56×56
+  **speaker icon** button (mdi-volume-high `\U000F057E`, added to `font_mdi`) sits beside it
+  in the same control row — the earlier ">" button next to the label is gone.
+- **Web Audio tab + virtual preview:** 40 px 🔊 button beside each switch (`.adv-preview-btn`).
+- `USER_MANUAL.md` §4.9 + `AUDIO_ALERTS.md` updated to describe the speaker icon on both
+  surfaces. Coverage + embed + compile + NVS-safe flash done in this closeout.
+
 ## 2026-08-01 (Evening) — Closeout: fixed probes, 2CH RTD docs, log-tuning tools
 
 - **Probe roles fixed:** Probe 1 = coolroom air (RTD CH1), Probe 2 = evaporator (RTD CH2);

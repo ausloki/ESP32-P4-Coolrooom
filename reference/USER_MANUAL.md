@@ -433,12 +433,13 @@ Spoken phrases use a pre-recorded female English voice on the on-board ES8311 sp
 | **Audio Alerts Enabled** | Master on/off for every spoken phrase. | On |
 | **Speaker Volume (%)** | Loudness of spoken alerts (50–90%). Default **85%**. Floored so alarm speech cannot be silenced by accident; capped to avoid amp distortion. Use **Test Speaker** after changing it. | 85% |
 | **Test Audio Alert** *(button)* | Plays a short test line (ignores master off so you can verify hardware). | — |
+| **Preview 🔊** *(per Speak row)* | Plays that row’s phrase once so you can hear it while configuring. Ignores the per-phrase toggle, master off, and soft-mute (same idea as Test Speaker). Both surfaces use a small speaker icon: on touchscreen Settings 8/8 it sits to the right of that row’s (now narrower) Toggle button; on the web Audio tab it sits beside the on/off button. | — |
 | **Speaker Amplifier (diagnostic)** | Raw power control for the amplifier itself. Playback switches it on and off automatically, so leave it alone in normal use — it is there to test the amplifier in isolation or force it quiet. Returns to off after every reboot. | Off |
 | **Speak High / Low Temp Alarm** | Alarm voice when that temperature alarm becomes active. | On |
 | **Speak Door Open Alarm** | Alarm voice when the *delayed* door alarm fires (§4.6). | On |
 | **Speak No-Cool / Ice / Probe Fault** | Alarm voice for those conditions (phrases match the centre status: *Not cooling*, *Ice on coil*, *Coolroom probe bad*). | On |
 | **Speak Relay Board Offline** | Voice when the Modbus relay board stops responding. | On |
-| **Speak Temp Board Offline** | Voice when the RS485 temperature-probe board stops responding (only when an RTD source is selected). | On |
+| **Speak Temp Board Offline** | Voice when the RS485 temperature-probe board stops responding. | On |
 | **Speak Humidity / Ambient Sensor Offline** | Voice when the enabled SHT31 or SHT20 stops answering. | On |
 | **Speak Cooling Started / Stopped** | Info voice when the compressor starts or stops. | Started On / Stopped **Off** |
 | **Speak Defrost Started / Complete** | Info voice for defrost cycle edges. | On |

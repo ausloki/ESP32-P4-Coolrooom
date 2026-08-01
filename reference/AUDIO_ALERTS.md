@@ -12,7 +12,8 @@
 - Web **Speaker Volume (%)** (50–90, default 85) — NVS-backed, synced with HA media player
 - Edge-triggered play on alarm/info events; home bell soft-mute silences speech
 - Web dashboard **Audio** tab + Test Speaker button
-- `hw_audio_ok` from boot I2C probe at `0x18`
+- Per-phrase **🔊** speaker-icon preview on the web Audio tab and on LVGL Settings 8/8
+  (plays that clip even if the Speak toggle or master is off)- `hw_audio_ok` from boot I2C probe at `0x18`
 
 ## Two gotchas that cost a debugging session
 

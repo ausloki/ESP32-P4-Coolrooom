@@ -402,11 +402,246 @@ script:
           condition:
             lambda: 'return id(hw_audio_ok);'
           then:
-            - switch.turn_on: audio_pa_enable
-            - delay: 60ms
+            - script.execute: audio_preview_prepare
             - media_player.speaker.play_on_device_media_file:
                 id: coolroom_media
                 media_file: clip_info_audio_test
                 announcement: true
           else:
             - logger.log: "Audio test skipped — ES8311 not detected"
+
+  # Preview clips for settings UI — ignore master/per-phrase toggles and soft-mute
+  # so an operator can hear each phrase while configuring Audio Alerts.
+  - id: audio_preview_prepare
+    mode: single
+    then:
+      - switch.turn_on: audio_pa_enable
+      - delay: 60ms
+      - lambda: 'id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;'
+      - media_player.volume_set:
+          id: coolroom_media
+          volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+
+  - id: preview_alarm_high
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_high
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_low
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_low
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_door
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_door
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_no_cool
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_no_cool
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_ice
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_ice
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_probe
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_probe
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_relay_board
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_relay_board
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_temp_board
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_temp_board
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_humidity_sensor
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_humidity_sensor
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_alarm_ambient_sensor
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_alarm_ambient_sensor
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_info_cooling_on
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_cooling_on
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_info_cooling_off
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_cooling_off
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_info_defrost_on
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_defrost_on
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_info_defrost_off
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_defrost_off
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_info_door_open
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_door_open
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"
+
+  - id: preview_info_door_closed
+    mode: single
+    then:
+      - if:
+          condition: {lambda: 'return id(hw_audio_ok);'}
+          then:
+            - script.execute: audio_preview_prepare
+            - media_player.speaker.play_on_device_media_file:
+                id: coolroom_media
+                media_file: clip_info_door_closed
+                announcement: true
+          else:
+            - logger.log: "Audio preview skipped — ES8311 not detected"

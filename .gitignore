@@ -29,3 +29,10 @@ logs/**/*.log
 logs/controller/
 # Lightweight venv for log pull / recommend launchers
 tools/.venv-log-tuning/
+
+# Local flash/serial capture scratch
+backups/
+
+# Python bytecode
+__pycache__/
+*.pyc

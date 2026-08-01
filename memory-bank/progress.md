@@ -1,5 +1,13 @@
 # Progress Tracking
 
+## 2026-08-01 — Per-phrase audio preview on LVGL + web
+
+- `preview_*` scripts / `btn_preview_*` buttons play a single clip regardless of master
+  enable, per-phrase toggle, or soft-mute.
+- LVGL Settings 8/8: Toggle 240 → 150 px, plus a 56 px mdi-volume-high speaker button per
+  Speak row (`\U000F057E` added to `font_mdi`). Web/preview use a 40 px 🔊 button.
+- Manuals updated; coverage, embed, compile, NVS-safe flash done.
+
 ## 2026-08-01 — Closeout: probes fixed, 2CH RTD sheets, log recommend tools
 
 - Removed Probe Source toggles; CH1/CH2 roles fixed in firmware + manuals.

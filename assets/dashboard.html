@@ -363,6 +363,37 @@
         .adv-switch-btn:hover:not(:disabled) {
             filter: brightness(0.92);
         }
+        .adv-field-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 5px;
+        }
+        .adv-field-controls .adv-switch-btn {
+            margin-top: 0;
+        }
+        .adv-preview-btn {
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            padding: 0;
+            border-radius: 8px;
+            border: none;
+            background: #00BCD4;
+            color: #fff;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .adv-preview-btn:hover:not(:disabled) {
+            filter: brightness(0.92);
+        }
+        .adv-preview-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
 
         .alert {
             padding: 15px;
@@ -2363,37 +2394,53 @@
                     { type: 'switch', entity: 'speaker_amplifier', name: 'Speaker Amplifier', label: 'Speaker Amplifier (diagnostic)',
                       help: 'Raw power control for the on-board amplifier. Playback normally switches this on and off by itself, so leave it alone during normal use \u2014 it is here to test the amplifier in isolation, or to force it quiet. It returns to off after every reboot.' },
                     { type: 'switch', entity: 'speak_high_temp_alarm', name: 'Speak High Temp Alarm', label: 'Speak High Temp Alarm',
-                      help: 'Voice: “Attention. High temperature alarm.” when that alarm becomes active.' },
+                      preview_name: 'Preview High Temp Alarm', preview_entity: 'preview_high_temp_alarm',
+                      help: 'Voice: “Attention. High temperature alarm.” when that alarm becomes active. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_low_temp_alarm', name: 'Speak Low Temp Alarm', label: 'Speak Low Temp Alarm',
-                      help: 'Voice for the low-temperature alarm.' },
+                      preview_name: 'Preview Low Temp Alarm', preview_entity: 'preview_low_temp_alarm',
+                      help: 'Voice for the low-temperature alarm. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_door_open_alarm', name: 'Speak Door Open Alarm', label: 'Speak Door Open Alarm',
-                      help: 'Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves.' },
+                      preview_name: 'Preview Door Open Alarm', preview_entity: 'preview_door_open_alarm',
+                      help: 'Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_no-cool_alarm', name: 'Speak No-Cool Alarm', label: 'Speak No-Cool Alarm',
-                      help: 'Voice: “Attention. Not cooling.” when that alarm becomes active.' },
+                      preview_name: 'Preview No-Cool Alarm', preview_entity: 'preview_no-cool_alarm',
+                      help: 'Voice: “Attention. Not cooling.” when that alarm becomes active. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_ice_alarm', name: 'Speak Ice Alarm', label: 'Speak Ice Alarm',
-                      help: 'Voice: “Attention. Ice on coil.”' },
+                      preview_name: 'Preview Ice Alarm', preview_entity: 'preview_ice_alarm',
+                      help: 'Voice: “Attention. Ice on coil.” Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_probe_fault', name: 'Speak Probe Fault', label: 'Speak Probe Fault',
-                      help: 'Voice: “Attention. Coolroom probe bad.” when the main coolroom probe fails.' },
+                      preview_name: 'Preview Probe Fault', preview_entity: 'preview_probe_fault',
+                      help: 'Voice: “Attention. Coolroom probe bad.” when the main coolroom probe fails. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_relay_board_offline', name: 'Speak Relay Board Offline', label: 'Speak Relay Board Offline',
-                      help: 'Voice when the Modbus relay board stops responding (matches centre status RELAY BOARD OFFLINE).' },
+                      preview_name: 'Preview Relay Board Offline', preview_entity: 'preview_relay_board_offline',
+                      help: 'Voice when the Modbus relay board stops responding (matches centre status RELAY BOARD OFFLINE). Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_temp_board_offline', name: 'Speak Temp Board Offline', label: 'Speak Temp Board Offline',
-                      help: 'Voice when the RS485 temperature-probe board stops responding (TEMP BOARD OFFLINE).' },
+                      preview_name: 'Preview Temp Board Offline', preview_entity: 'preview_temp_board_offline',
+                      help: 'Voice when the RS485 temperature-probe board stops responding (TEMP BOARD OFFLINE). Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_humidity_sensor_offline', name: 'Speak Humidity Sensor Offline', label: 'Speak Humidity Sensor Offline',
-                      help: 'Voice when the enabled cabinet humidity/temp sensor (SHT31) stops answering.' },
+                      preview_name: 'Preview Humidity Sensor Offline', preview_entity: 'preview_humidity_sensor_offline',
+                      help: 'Voice when the enabled cabinet humidity/temp sensor (SHT31) stops answering. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_ambient_sensor_offline', name: 'Speak Ambient Sensor Offline', label: 'Speak Ambient Sensor Offline',
-                      help: 'Voice when the enabled ambient sensor (SHT20) stops answering.' },
+                      preview_name: 'Preview Ambient Sensor Offline', preview_entity: 'preview_ambient_sensor_offline',
+                      help: 'Voice when the enabled ambient sensor (SHT20) stops answering. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_cooling_started', name: 'Speak Cooling Started', label: 'Speak Cooling Started',
-                      help: 'Info voice when the compressor starts.' },
+                      preview_name: 'Preview Cooling Started', preview_entity: 'preview_cooling_started',
+                      help: 'Info voice when the compressor starts. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_cooling_stopped', name: 'Speak Cooling Stopped', label: 'Speak Cooling Stopped',
-                      help: 'Info voice when the compressor stops. Off by default (can be chatty).' },
+                      preview_name: 'Preview Cooling Stopped', preview_entity: 'preview_cooling_stopped',
+                      help: 'Info voice when the compressor stops. Off by default (can be chatty). Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_defrost_started', name: 'Speak Defrost Started', label: 'Speak Defrost Started',
-                      help: 'Info voice when a defrost cycle begins.' },
+                      preview_name: 'Preview Defrost Started', preview_entity: 'preview_defrost_started',
+                      help: 'Info voice when a defrost cycle begins. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_defrost_complete', name: 'Speak Defrost Complete', label: 'Speak Defrost Complete',
-                      help: 'Info voice when a defrost cycle ends.' },
+                      preview_name: 'Preview Defrost Complete', preview_entity: 'preview_defrost_complete',
+                      help: 'Info voice when a defrost cycle ends. Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_door_opened', name: 'Speak Door Opened', label: 'Speak Door Opened',
-                      help: 'Info voice the moment the door reed sees open (immediate, not the delayed alarm).' },
+                      preview_name: 'Preview Door Opened', preview_entity: 'preview_door_opened',
+                      help: 'Info voice the moment the door reed sees open (immediate, not the delayed alarm). Tap 🔊 to hear it.' },
                     { type: 'switch', entity: 'speak_door_closed', name: 'Speak Door Closed', label: 'Speak Door Closed',
-                      help: 'Info voice when the door closes. Off by default.' },
+                      preview_name: 'Preview Door Closed', preview_entity: 'preview_door_closed',
+                      help: 'Info voice when the door closes. Off by default. Tap 🔊 to hear it.' },
                 ],
             },
             {
@@ -2672,13 +2719,22 @@
                             </div>`;
                     }
                     const btnId = `adv_${f.entity}_btn`;
+                    const preview = (f.preview_name)
+                        ? (() => {
+                            const pName = f.preview_name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            return `<button type="button" class="adv-preview-btn" title="Play ${f.label}" aria-label="Play ${f.label}" onclick="pressButtonSetting('${pName}', 'Preview: ${labelEsc}')">🔊</button>`;
+                          })()
+                        : '';
                     return `
                         <div class="adv-field">
                             <div class="field-label-row">
                                 <label>${f.label}</label>
                                 ${helpIcon}
                             </div>
-                            <button id="${btnId}" class="adv-switch-btn" onclick="toggleAdvancedSwitch('${nameEsc}', '${labelEsc}')">--</button>
+                            <div class="adv-field-controls">
+                                <button id="${btnId}" class="adv-switch-btn" onclick="toggleAdvancedSwitch('${nameEsc}', '${labelEsc}')">--</button>
+                                ${preview}
+                            </div>
                             ${helpPopover}
                         </div>`;
                 }).join('');

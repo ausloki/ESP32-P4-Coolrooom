@@ -592,22 +592,22 @@
         { type: "number", entity: "speaker_volume____", label: "Speaker Volume (%)", def: 85, help: "Loudness of spoken alerts on the on-board speaker. 85% is the measured clear level; the range is capped at 50–90% so alarms cannot be silenced or driven into distortion. Use Test Speaker after changing it." },
         { type: "button", entity: "test_audio_alert", label: "Test Speaker", help: "Play a short test phrase. Ignores the master toggle so you can verify the speaker even when alerts are off. Requires the ES8311 codec on I2C." },
         { type: "switch", entity: "speaker_amplifier", label: "Speaker Amplifier (diagnostic)", def: true, help: "Raw power control for the on-board amplifier. Playback normally switches this on and off by itself, so leave it alone during normal use — it is here to test the amplifier in isolation, or to force it quiet. It returns to off after every reboot." },
-        { type: "switch", entity: "speak_high_temp_alarm", label: "Speak High Temp Alarm", def: true, help: "Voice: “Attention. High temperature alarm.” when that alarm becomes active." },
-        { type: "switch", entity: "speak_low_temp_alarm", label: "Speak Low Temp Alarm", def: true, help: "Voice for the low-temperature alarm." },
-        { type: "switch", entity: "speak_door_open_alarm", label: "Speak Door Open Alarm", def: true, help: "Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves." },
-        { type: "switch", entity: "speak_no-cool_alarm", label: "Speak No-Cool Alarm", def: true, help: "Voice: “Attention. Not cooling.” when that alarm becomes active." },
-        { type: "switch", entity: "speak_ice_alarm", label: "Speak Ice Alarm", def: true, help: "Voice: “Attention. Ice on coil.”" },
-        { type: "switch", entity: "speak_probe_fault", label: "Speak Probe Fault", def: true, help: "Voice: “Attention. Coolroom probe bad.” when the main coolroom probe fails." },
-        { type: "switch", entity: "speak_relay_board_offline", label: "Speak Relay Board Offline", def: true, help: "Voice when the Modbus relay board stops responding (matches centre status RELAY BOARD OFFLINE)." },
-        { type: "switch", entity: "speak_temp_board_offline", label: "Speak Temp Board Offline", def: true, help: "Voice when the RS485 temperature-probe board stops responding (TEMP BOARD OFFLINE)." },
-        { type: "switch", entity: "speak_humidity_sensor_offline", label: "Speak Humidity Sensor Offline", def: true, help: "Voice when the enabled cabinet humidity/temp sensor (SHT31) stops answering." },
-        { type: "switch", entity: "speak_ambient_sensor_offline", label: "Speak Ambient Sensor Offline", def: true, help: "Voice when the enabled ambient sensor (SHT20) stops answering." },
-        { type: "switch", entity: "speak_cooling_started", label: "Speak Cooling Started", def: true, help: "Info voice when the compressor starts." },
-        { type: "switch", entity: "speak_cooling_stopped", label: "Speak Cooling Stopped", def: false, help: "Info voice when the compressor stops. Off by default (can be chatty)." },
-        { type: "switch", entity: "speak_defrost_started", label: "Speak Defrost Started", def: true, help: "Info voice when a defrost cycle begins." },
-        { type: "switch", entity: "speak_defrost_complete", label: "Speak Defrost Complete", def: true, help: "Info voice when a defrost cycle ends." },
-        { type: "switch", entity: "speak_door_opened", label: "Speak Door Opened", def: true, help: "Info voice the moment the door reed sees open (immediate, not the delayed alarm)." },
-        { type: "switch", entity: "speak_door_closed", label: "Speak Door Closed", def: false, help: "Info voice when the door closes. Off by default." },
+        { type: "switch", entity: "speak_high_temp_alarm", label: "Speak High Temp Alarm", def: true, preview: true, help: "Voice: “Attention. High temperature alarm.” when that alarm becomes active. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_low_temp_alarm", label: "Speak Low Temp Alarm", def: true, preview: true, help: "Voice for the low-temperature alarm. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_door_open_alarm", label: "Speak Door Open Alarm", def: true, preview: true, help: "Voice when the door-open *alarm* fires (after Door Alarm Delay) — not the moment the door moves. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_no-cool_alarm", label: "Speak No-Cool Alarm", def: true, preview: true, help: "Voice: “Attention. Not cooling.” when that alarm becomes active. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_ice_alarm", label: "Speak Ice Alarm", def: true, preview: true, help: "Voice: “Attention. Ice on coil.” Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_probe_fault", label: "Speak Probe Fault", def: true, preview: true, help: "Voice: “Attention. Coolroom probe bad.” when the main coolroom probe fails. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_relay_board_offline", label: "Speak Relay Board Offline", def: true, preview: true, help: "Voice when the Modbus relay board stops responding (matches centre status RELAY BOARD OFFLINE). Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_temp_board_offline", label: "Speak Temp Board Offline", def: true, preview: true, help: "Voice when the RS485 temperature-probe board stops responding (TEMP BOARD OFFLINE). Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_humidity_sensor_offline", label: "Speak Humidity Sensor Offline", def: true, preview: true, help: "Voice when the enabled cabinet humidity/temp sensor (SHT31) stops answering. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_ambient_sensor_offline", label: "Speak Ambient Sensor Offline", def: true, preview: true, help: "Voice when the enabled ambient sensor (SHT20) stops answering. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_cooling_started", label: "Speak Cooling Started", def: true, preview: true, help: "Info voice when the compressor starts. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_cooling_stopped", label: "Speak Cooling Stopped", def: false, preview: true, help: "Info voice when the compressor stops. Off by default (can be chatty). Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_defrost_started", label: "Speak Defrost Started", def: true, preview: true, help: "Info voice when a defrost cycle begins. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_defrost_complete", label: "Speak Defrost Complete", def: true, preview: true, help: "Info voice when a defrost cycle ends. Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_door_opened", label: "Speak Door Opened", def: true, preview: true, help: "Info voice the moment the door reed sees open (immediate, not the delayed alarm). Tap 🔊 to hear it." },
+        { type: "switch", entity: "speak_door_closed", label: "Speak Door Closed", def: false, preview: true, help: "Info voice when the door closes. Off by default. Tap 🔊 to hear it." },
       ]},
       { title: "Alarms & Notifications", fields: [
         { type: "number", entity: "high_temp_alarm_delta____c_", label: "High Temp Alarm Delta (°C)", def: 5, help: "How far above Setpoint the room can drift before the High Temperature alarm can fire (still subject to Persist Time below)." },
@@ -690,7 +690,10 @@
           }
           return `<div class="adv-field">
             <div class="field-label-row"><label>${f.label}</label>${helpIcon}</div>
-            <span class="status-badge ${f.def ? 'status-ok' : 'status-error'}">${f.def ? 'ON' : 'OFF'}</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="status-badge ${f.def ? 'status-ok' : 'status-error'}">${f.def ? 'ON' : 'OFF'}</span>
+              ${f.preview ? '<button class="btn" disabled title="Preview (live dashboard only)">🔊</button>' : ''}
+            </div>
             ${helpPopover}
           </div>`;
         }).join('');

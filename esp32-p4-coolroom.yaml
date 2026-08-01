@@ -3506,6 +3506,120 @@ button:
     on_press:
       - script.execute: speak_audio_test
 
+  # Per-phrase previews for LVGL/web Audio settings (ignore enable toggles / soft-mute).
+  - platform: template
+    id: btn_preview_alarm_high
+    name: "Preview High Temp Alarm"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 91}
+    on_press: [{script.execute: preview_alarm_high}]
+  - platform: template
+    id: btn_preview_alarm_low
+    name: "Preview Low Temp Alarm"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 92}
+    on_press: [{script.execute: preview_alarm_low}]
+  - platform: template
+    id: btn_preview_alarm_door
+    name: "Preview Door Open Alarm"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 93}
+    on_press: [{script.execute: preview_alarm_door}]
+  - platform: template
+    id: btn_preview_alarm_no_cool
+    name: "Preview No-Cool Alarm"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 94}
+    on_press: [{script.execute: preview_alarm_no_cool}]
+  - platform: template
+    id: btn_preview_alarm_ice
+    name: "Preview Ice Alarm"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 95}
+    on_press: [{script.execute: preview_alarm_ice}]
+  - platform: template
+    id: btn_preview_alarm_probe
+    name: "Preview Probe Fault"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 96}
+    on_press: [{script.execute: preview_alarm_probe}]
+  - platform: template
+    id: btn_preview_alarm_relay_board
+    name: "Preview Relay Board Offline"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 97}
+    on_press: [{script.execute: preview_alarm_relay_board}]
+  - platform: template
+    id: btn_preview_alarm_temp_board
+    name: "Preview Temp Board Offline"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 98}
+    on_press: [{script.execute: preview_alarm_temp_board}]
+  - platform: template
+    id: btn_preview_alarm_humidity_sensor
+    name: "Preview Humidity Sensor Offline"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 99}
+    on_press: [{script.execute: preview_alarm_humidity_sensor}]
+  - platform: template
+    id: btn_preview_alarm_ambient_sensor
+    name: "Preview Ambient Sensor Offline"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 100}
+    on_press: [{script.execute: preview_alarm_ambient_sensor}]
+  - platform: template
+    id: btn_preview_info_cooling_on
+    name: "Preview Cooling Started"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 101}
+    on_press: [{script.execute: preview_info_cooling_on}]
+  - platform: template
+    id: btn_preview_info_cooling_off
+    name: "Preview Cooling Stopped"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 102}
+    on_press: [{script.execute: preview_info_cooling_off}]
+  - platform: template
+    id: btn_preview_info_defrost_on
+    name: "Preview Defrost Started"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 103}
+    on_press: [{script.execute: preview_info_defrost_on}]
+  - platform: template
+    id: btn_preview_info_defrost_off
+    name: "Preview Defrost Complete"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 104}
+    on_press: [{script.execute: preview_info_defrost_off}]
+  - platform: template
+    id: btn_preview_info_door_open
+    name: "Preview Door Opened"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 105}
+    on_press: [{script.execute: preview_info_door_open}]
+  - platform: template
+    id: btn_preview_info_door_closed
+    name: "Preview Door Closed"
+    icon: "mdi:volume-high"
+    entity_category: config
+    web_server: {sorting_group_id: group_audio, sorting_weight: 106}
+    on_press: [{script.execute: preview_info_door_closed}]
+
   # ── Phase 6: Manual defrost control ──────────────────────────────────────
   - platform: template
     id: btn_manual_defrost_start
@@ -5882,7 +5996,8 @@ font:
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: font_mdi
     size: 28
-    glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A\U000F05A9\U000F091F\U000F0922\U000F0925\U000F0928\U000F0924\U000F092D"
+    # Last glyph is mdi-volume-high — the per-phrase preview button on Settings 8/8.
+    glyphs: "\U000F0717\U000F0238\U000F0335\U000F009A\U000F05A9\U000F091F\U000F0922\U000F0925\U000F0928\U000F0924\U000F092D\U000F057E"
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: font_mdi_large
     size: 75
@@ -9419,7 +9534,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9432,6 +9547,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_high
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_high
               - label: {x: 500, y: 216, width: 460, text: "Speak Low Temp", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9456,7 +9583,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9469,6 +9596,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_low
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_low
               - label: {x: 0, y: 324, width: 460, text: "Speak Door Alarm", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9493,7 +9632,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9506,6 +9645,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_door
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_door
               - label: {x: 500, y: 324, width: 460, text: "Speak No-Cool", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9530,7 +9681,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9543,6 +9694,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_no_cool
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_no_cool
               - label: {x: 0, y: 432, width: 460, text: "Speak Ice", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9567,7 +9730,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9580,6 +9743,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_ice
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_ice
               - label: {x: 500, y: 432, width: 460, text: "Speak Probe Fault", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9604,7 +9779,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9617,6 +9792,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_probe
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_probe
               - label: {x: 0, y: 540, width: 460, text: "Speak Relay Offline", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9641,7 +9828,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9654,6 +9841,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_relay_board
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_relay_board
               - label: {x: 500, y: 540, width: 460, text: "Speak Temp Offline", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9678,7 +9877,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9691,6 +9890,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_temp_board
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_temp_board
               - label: {x: 0, y: 648, width: 460, text: "Speak Hum Offline", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9715,7 +9926,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9728,6 +9939,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_humidity_sensor
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_humidity_sensor
               - label: {x: 500, y: 648, width: 460, text: "Speak Amb Offline", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9752,7 +9975,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9765,6 +9988,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_alarm_ambient_sensor
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_alarm_ambient_sensor
               - label: {x: 0, y: 756, width: 460, text: "Speak Cool On", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9789,7 +10024,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9802,6 +10037,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_info_cooling_on
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_info_cooling_on
               - label: {x: 500, y: 756, width: 460, text: "Speak Cool Off", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9826,7 +10073,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9839,6 +10086,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_info_cooling_off
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_info_cooling_off
               - label: {x: 0, y: 864, width: 460, text: "Speak Defrost On", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9863,7 +10122,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9876,6 +10135,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_info_defrost_on
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_info_defrost_on
               - label: {x: 500, y: 864, width: 460, text: "Speak Defrost Off", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9900,7 +10171,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9913,6 +10184,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_info_defrost_off
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_info_defrost_off
               - label: {x: 0, y: 972, width: 460, text: "Speak Door Opened", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -9937,7 +10220,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9950,6 +10233,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_info_door_open
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_info_door_open
               - label: {x: 500, y: 972, width: 460, text: "Speak Door Closed", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
@@ -9974,7 +10269,7 @@ lvgl:
                     - button:
                         x: 196
                         y: 4
-                        width: 240
+                        width: 150
                         height: 56
                         bg_color: col_blue
                         radius: 8
@@ -9987,6 +10282,18 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_audio_info_door_closed
                           - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 380
+                        y: 4
+                        width: 56
+                        height: 56
+                        bg_color: col_cyan
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets: [{label: {align: CENTER, text: "\U000F057E", text_font: font_mdi, text_color: col_text}}]
+                        on_click:
+                          - button.press: btn_preview_info_door_closed
         - button:
             x: 0
             y: 552
