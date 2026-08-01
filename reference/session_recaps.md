@@ -15,6 +15,7 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 - **Web Audio tab + virtual preview:** 40 px 🔊 button beside each switch (`.adv-preview-btn`).
 - `USER_MANUAL.md` §4.9 + `AUDIO_ALERTS.md` updated to describe the speaker icon on both
   surfaces. Coverage + embed + compile + NVS-safe flash done in this closeout.
+- **Glass + web confirmed** (Cory): layout looks good on LVGL Settings 8/8 and the web GUI.
 
 ## 2026-08-01 (Evening) — Closeout: fixed probes, 2CH RTD docs, log-tuning tools
 

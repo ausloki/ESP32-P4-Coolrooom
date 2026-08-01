@@ -15,6 +15,7 @@ log-tuning tools + Win/mac launchers. Next: RS485/RTD bench bring-up.
 - Coverage checker + persist-script staging check green
 - Rotating centre status + matching audio + ntfy hardware-offline
 - Virtual preview aligned with live gauge / Audio / Alarms & Notify (2026-08-01)
+- Per-phrase speaker-icon audio preview on LVGL Settings 8/8 + web Audio tab (glass+web OK)
 - Temperature Display Unit restored: Celsius default / Fahrenheit, LVGL + web + HA
 - LVGL settings **1/8–8/8** on glass (Cory confirmed 2026-08-01 evening)
 - Info page: glyph fix (`|` / `—`), SD used/free %, NTP sync-age latch

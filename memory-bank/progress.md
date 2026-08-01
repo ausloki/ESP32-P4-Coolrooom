@@ -7,6 +7,7 @@
 - LVGL Settings 8/8: Toggle 240 → 150 px, plus a 56 px mdi-volume-high speaker button per
   Speak row (`\U000F057E` added to `font_mdi`). Web/preview use a 40 px 🔊 button.
 - Manuals updated; coverage, embed, compile, NVS-safe flash done.
+- Cory confirmed layout looks good on LVGL and web GUI.
 
 ## 2026-08-01 — Closeout: probes fixed, 2CH RTD sheets, log recommend tools
 
