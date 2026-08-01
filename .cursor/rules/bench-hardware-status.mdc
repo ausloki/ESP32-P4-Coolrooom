@@ -20,8 +20,9 @@ peripheral boards as **expected**, not regressions, until Cory confirms they are
 
 - On-board display, touch, Wi-Fi (C6), speaker path (ES8311 / PA), web/API — as already
   used in this project.
-- On-board RTC (PCF8563) only after battery + chip are confirmed present; do not treat
-  RTC FAIL as blocking if the CR2032 / chip is known absent.
+- On-board **RTC battery holder** (item 11 / 1220) only after a cell is fitted; wall
+  clock uses SoC LP RTC + NTP. Do not treat “time pending until NTP” as a failure
+  when no cell is installed or Wi‑Fi is down.
 
 ## Rules for agents
 

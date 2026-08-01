@@ -4,6 +4,16 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Drop PCF8563; SoC LP RTC + NTP only
+
+- Waveshare FAQ + schematic: no I2C RTC chip; item 11 is battery holder for SoC VBAT.
+- Removed `time: platform: pcf8563`, `hw_rtc_ok`, and I2C RTC probe/write paths.
+- Diagnostics: `system_time_valid` / UI “System Time” via `p4_wall_clock_ok()`.
+- Docs: `reference/RTC_Configuration.md` (replaces RTC_PCF8563_*), USER_MANUAL,
+  hardware_pins, bench rule, dashboard entity map.
+
+---
+
 ## 2026-08-01 (Afternoon) — CPU Utilisation on Info + Web
 
 - Enabled `CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS` (P4 is non-SMP FreeRTOS).

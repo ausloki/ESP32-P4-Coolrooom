@@ -108,7 +108,7 @@ If any step fails, treat the task as incomplete and resolve before closeout.
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | WiFi, HA API, web server, OTA | ✅ |
-| 2 | RS485 Modbus: relays + 2x RTD + PCF8563 RTC | ✅ |
+| 2 | RS485 Modbus: relays + 2x RTD; wall clock = SoC LP RTC + NTP | ✅ |
 | 3 | Coolroom control logic (hysteresis, alarms, defrost) | ✅ |
 | 4 | LVGL 7" MIPI-DSI touchscreen dashboard | ✅ |
 | 5 | SD card logging, ntfy notifications, backup/restore | ⏳ |
@@ -121,4 +121,4 @@ If any step fails, treat the task as incomplete and resolve before closeout.
 | `reference/hardware_pins.md` | All confirmed GPIO assignments |
 | `reference/control_logic_ns_diagram.md` | Control loop NS diagram |
 | `reference/program_control_logic_flowchart.md` | Boot sequence + sensor/phase flowcharts |
-| `reference/RTC_PCF8563_Configuration.md` | PCF8563 RTC integration guide |
+| `reference/RTC_Configuration.md` | SoC LP RTC + SNTP timekeeping |

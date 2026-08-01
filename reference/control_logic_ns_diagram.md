@@ -149,7 +149,7 @@ Control loop:                  if probe_fault → both OFF immediately
 | `ctl_defrost_on_since_ms`| uint32_t| millis() when the defrost cycle started; 0 when idle |
 | `ctl_defrost_last_end_ms`| uint32_t| millis() when last defrost ended      |
 | `hw_rs485_relay_ok`     | bool     | Relay board comms health              |
-| `hw_rtc_ok`             | bool     | PCF8563 RTC health                    |
+| `system_time_valid`     | binary   | Wall clock valid (SoC LP RTC)         |
 | `ctl_comp_lockout_min`  | float    | Phase 6: off-delay lockout time (min)  |
 | `ctl_comp_last_off_ms`  | uint32_t | Phase 6: millis() when compressor last turned OFF |
 | `ctl_comp_on_since_ms`  | uint32_t | Phase 6: millis() when compressor last turned ON  |

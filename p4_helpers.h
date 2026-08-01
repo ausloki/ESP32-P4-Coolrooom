@@ -288,20 +288,15 @@ inline void p4_ha_api_drop_clients() {
 inline void p4_ha_api_drop_clients() {}
 #endif
 
-// ─── RTC Notes ──────────────────────────────────────────────────────────────
-// Battery-backed PCF8563 @ 0x51 (Waveshare assumption) keeps wall clock across
-// power cuts. Boot: read_time() seeds the ESP clock before WiFi/NTP. NTP still
-// runs, but at a long interval once the RTC has valid time, and each sync
-// writes back to the chip. Never call read/write when the component is_failed()
-// — a missing chip's I2C timeouts can stall the main loop hard enough that
-// WiFi never comes up.
+// ─── Wall clock (SoC LP RTC + SNTP) ─────────────────────────────────────────
+// Waveshare FAQ for ESP32-P4-WIFI6-Touch-LCD-7B: use the chip's internal 48-bit
+// low-power RTC via settimeofday() / POSIX time, plus NTP over C6 Wi-Fi.
+// Optional 1220 cell in holder item 11 backs VBAT so time can survive power
+// loss. There is no on-board I2C RTC chip in the published docs — do not probe
+// 0x51/0x68 for timekeeping.
 //
 // ESP32-P4 / ESP-IDF quirk: flashing or resetting via the USB-to-UART bridge
-// (DTR/RTS → EN) reports ESP_RST_POWERON, not a software reboot. Do not treat
-// post-flash wall-clock survival as "ESP soft-reboot retained time" — the SoC
-// reset reason looks like a cold power-on. A correct clock right after USB
-// reset with RTC Offline means NTP (or another source) already set time; with
-// RTC Online it is evidence the battery chip seeded before WiFi.
-//
-// Call id(rtc_pcf8563).now() only after confirming !is_failed().
+// (DTR/RTS → EN) reports ESP_RST_POWERON, not a software reboot. A correct
+// clock right after USB reset usually means NTP already ran (or VBAT held
+// time across the power-on-like reset).
 // ────────────────────────────────────────────────────────────────────────────

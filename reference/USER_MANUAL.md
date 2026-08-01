@@ -678,11 +678,11 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 
 | Item | What it shows |
 |---|---|
-| System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. With a working battery RTC, timestamps are correct from boot without waiting for WiFi; NTP still corrects drift (about weekly when the RTC is healthy, daily if not). |
+| System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. Wall clock uses the ESP32-P4 internal LP RTC; NTP over Wi‑Fi keeps it accurate. With a cell in the board’s RTC battery holder, time can survive power cuts; without it, expect pending time until first NTP after every hard power loss. |
 | Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU is the average busy percentage across both P4 cores over the last sample window (typically a few seconds). |
 | SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9) |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
-| RTC / SHT31 / SHT20 Online | Whether each optional peripheral is detected. RTC = battery-backed clock (PCF8563); if offline, install/check the CR2032 and expect log timestamps to wait for WiFi/NTP after every power cut. |
+| System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 = humidity sensors detected on the I2C header. |
 | Sensor Fallback Active | Whether the compressor is currently running the fallback duty cycle from §4.1/§4.7 |
 | **Restart Controller** *(button)* | Reboots the device. Settings are preserved (stored in flash), in-progress defrost/alarm timers are not. On the web dashboard this lives on the **Hardware** tab under *Controller*. |
 | **Factory Reset** *(button)* | Erases every setting in this manual back to its default value **and clears the saved WiFi credentials**, then reboots. The controller comes back on its own access point and has to be re-joined to your network (§4.10), so do not use it remotely. Take a Backup (§4.9) first if you want to restore afterward. On the web dashboard it is on the **Hardware** tab under *Controller*, behind a confirmation and a typed `RESET`. |

@@ -7,7 +7,7 @@ flowchart TD
     INIT --> RS485[RS485 Modbus\nControllers come online\nrelay_board / rtd_board_1]
     RS485 --> NTP{NTP Sync\nComplete?}
     NTP -->|No - retry 60s| NTP
-    NTP -->|Yes| RTC[PCF8563 RTC synced\nhw_rtc_ok = true\nSNTP → 24h interval]
+    NTP -->|Yes| RTC[SoC LP RTC updated\nwall clock valid\nSNTP → weekly interval]
     RTC --> LOOP
 
     LOOP([Main 10s Control Loop])
@@ -56,17 +56,17 @@ flowchart TD
 sequenceDiagram
     participant Boot
     participant NTP
-    participant RTC as PCF8563 RTC
+    participant Clock as SoC LP RTC
     participant RS485
     participant HA as Home Assistant
 
     Boot->>Boot: p4_log_boot() - CPU/DRAM/PSRAM diagnostics
-    Boot->>NTP: p4_ntp_set_fast_sync(60000ms)
+    Boot->>NTP: p4_ntp_set_fast_sync(60000ms) unless VBAT already holds time
     Boot->>RS485: Modbus controllers init (priority -10)
     RS485-->>Boot: relay_board online → hw_rs485_relay_ok = true
     RS485-->>Boot: rtd_board_1 online → hw_rs485_rtd1_ok = true
-    NTP-->>Boot: on_time_sync → p4_ntp_set_interval(86400000ms)
-    RTC-->>Boot: on_time_sync → hw_rtc_ok = true
+    NTP-->>Boot: on_time_sync → settimeofday into LP RTC
+    Clock-->>Boot: p4_wall_clock_ok() / system_time_valid
     Boot->>HA: API connection established
     Boot->>Boot: 10s control loop starts
 ```

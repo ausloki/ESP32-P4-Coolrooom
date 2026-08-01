@@ -17,16 +17,19 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 
 ## Still to verify / open
 
-1. Optional: second alarm type while muted → jiggle resumes
+1. Optional: second alarm type while muted → jiggle resumes (door reed is enough)
 2. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
-3. Web gauge twin after this flash (spot-check on LAN)
-4. After any USB flash: confirm settings still present (or re-apply + Backup to SD)
+3. ✅ Web gauge twin matches LVGL (Cory, 2026-08-01)
+4. ✅ SD Backup works (Cory); full sensor coverage in backup.json still unverified without RTD/I2C probes
+5. ✅ I2C/RTC: **dropped PCF8563** (2026-08-01). Waveshare FAQ = SoC 48-bit LP RTC +
+   NTP; no I2C RTC chip in docs. Diagnostics: **System Time Valid**. Optional 1220 in
+   holder item 11 backs VBAT.
 
 ## Leave for later
 
 - RS485 / external I2C not on bench
-- RTC PCF8563 still SNTP-primary until chip confirmed
 - Manual screenshots still placeholders
+- CPU % spike on hard browser refresh is expected (SSE full reconnect); smooth later if desired
 
 ## Key commands
 

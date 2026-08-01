@@ -20,10 +20,10 @@
 # RTD has no humidity capability at all, and the second RTD board that used
 # to cover ambient has been decommissioned in favor of the I2C SHT20 — one
 # less RS485 board to wire/maintain, and humidity comes along for free). I2C
-# also carries the onboard RTC (chip identity not confirmed from local
-# schematic text extraction; verify on physical hardware, with PCF8563
-# currently treated as the working assumption) and the GT911 touch
-# controller. See reference/hardware_pins.md for the full I2C address table.
+# also carries the GT911 touch controller. Wall-clock time uses the ESP32-P4
+# internal 48-bit LP RTC + SNTP (Waveshare FAQ) — no on-board I2C RTC chip in
+# the published docs. See reference/hardware_pins.md and
+# reference/RTC_Configuration.md.
 #
 # PROBE MAP
 #   Probe 1 (coolroom primary)   — RTD board 1, CH1, addr 100
@@ -61,16 +61,17 @@ substitutions:
   ntp_server_2: time.google.com
 
   # ── NTP sync intervals (milliseconds, passed to ESP-IDF esp_sntp_set_sync_interval)
-  # ntp_fast_sync_ms     : poll rate at boot until first sync when no RTC time yet
-  # ntp_normal_sync_ms   : steady-state when relying on NTP alone (no external RTC)
-  # ntp_with_rtc_sync_ms : steady-state when battery RTC already holds time —
-  #                        occasional correction only; cuts NTP traffic sharply
+  # ntp_fast_sync_ms     : poll rate at boot until first sync when SoC LP RTC unset
+  # ntp_normal_sync_ms   : unused fallback interval (kept for clarity)
+  # ntp_with_rtc_sync_ms : steady-state once wall clock is valid (VBAT-held or
+  #                        after first SNTP) — weekly correction only
   ntp_fast_sync_ms:      "60000"
   ntp_normal_sync_ms:    "86400000"
   ntp_with_rtc_sync_ms:  "604800000"
 
   # ── I2C header (GPIO CONFIRMED from Waveshare docs) ───────────────────────
-  # Reserved for onboard RTC only. NOT used for temperature.
+  # GT911 touch + optional SHT humidity sensors. Wall clock is SoC LP RTC + NTP,
+  # not an I2C chip. Primary coolroom/evap temps stay on RS485 RTD.
   i2c_sda_pin: GPIO7
   i2c_scl_pin: GPIO8
 
@@ -272,36 +273,25 @@ esphome:
                 ESP_LOGW("sd", "SD card not found or mount failed");
             }
 
-            // External RTC (PCF8563 @ 0x51). Prefer the component's own
-            // is_failed() over a second I2C probe — setup() already tried.
-            // Only read/write the chip when it answered; otherwise leave
-            // NTP on the fast boot schedule. DS3231-class @ 0x68 is logged
-            // for diagnostics but has no driver wired yet.
+            // SoC LP RTC (Waveshare FAQ): if VBAT already held wall time across
+            // reset, skip the 60s NTP hammer. Otherwise stay on fast sync until
+            // the first SNTP settimeofday(). No I2C RTC chip on this board.
+            if (p4_wall_clock_ok()) {
+              p4_ntp_set_interval(${ntp_with_rtc_sync_ms});
+              id(system_time_valid).publish_state(true);
+              ESP_LOGI("rtc", "SoC LP RTC already has wall time — NTP interval %u ms",
+                       (unsigned) ${ntp_with_rtc_sync_ms});
+            } else {
+              id(system_time_valid).publish_state(false);
+              ESP_LOGI("rtc", "SoC LP RTC unset — fast NTP until first sync");
+            }
+
             {
                 uint8_t reg = 0x00;
                 uint8_t b = 0;
                 auto probe = [&](uint8_t addr) -> bool {
                     return id(i2c_bus).write_readv(addr, &reg, 1, &b, 1) == i2c::ERROR_OK;
                 };
-
-                id(hw_rtc_ok) = !id(rtc_pcf8563).is_failed();
-                if (id(hw_rtc_ok)) {
-                    id(rtc_pcf8563).read_time();
-                    if (p4_wall_clock_ok()) {
-                        // Battery kept time — logs/UI have real timestamps
-                        // before WiFi. Drop the 60s NTP hammer; still correct
-                        // occasionally via ntp_with_rtc_sync_ms.
-                        p4_ntp_set_interval(${ntp_with_rtc_sync_ms});
-                        ESP_LOGI("rtc", "PCF8563 seeded wall clock — NTP interval %u ms",
-                                 (unsigned) ${ntp_with_rtc_sync_ms});
-                    } else {
-                        ESP_LOGW("rtc", "PCF8563 present but time unset — waiting for NTP, then will write back");
-                    }
-                } else if (probe(0x68)) {
-                    ESP_LOGW("rtc", "RTC at 0x68 (DS3231/DS1307-class) — no driver yet, SNTP only");
-                } else {
-                    ESP_LOGW("rtc", "No PCF8563 — time from SNTP only (check CR2032 / chip marking)");
-                }
 
                 if (probe(0x18)) {
                     id(hw_audio_ok) = true;
@@ -513,21 +503,12 @@ mdns:
   disabled: false
 
 ##############################################################################
-# Time — SNTP + battery-backed PCF8563
+# Time — ESP32-P4 internal 48-bit LP RTC + SNTP (Waveshare FAQ)
 #
-# Boot path: if the PCF8563 answers, read_time() seeds the ESP wall clock
-# before WiFi is up, so logs and the UI have real timestamps immediately.
-# NTP still runs for long-term accuracy, but at ntp_with_rtc_sync_ms (7 days)
-# once the RTC already holds time — no 60s hammer. Each successful NTP sync
-# writes back to the chip so the next power cut starts correct again.
-#
-# Missing chip: component marks failed; we never call read/write on it
-# (I2C timeouts on a dead address previously stalled bring-up hard enough
-# that WiFi never associated). Falls back to ntp_fast_sync_ms → ntp_normal.
-#
-# ESP32-P4 quirk: USB-to-UART flash/reset reports ESP_RST_POWERON (not SW
-# reboot). A correct clock after USB reset with RTC Offline is NTP, not
-# soft-reboot time retention; RTC Online + early seed is the battery proof.
+# System Time API: SNTP calls settimeofday() into the SoC LP RTC.
+# Network Sync: C6 Wi-Fi + NTP servers below.
+# Optional 1220 cell in holder item 11 backs VBAT so time can survive power loss.
+# No I2C RTC component — PCF8563 removed 2026-08-01.
 ##############################################################################
 
 time:
@@ -539,25 +520,15 @@ time:
       - ${ntp_server_2}
     on_time_sync:
       - lambda: |-
-          const bool rtc_ok = id(hw_rtc_ok) && !id(rtc_pcf8563).is_failed();
-          if (rtc_ok) {
-            id(rtc_pcf8563).write_time();
+          // After first sync (or any later correction), settle to the normal
+          // interval. If VBAT already held time at boot we may already be on
+          // the longer cadence from on_boot — that is fine to keep.
+          if (p4_wall_clock_ok())
             p4_ntp_set_interval(${ntp_with_rtc_sync_ms});
-            ESP_LOGI("ntp", "Sync complete — wrote PCF8563, NTP interval %u ms",
-                     (unsigned) ${ntp_with_rtc_sync_ms});
-          } else {
+          else
             p4_ntp_set_interval(${ntp_normal_sync_ms});
-            ESP_LOGI("ntp", "Sync complete — no external RTC, NTP interval %u ms",
-                     (unsigned) ${ntp_normal_sync_ms});
-          }
-
-  - platform: pcf8563
-    id: rtc_pcf8563
-    i2c_id: i2c_bus
-    address: 0x51
-    # never: we read once at boot and write on NTP sync. A periodic read
-    # would overwrite a fresh NTP correction with a drifting chip.
-    update_interval: never
+          id(system_time_valid).publish_state(p4_wall_clock_ok());
+          ESP_LOGI("ntp", "Sync complete — SoC LP RTC updated, NTP interval set");
 
 logger:
   level: INFO
@@ -627,18 +598,14 @@ web_server:
       sorting_weight: 100
 
 ##############################################################################
-# I2C — RTC + GT911 touch + external I2C header (item 19, PH2.0 4-PIN: SDA/SCL
+# I2C — GT911 touch + external I2C header (item 19, PH2.0 4-PIN: SDA/SCL
 # GPIO7/8, on-board pullups already present, do not enable internal pullups).
 #
-# Phase 2 deliberately kept this bus temperature-free (RS485 RTD handles all
-# temperature sensing) — that constraint is unchanged. What's new here is
-# humidity, which RS485 RTD cannot provide at all, so the SHT31 (internal)
-# and SHT20 (external) humidity/temp sensors below share this same bus rather
-# than opening a second I2C bus or connector. All four devices coexist at
-# distinct addresses (RTC 0x51, GT911 0x5D, SHT31 0x44/0x45, SHT20 0x40) — no
-# conflicts. See reference/hardware_pins.md for the full address table and
-# physical wiring (both new sensors land on the same item-19 4-pin header,
-# wired in parallel — I2C is a shared bus, not a point-to-point link).
+# Phase 2 deliberately kept this bus free of primary coolroom/evap probes
+# (RS485 RTD handles those). Humidity (and ambient temp) use SHT31 / SHT20 on
+# this same bus. Addresses: GT911 0x5D, SHT31 0x44/0x45, SHT20 0x40, ES8311
+# 0x18 (codec). No I2C RTC — wall clock is SoC LP RTC + SNTP. See
+# reference/hardware_pins.md.
 ##############################################################################
 
 i2c:
@@ -2338,11 +2305,11 @@ text_sensor:
       sorting_weight: 40
     lambda: |-
       bool relay_ok = id(hw_rs485_relay_ok);
-      bool rtc_ok   = id(hw_rtc_ok);
+      bool time_ok  = p4_wall_clock_ok();
       char buf[64];
-      snprintf(buf, sizeof(buf), "Relay: %s | RTC: %s",
+      snprintf(buf, sizeof(buf), "Relay: %s | Time: %s",
                relay_ok ? "OK" : "OFFLINE",
-               rtc_ok   ? "OK" : "OFFLINE");
+               time_ok  ? "OK" : "PENDING");
       return std::string(buf);
 
   - platform: template
@@ -2437,13 +2404,13 @@ binary_sensor:
     lambda: 'return id(hw_rs485_rtd1_ok);'
 
   - platform: template
-    id: rtc_online
-    name: "RTC (PCF8563) Online"
+    id: system_time_valid
+    name: "System Time Valid"
     device_class: connectivity
     web_server:
       sorting_group_id: group_diagnostics
       sorting_weight: 33
-    lambda: 'return id(hw_rtc_ok);'
+    lambda: 'return p4_wall_clock_ok();'
 
   - platform: template
     id: sht31_online
@@ -4576,9 +4543,8 @@ interval:
             char buf[64];
             bool relay_ok = id(hw_rs485_relay_ok);
             bool rtd_ok = id(hw_rs485_rtd1_ok);
-            bool rtc_ok = id(hw_rtc_ok);
-            snprintf(buf, sizeof(buf), "Relay:%s RTD:%s RTC:%s",
-              relay_ok ? "OK" : "NO", rtd_ok ? "OK" : "NO", rtc_ok ? "OK" : "NO");
+            snprintf(buf, sizeof(buf), "Relay:%s RTD:%s",
+              relay_ok ? "OK" : "NO", rtd_ok ? "OK" : "NO");
             return std::string(buf);
       - lvgl.label.update:
           id: lbl_info_probes
@@ -4607,18 +4573,20 @@ interval:
       - lvgl.label.update:
           id: lbl_info_rtc
           text: !lambda |-
-            if (id(hw_rtc_ok)) {
-              if (p4_wall_clock_ok())
-                return std::string("RTC: PCF8563 online — time held across reboots");
-              return std::string("RTC: PCF8563 online — waiting for first NTP to set it");
+            if (p4_wall_clock_ok()) {
+              if (p4_ntp_synced())
+                return std::string("Time: valid — SoC LP RTC + NTP");
+              return std::string("Time: valid — SoC LP RTC (awaiting NTP refresh)");
             }
-            return std::string("RTC: not found — SNTP only");
+            return std::string("Time: pending — waiting for first NTP sync");
+      - lambda: |-
+          id(system_time_valid).publish_state(p4_wall_clock_ok());
       - lvgl.led.update:
           id: led_rs485
           brightness: !lambda 'return (id(hw_rs485_relay_ok) && id(hw_rs485_rtd1_ok)) ? 100.0f : 0.0f;'
       - lvgl.led.update:
           id: led_rtc
-          brightness: !lambda 'return id(hw_rtc_ok) ? 100.0f : 0.0f;'
+          brightness: !lambda 'return p4_wall_clock_ok() ? 100.0f : 0.0f;'
 
   # ── Home screen icon animations ──────────────────────────────────────────
   # 20fps (50ms) tick driving simple procedural animations on the 4 left-
@@ -4750,12 +4718,6 @@ globals:
     initial_value: "false"
 
   - id: hw_rs485_rtd1_ok
-    type: bool
-    restore_value: no
-    initial_value: "false"
-
-  # ── RTC health flag ────────────────────────────────────────────────────────
-  - id: hw_rtc_ok
     type: bool
     restore_value: no
     initial_value: "false"
@@ -8432,7 +8394,7 @@ lvgl:
               - label: {id: lbl_info_ip, x: 0, y: 512, width: 470, text: "---", text_font: font_medium, text_color: col_text}
 
               # Right column
-              - label: {x: 500, y: 0, width: 470, text: "RS485 / RTC", text_font: font_medium, text_color: col_subtext}
+              - label: {x: 500, y: 0, width: 470, text: "RS485", text_font: font_medium, text_color: col_subtext}
               - label: {id: lbl_info_rs485, x: 500, y: 32, width: 470, text: "---", text_font: font_medium, text_color: col_text}
               - label: {x: 500, y: 80, width: 470, text: "Probe Health", text_font: font_medium, text_color: col_subtext}
               - label: {id: lbl_info_probes, x: 500, y: 112, width: 470, text: "---", text_font: font_medium, text_color: col_text}
@@ -8440,8 +8402,8 @@ lvgl:
               - label: {id: lbl_info_sd, x: 500, y: 232, width: 470, text: "---", text_font: font_medium, text_color: col_text}
               - label: {x: 500, y: 280, width: 470, text: "Compressor Lockout", text_font: font_medium, text_color: col_subtext}
               - label: {id: lbl_lockout_timer_display, x: 500, y: 312, width: 470, text: "Ready", text_font: font_medium, text_color: col_text}
-              - label: {x: 500, y: 360, width: 470, text: "External RTC", text_font: font_medium, text_color: col_subtext}
-              - label: {id: lbl_info_rtc, x: 500, y: 392, width: 470, text: "Not confirmed (SNTP only)", text_font: font_small, text_color: col_subtext}
+              - label: {x: 500, y: 360, width: 470, text: "System Time", text_font: font_medium, text_color: col_subtext}
+              - label: {id: lbl_info_rtc, x: 500, y: 392, width: 470, text: "Pending NTP", text_font: font_small, text_color: col_subtext}
 
         - button:
             x: 0

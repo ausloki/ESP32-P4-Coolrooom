@@ -44,16 +44,16 @@ Note: External pullups provided on-board. Do NOT enable internal pullups in soft
 
 | Device | I2C Address | Role |
 | --- | --- | --- |
-| PCF8563 RTC | 0x51 | On-board real-time clock |
+| *(on-board timekeeping)* | *(not I2C)* | ESP32-P4 LP/VBAT RTC via battery holder item 11 — Waveshare does **not** name an I2C RTC part; see `reference/RTC_Configuration.md` |
 | GT911 touch controller | 0x5D | Display touch (required — do not remove/repurpose this bus) |
 | SHT31 | 0x44 (0x45 on some breakouts — check ADDR pin strapping before flashing) | Internal (coolroom) humidity + temperature |
 | SHT20 (HTU21D-compatible) | 0x40 (fixed) | External (ambient) humidity + temperature |
 
-No address conflicts — all four devices sit on distinct addresses. Both new humidity/temp
-sensors wire to this same item-19 4-pin header in parallel with the RTC (SDA/SCL/VCC/GND);
-there is no second I2C connector on this board, and none is needed since I2C already supports
-multiple devices sharing one bus. On-board pullups (noted above) are shared across all devices
-on the bus — do not add per-sensor pullup resistors, that would over-pull the bus.
+Humidity/temp sensors wire to this same item-19 4-pin header in parallel (SDA/SCL/VCC/GND).
+There is no I2C RTC on this board; firmware uses SoC LP RTC + SNTP only. A 1220 cell in
+holder item 11 backs SoC VBAT so wall time can survive power loss. There is no
+second I2C connector on this board. On-board pullups (noted above) are shared across all
+devices on the bus — do not add per-sensor pullup resistors, that would over-pull the bus.
 
 Phase 2 deliberately kept this bus free of temperature sensors (RS485 RTD handled all
 temperature sensing at the time). That still holds for the primary coolroom probe and the
@@ -302,7 +302,7 @@ LDO channel 3 at 2.5V required for MIPI D-PHY power.
 | GPIO       | Used By                            |
 |------------|------------------------------------|
 | 6          | ESP32-C6 wakeup                    |
-| 7–8        | I2C bus (RTC, GT911, external hdr) |
+| 7–8        | I2C bus (GT911, external hdr / SHT) |
 | 9–13       | On-board I2S audio (ES8311 / mics) |
 | 14–19      | ESP32-C6 SDIO co-processor         |
 | 20         | Battery voltage sense divider      |

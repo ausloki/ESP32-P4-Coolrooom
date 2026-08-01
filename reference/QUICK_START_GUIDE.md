@@ -32,7 +32,8 @@ the unit, or from a web page on any browser on your network.
 - [ ] **Check both probes are reading sensibly** (System/Diagnostics section — Probe Health
       Summary) before relying on the unit.
 - [ ] **Check the hardware is all present** — log in → **Hardware** tab. Both RS485 boards,
-      the RTC, the humidity sensors and the SD card should read *online*. If you don't want
+      System Time, the humidity sensors and the SD card should read *online* (RS485 boards
+      only once those are wired). If you don't want
       the alarm relay driving an external siren, turn **Siren Relay Enabled** off here:
       alarms and push notifications carry on as normal. See §4.13.
 - [ ] **Subscribe to push notifications** — log in → **Alarms & Notify** tab → set topic
