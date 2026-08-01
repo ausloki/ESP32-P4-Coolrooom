@@ -4,6 +4,18 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Gauge Design Locked + Web Twin + Closeout
+
+- New always-apply rule `.cursor/rules/home-gauge-design.mdc`: rings-only on flat
+  `#1C1C1E`, dial −10…+30, stack 440/396/352, no translucent chrome (documents the
+  composite-grey trap), LVGL↔web stay twins.
+- Web `assets/dashboard.html` (+ virtual preview): dropped ticks / CURRENT·SET·AMB
+  labels; equal stroke; blue coolroom arc (label still green/blue/red); dial −10…30;
+  240° sweep; radii 135/117/99.
+- memory-bank activeContext updated.
+
+---
+
 ## 2026-08-01 (Afternoon) — Frosted Plate Deleted; Gauge Is Rings Only
 
 Removed the 440px underlay `obj` behind the arcs. `col_panel` at 42% over `col_bg`

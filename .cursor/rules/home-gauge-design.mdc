@@ -1,0 +1,52 @@
+---
+description: Home horseshoe gauge design — LVGL and web must stay visual twins; no grey glass layers
+alwaysApply: true
+---
+
+# Home gauge design (LVGL + web)
+
+The touchscreen home gauge and the web Coolroom Status gauge must stay **visually
+aligned**. Change one → update the other in the same change.
+
+## Canonical look (as of 2026-08-01)
+
+- **Three concentric arcs only**, drawn on flat `col_bg` (`#1C1C1E`). No frosted
+  underlay plate, no outer rim arc, no centre-disc border, no tick marks, no
+  CURRENT/SET/AMB ring labels.
+- **Colours match the sensor text**: coolroom outer = `col_blue` `#0A84FF`,
+  setpoint middle = `col_cyan` `#00BCD4`, ambient inner = `col_pink` `#FF1493`.
+  Dim track + bright fill (same hue at lower opacity). The coolroom *value arc*
+  stays blue; only the centre temperature *label* recolors (green / blue / red
+  for normal / low / high).
+- **Dial range** is substitutions `dial_min_c` / `dial_max_c` in
+  `esp32-p4-coolroom.yaml` (currently **−10 … +30 °C**). Bottom-left end of the
+  horseshoe = dial floor. Setpoint number `min_value` is locked to `dial_min_c`.
+  Web `tempToPercent` must use the same floor/ceiling.
+- **Geometry**: LVGL stack **440 / 396 / 352**, `arc_width` 14 (~8 px daylight),
+  horseshoe **150° → 30°** (240° sweep, gap at 6 o’clock). Web SVG should keep
+  the same sweep and proportional radii / equal stroke widths.
+- **Centre**: opaque `col_bg` disc (masks ambient ring stub) with no border; big
+  readout, cyan setpoint, orange status.
+
+## Hard rule — do not reintroduce translucent chrome
+
+Anything semi-opaque over `#1C1C1E` composites to **flat grey**, not frost:
+
+| Tried | Composite |
+|-------|-----------|
+| `#FFFFFF` @ ~22% | ~`#4E4E4E` |
+| `col_panel` `#2C2C2E` @ 42% | ~`#232325` |
+
+Do **not** add rim arcs, frosted plates, or faint white borders “for glass”. Rings
+on flat background is the approved look.
+
+## Where to edit
+
+| Surface | File |
+|---------|------|
+| LVGL | `esp32-p4-coolroom.yaml` (home page arcs + `dial_*` substitutions) |
+| Scale helpers | `p4_ui.h` (`p4_ui_temp_to_arc_pct` / `p4_ui_setpoint_to_arc_pct`) |
+| Web | `assets/dashboard.html` (and `assets/dashboard_virtual_preview.html`) |
+| User-facing copy | `reference/USER_MANUAL.md` home-screen gauge section |
+
+After HTML edits: `python3 scripts/embed_dashboard.py` before compile/flash.

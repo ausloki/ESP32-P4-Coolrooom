@@ -561,22 +561,13 @@
             .gauge-info-line + .gauge-info-line { margin-top: 2px; }
         }
         .gauge-wrap svg { width: 100%; height: auto; display: block; }
-        /* Faded track in each ring's own hue (not a neutral grey) — an instrument-
-           dial touch borrowed from an earlier project's web gauge. */
+        /* Dim track + bright fill in each sensor's own hue — same as LVGL.
+           No ticks, no frosted plate, no rim: arcs sit on flat #1C1C1E. */
         .gauge-track { fill: none; stroke-linecap: round; }
-        .gauge-track.outer { stroke: rgba(10, 132, 255, 0.16); }
-        .gauge-track.middle { stroke: rgba(0, 188, 212, 0.16); }
-        .gauge-track.inner { stroke: rgba(255, 20, 147, 0.16); }
-        .gauge-arc { fill: none; stroke-linecap: round; }
-        .gauge-tick { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1.5; }
-        .gauge-tick.major { stroke: rgba(255, 255, 255, 0.4); stroke-width: 2; }
-        .gauge-ring-label {
-            font-size: 8px;
-            font-family: inherit;
-            text-anchor: middle;
-            letter-spacing: 0.06em;
-            fill: rgba(255, 255, 255, 0.38);
-        }
+        .gauge-track.outer { stroke: rgba(10, 132, 255, 0.28); }
+        .gauge-track.middle { stroke: rgba(0, 188, 212, 0.28); }
+        .gauge-track.inner { stroke: rgba(255, 20, 147, 0.28); }
+        .gauge-arc { fill: none; stroke-linecap: round; opacity: 0.92; }
         .gauge-center {
             position: absolute;
             inset: 0;
@@ -587,7 +578,7 @@
             text-align: center;
             pointer-events: none;
         }
-        .gauge-temp { font-size: 46px; font-weight: 300; color: #30D158; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
+        .gauge-temp { font-size: 46px; font-weight: 300; color: #0A84FF; line-height: 1; letter-spacing: -0.01em; transition: color 0.25s; }
         .gauge-setpoint { font-size: 14px; color: #00BCD4; margin-top: 8px; font-weight: 500; }
         .gauge-status { font-size: 12px; color: #FF9F0A; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
         /* Humidity/temp reading pills — same idea as the old project's
@@ -649,13 +640,12 @@
                 </div>
                 <div class="gauge-wrap">
                     <svg viewBox="0 0 300 300">
-                        <g id="gaugeTicks"></g>
-                        <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="14"></path>
-                        <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="11"></path>
-                        <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="9"></path>
-                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#30D158" stroke-width="14"></path>
-                        <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="11"></path>
-                        <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="9"></path>
+                        <path id="gaugeTrackOuter" class="gauge-track outer" stroke-width="10"></path>
+                        <path id="gaugeTrackMiddle" class="gauge-track middle" stroke-width="10"></path>
+                        <path id="gaugeTrackInner" class="gauge-track inner" stroke-width="10"></path>
+                        <path id="gaugeArcOuter" class="gauge-arc" stroke="#0A84FF" stroke-width="10"></path>
+                        <path id="gaugeArcMiddle" class="gauge-arc" stroke="#00BCD4" stroke-width="10"></path>
+                        <path id="gaugeArcInner" class="gauge-arc" stroke="#FF1493" stroke-width="10"></path>
                     </svg>
                     <div class="gauge-center">
                         <div class="gauge-temp" id="gaugeTemp">--°C</div>
@@ -1811,13 +1801,15 @@
         // CENTRAL HORSESHOE GAUGE (mirrors the LVGL touchscreen's 3-arc display)
         // ═══════════════════════════════════════════════════════════════════════════════
 
-        // Same 270°-sweep / 90°-gap-at-bottom horseshoe layout as the on-device LVGL
-        // arcs, and the same temperature-to-percent mapping used in esp32-p4-coolroom.yaml:
-        //   percent = (temp_celsius + 20) / 35 * 100   (-20°C -> 0%, 15°C -> 100%)
+        // Mirrors LVGL home arcs: 240° sweep (150→30), gap at 6 o'clock; dial
+        // range matches dial_min_c / dial_max_c in esp32-p4-coolroom.yaml.
+        // Radii proportional to LVGL 440/396/352 with equal stroke (~8px gaps).
         const GAUGE_CENTER = 150;
-        const GAUGE_START_ANGLE = -135; // degrees, 0 = 12 o'clock, clockwise positive
-        const GAUGE_SWEEP = 270;
-        const GAUGE_RADII = { outer: 130, middle: 105, inner: 82 };
+        const GAUGE_START_ANGLE = -120; // degrees, 0 = 12 o'clock, clockwise positive
+        const GAUGE_SWEEP = 240;
+        const GAUGE_DIAL_MIN = -10;
+        const GAUGE_DIAL_MAX = 30;
+        const GAUGE_RADII = { outer: 135, middle: 117, inner: 99 };
 
         function gaugePoint(radius, angleDeg) {
             const rad = (angleDeg * Math.PI) / 180;
@@ -1836,7 +1828,8 @@
 
         function tempToPercent(tempC) {
             if (typeof tempC !== 'number' || isNaN(tempC)) return 0;
-            const pct = ((tempC + 20) / 35) * 100;
+            const span = GAUGE_DIAL_MAX - GAUGE_DIAL_MIN;
+            const pct = ((tempC - GAUGE_DIAL_MIN) / span) * 100;
             return Math.max(0, Math.min(100, pct));
         }
 
@@ -1847,48 +1840,19 @@
             el.setAttribute('d', gaugeArcPath(radius, GAUGE_START_ANGLE, endAngle));
         }
 
-        // Short tick marks around the outer ring plus small ring labels tucked
-        // into the bottom-left of the gap (CURRENT/SET/AMB) — an instrument-dial
-        // touch borrowed from an earlier project's web gauge. Built once; static.
-        function buildGaugeTicks() {
-            const g = document.getElementById('gaugeTicks');
-            if (!g) return;
-            let html = '';
-            for (let v = -20; v <= 15; v += 5) {
-                const major = v % 10 === 0;
-                const angle = GAUGE_START_ANGLE + ((v + 20) / 35) * GAUGE_SWEEP;
-                const p1 = gaugePoint(GAUGE_RADII.outer + 8, angle);
-                const p2 = gaugePoint(GAUGE_RADII.outer + (major ? 15 : 11), angle);
-                html += `<line class="gauge-tick${major ? ' major' : ''}" x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}"></line>`;
-            }
-            const labelAngle = 200; // bottom-left, inside the gap
-            const labels = [
-                { r: GAUGE_RADII.outer, text: 'CURRENT' },
-                { r: GAUGE_RADII.middle, text: 'SET' },
-                { r: GAUGE_RADII.inner, text: 'AMB' }
-            ];
-            labels.forEach((l) => {
-                const p = gaugePoint(l.r, labelAngle);
-                html += `<text class="gauge-ring-label" x="${p.x.toFixed(1)}" y="${(p.y + 3).toFixed(1)}">${l.text}</text>`;
-            });
-            g.innerHTML = html;
-        }
-
         function initGaugeTracks() {
             const fullEnd = GAUGE_START_ANGLE + GAUGE_SWEEP;
-            setGaugeArc('gaugeTrackOuter', GAUGE_RADII.outer, 100);
-            // tracks use full sweep via setAttribute on path with full end — keep explicit:
             const outer = document.getElementById('gaugeTrackOuter');
             const middle = document.getElementById('gaugeTrackMiddle');
             const inner = document.getElementById('gaugeTrackInner');
             if (outer) outer.setAttribute('d', gaugeArcPath(GAUGE_RADII.outer, GAUGE_START_ANGLE, fullEnd));
             if (middle) middle.setAttribute('d', gaugeArcPath(GAUGE_RADII.middle, GAUGE_START_ANGLE, fullEnd));
             if (inner) inner.setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
-            buildGaugeTicks();
         }
 
         // Same alarm-relative color coding as the LVGL center label: red above
         // setpoint+alarm_high, blue below setpoint-alarm_low, green otherwise.
+        // The coolroom *arc* stays col_blue — only the label recolors.
         function temperatureStateColor(data) {
             const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
             if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_high === 'number' && data.temperature > data.setpoint + data.alarm_high) {
@@ -1909,13 +1873,10 @@
             if (!tempEl) return;
             const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
             tempEl.textContent = hasTemp ? `${data.temperature.toFixed(1)}°C` : '--°C';
+            tempEl.style.color = temperatureStateColor(data);
 
-            // The value arc itself shifts color with the reading too, not just the
-            // center label — matches the LVGL center label's states either way.
-            const stateColor = temperatureStateColor(data);
-            tempEl.style.color = stateColor;
             const arcOuter = document.getElementById('gaugeArcOuter');
-            if (arcOuter) arcOuter.style.stroke = stateColor;
+            if (arcOuter) arcOuter.style.stroke = '#0A84FF';
 
             setText('gaugeSetpoint',
                 typeof data.setpoint === 'number' && !isNaN(data.setpoint) ? `Set: ${data.setpoint.toFixed(1)}°C` : 'Set: --°C');
