@@ -4,6 +4,27 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Midday) — Tick Overlay Crosses the Rings
+
+Follow-up to the tick-ring pass: Cory wanted the marks to cross the arcs, not sit in a
+band outside them.
+
+- **Meter moved after the three arcs in the widget list** (widget order is z-order), so
+  each tick draws over the rings and cuts them into per-degree segments. It stays before
+  the centre disc, which trims the inner stubs.
+- Tick length 14 → **67 px**, outer edge r=224 (glass rim) down to r=157, just inside the
+  ambient ring's inner edge.
+- **Arc stack restored to the sizes approved earlier** (448/430/412/376/340/318) — the
+  ticks no longer need their own outer band, so the 16 px I had borrowed went back. Right
+  labels at `x:328` remain correct for the 412 stack.
+- Setpoint mapping confirmed: the 1 s interval already calls
+  `p4_ui_setpoint_to_arc_pct(ctl_setpoint, -15, 30)`, so 2 °C → 37.8% of the 240° sweep.
+  Offline sensors return 0 (empty ring) via `p4_rtd_valid`.
+- Documented that a setpoint below −15 °C (the number allows −20) still applies but shows
+  an empty cyan ring.
+
+---
+
 ## 2026-08-01 (Midday) — Tick Ring, −15 °C Dial Floor, Header Swap
 
 Home gauge visual pass 2 (concept image supplied by Cory):

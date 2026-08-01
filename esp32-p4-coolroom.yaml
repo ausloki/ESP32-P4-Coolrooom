@@ -5942,45 +5942,16 @@ lvgl:
               #   - Left rail + touch targets untouched (container stays
               #     x:80, clickable false).
               #   - No real Gaussian blur (too expensive on P4 full-refresh).
-
-              # Tick ring — radial marks only, no numerals. Shares the dial
-              # range with all three arcs so ticks and fills always agree.
-              # Ticks draw inward from this widget's edge, so every ring below
-              # must stay inside (464/2 − 14) = 218px radius.
-              # No `major:` block on purpose: major ticks render value labels
-              # and this scale is meant to be unlabelled.
-              - meter:
-                  align: CENTER
-                  y: 0
-                  width: 464
-                  height: 464
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scales:
-                    - range_from: ${dial_min_c}
-                      range_to: ${dial_max_c}
-                      angle_range: 240
-                      rotation: 150
-                      ticks:
-                        count: ${dial_tick_count}
-                        width: 2
-                        length: 14
-                        color: col_subtext
-                      indicators:
-                        - tick_style:
-                            start_value: ${dial_min_c}
-                            end_value: ${dial_max_c}
-                            color_start: col_subtext
-                            color_end: col_subtext
+              #   - Widget order IS z-order: the tick meter sits AFTER the three
+              #     arcs so its marks cross over them (segmented look), and
+              #     BEFORE the centre disc so the disc trims the inner stubs.
 
               # Soft white glass rim (outer highlight edge)
               - arc:
                   align: CENTER
                   y: 0
-                  width: 420
-                  height: 420
+                  width: 448
+                  height: 448
                   bg_opa: TRANSP
                   arc_color: col_glass_rim
                   arc_opa: 22%
@@ -5999,9 +5970,9 @@ lvgl:
               - obj:
                   align: CENTER
                   y: 0
-                  width: 404
-                  height: 404
-                  radius: 202
+                  width: 430
+                  height: 430
+                  radius: 215
                   border_width: 1
                   border_color: col_glass_rim
                   border_opa: 18%
@@ -6014,8 +5985,8 @@ lvgl:
                   id: home_temp_arc
                   align: CENTER
                   y: 0
-                  width: 396
-                  height: 396
+                  width: 412
+                  height: 412
                   bg_opa: TRANSP
                   arc_color: col_blue
                   arc_opa: 28%
@@ -6038,8 +6009,8 @@ lvgl:
                   id: home_setpoint_arc
                   align: CENTER
                   y: 0
-                  width: 360
-                  height: 360
+                  width: 376
+                  height: 376
                   bg_opa: TRANSP
                   arc_color: col_cyan
                   arc_opa: 28%
@@ -6062,8 +6033,8 @@ lvgl:
                   id: home_ambient_arc
                   align: CENTER
                   y: 0
-                  width: 324
-                  height: 324
+                  width: 340
+                  height: 340
                   bg_opa: TRANSP
                   arc_color: col_pink
                   arc_opa: 28%
@@ -6081,13 +6052,47 @@ lvgl:
                   knob:
                     bg_opa: TRANSP
 
+              # Tick overlay — radial marks only, no numerals. Drawn AFTER the
+              # three arcs so each mark crosses all of them, cutting the rings
+              # into per-degree segments; the centre disc (next) trims the
+              # inner stubs. Outer edge (r=224) matches the glass rim, length
+              # 67 reaches just inside the ambient ring's inner edge (r=156).
+              # Shares the dial range with the arcs so ticks and fills agree.
+              # No `major:` block on purpose: major ticks render value labels
+              # and this scale is meant to be unlabelled.
+              - meter:
+                  align: CENTER
+                  y: 0
+                  width: 448
+                  height: 448
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scales:
+                    - range_from: ${dial_min_c}
+                      range_to: ${dial_max_c}
+                      angle_range: 240
+                      rotation: 150
+                      ticks:
+                        count: ${dial_tick_count}
+                        width: 2
+                        length: 67
+                        color: col_subtext
+                      indicators:
+                        - tick_style:
+                            start_value: ${dial_min_c}
+                            end_value: ${dial_max_c}
+                            color_start: col_subtext
+                            color_end: col_subtext
+
               # Glass center disc (readout sits on frosted glass)
               - obj:
                   align: CENTER
                   y: 0
-                  width: 306
-                  height: 306
-                  radius: 153
+                  width: 318
+                  height: 318
+                  radius: 159
                   border_width: 1
                   border_color: col_glass_rim
                   border_opa: 22%

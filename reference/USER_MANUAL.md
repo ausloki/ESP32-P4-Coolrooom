@@ -27,9 +27,10 @@ each function does and why; use the Quick Guide when you just need a fast answer
 date on the right as day + short month (e.g. `10 Apr`), just left of the Wi‑Fi strength icon.
 
 **Home-screen gauge (touchscreen):** three concentric arcs sweeping the same dial, from
-**−15 °C** at the bottom-left end to **+30 °C** at the bottom-right end, with an unlabelled
-tick ring (one mark per °C) around the outside. Each arc is drawn in its sensor's colour so
-the ring and the matching text readout agree at a glance:
+**−15 °C** at the bottom-left end to **+30 °C** at the bottom-right end. Unlabelled tick
+marks (one per °C) cross all three rings from the outer rim inward, cutting them into
+segments so you can read roughly where a value sits without numerals. Each arc is drawn in
+its sensor's colour so the ring and the matching text readout agree at a glance:
 
 | Ring (outermost first) | Colour | Shows |
 |---|---|---|
@@ -38,9 +39,12 @@ the ring and the matching text readout agree at a glance:
 | Inner | Pink | Ambient |
 
 A reading colder than −15 °C or warmer than +30 °C sits pinned at the end of its arc — the
-numeric readouts remain exact. The dial range is set by the `dial_min_c` / `dial_max_c`
-substitutions at the top of `esp32-p4-coolroom.yaml` (change `dial_tick_count` to match:
-`max − min + 1`).
+numeric readouts remain exact. A sensor that is offline leaves its ring empty. The dial
+range is set by the `dial_min_c` / `dial_max_c` substitutions at the top of
+`esp32-p4-coolroom.yaml` (change `dial_tick_count` to match: `max − min + 1`).
+
+> Note: the setpoint can be set as low as −20 °C, below the bottom of the dial. A setpoint
+> under −15 °C still applies normally but the cyan ring shows empty.
 
 **Home-screen left icons (touchscreen):**
 
