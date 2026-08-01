@@ -4,6 +4,30 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Midday) — Tick Ring, −15 °C Dial Floor, Header Swap
+
+Home gauge visual pass 2 (concept image supplied by Cory):
+
+- **Dial rescaled** from a hard-coded −20…+15 to substitutions `dial_min_c: -15` /
+  `dial_max_c: 30` (`dial_tick_count: 46`, one minor tick per °C). −15 °C is the coldest
+  the room is expected to reach and sits at the bottom-left end of the horseshoe; +30 °C
+  keeps summer ambient off the stop. All three arcs and the tick ring read the same scale.
+- **Tick ring added** — LVGL `meter` (464 px, `angle_range: 240`, `rotation: 150`) with
+  minor ticks only, 14 px long, drawn inward from the edge. No `major:` block on purpose:
+  major ticks render value labels and the scale must stay unlabelled.
+- **Rings shrunk to clear the ticks**: rim 448→420, plate 430→404, coolroom 412→396,
+  setpoint 376→360, ambient 340→324, centre disc 318→306. Ring colours already matched
+  their sensors (blue coolroom / cyan setpoint / pink ambient) — unchanged.
+- **Header swapped back**: 12-h clock (with seconds) on the left at `x:12`; date on the
+  right, `RIGHT`-aligned at `x:690`, formatted day + short month (`10 Apr`).
+- `p4_ui.h`: `p4_ui_temp_to_arc_pct` / `p4_ui_setpoint_to_arc_pct` now take `lo/hi`;
+  new `p4_ui_fmt_clock_12h` / `p4_ui_fmt_date_short` replace the 1 s inline lambdas.
+
+Coverage check clean, compiled, NVS-safe serial flash. DIRAM 26.7%, flash 2.46 MB.
+USER_MANUAL §Home-screen gauge documents the range, colours and how to change it.
+
+---
+
 ## 2026-08-01 (Morning) — Phase 2: `p4_ui.h` Hot-Path Extract
 
 Moved presentation helpers out of YAML without changing behavior:

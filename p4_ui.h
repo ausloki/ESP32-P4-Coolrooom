@@ -10,27 +10,66 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <string>
+#include <sys/time.h>
 #include <lvgl.h>
 #include "p4_helpers.h"
 
 // ─── Dial scale (shared by coolroom / setpoint / ambient arcs) ─────────────
-// Maps °C on a fixed -20..+15 dial onto LVGL arc value 0..100.
+// Maps °C onto LVGL arc value 0..100 across the configured dial range. The
+// same range drives the tick ring, so ticks and fills always agree.
 
-/// Probe / measured reading: invalid → 0 (empty arc).
-inline int p4_ui_temp_to_arc_pct(float t_c) {
-    if (!p4_rtd_valid(t_c)) return 0;
-    int v = (int)((t_c + 20.0f) / 35.0f * 100.0f);
+inline int p4_ui_scale_pct_(float t_c, float lo_c, float hi_c) {
+    const float span = hi_c - lo_c;
+    if (span <= 0.0f) return 0;
+    int v = (int)((t_c - lo_c) / span * 100.0f);
     if (v < 0) return 0;
     if (v > 100) return 100;
     return v;
 }
 
+/// Probe / measured reading: invalid → 0 (empty arc).
+inline int p4_ui_temp_to_arc_pct(float t_c, float lo_c, float hi_c) {
+    if (!p4_rtd_valid(t_c)) return 0;
+    return p4_ui_scale_pct_(t_c, lo_c, hi_c);
+}
+
 /// Setpoint dial (always a finite stored value — no probe-validity gate).
-inline int p4_ui_setpoint_to_arc_pct(float sp_c) {
-    int v = (int)((sp_c + 20.0f) / 35.0f * 100.0f);
-    if (v < 0) return 0;
-    if (v > 100) return 100;
-    return v;
+inline int p4_ui_setpoint_to_arc_pct(float sp_c, float lo_c, float hi_c) {
+    return p4_ui_scale_pct_(sp_c, lo_c, hi_c);
+}
+
+// ─── Header clock / date ───────────────────────────────────────────────────
+
+/// Header clock, 12-hour with seconds (e.g. "01:05:09 PM").
+/// Falls back to the uptime string until the wall clock is set.
+inline std::string p4_ui_fmt_clock_12h() {
+    struct timeval tv{};
+    gettimeofday(&tv, nullptr);
+    char buf[24];
+    if (tv.tv_sec < 86400L) {
+        p4_fmt_time(buf, sizeof(buf));
+        return std::string(buf);
+    }
+    struct tm t{};
+    localtime_r(&tv.tv_sec, &t);
+    strftime(buf, sizeof(buf), "%I:%M:%S %p", &t);
+    return std::string(buf);
+}
+
+/// Header date as day + short month, no leading zero (e.g. "10 Apr").
+inline std::string p4_ui_fmt_date_short() {
+    struct timeval tv{};
+    gettimeofday(&tv, nullptr);
+    if (tv.tv_sec < 86400L) return std::string("--");
+    struct tm t{};
+    localtime_r(&tv.tv_sec, &t);
+    char mon[8];
+    strftime(mon, sizeof(mon), "%b", &t);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d %s", t.tm_mday, mon);
+    return std::string(buf);
 }
 
 // ─── Door reed polarity ────────────────────────────────────────────────────
