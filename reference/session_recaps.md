@@ -4,6 +4,18 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Setpoint Floor Clamped to Dial Min (−10 °C)
+
+Cory: clamp the setpoint so it cannot sit below the home-gauge dial.
+
+- `setpoint` number `min_value: -30` → `${dial_min_c}` (−10). Max stays at 15 °C —
+  dial max (30) is ambient headroom, not a coolroom setpoint ceiling.
+- Boot coerce raises a stale NVS value below the floor; SD restore does the same for
+  older backups. Web Operational Settings input gets matching `min`/`max`/`step`.
+- USER_MANUAL: range −10–15 °C; removed the "empty cyan ring below dial" callout.
+
+---
+
 ## 2026-08-01 (Midday) — Ticks Scrapped, Dial Floor −10 °C
 
 Cory: the tick scale never looked clean against the glass rings, so it's gone.

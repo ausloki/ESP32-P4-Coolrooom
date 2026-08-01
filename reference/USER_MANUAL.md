@@ -39,10 +39,8 @@ in its sensor's colour so the ring and the matching text readout agree at a glan
 A reading colder than −10 °C or warmer than +30 °C sits pinned at the end of its arc — the
 numeric readouts remain exact. A sensor that is offline leaves its ring empty. The dial
 range is set by the `dial_min_c` / `dial_max_c` substitutions at the top of
-`esp32-p4-coolroom.yaml`.
-
-> Note: the setpoint can be set as low as −20 °C, below the bottom of the dial. A setpoint
-> under −10 °C still applies normally but the cyan ring shows empty.
+`esp32-p4-coolroom.yaml`. The setpoint's minimum is locked to `dial_min_c`, so every
+legal setpoint has a visible position on the cyan arc.
 
 **Home-screen left icons (touchscreen):**
 
@@ -164,7 +162,7 @@ the compressor.
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
-| **Setpoint** | The temperature you want the coolroom to hold. | -30 – 15 °C | 2.0 °C | Set to whatever your stored product needs. |
+| **Setpoint** | The temperature you want the coolroom to hold. | −10 – 15 °C | 2.0 °C | Floor matches the home-gauge dial (`dial_min_c`). Set to whatever your stored product needs. |
 | **Compressor Differential** | The "dead band" around the setpoint. Compressor switches ON at setpoint + half the differential, OFF at setpoint − half. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing. Narrower = tighter temperature control but more frequent cycling. |
 | **Compressor Off-Delay (Lockout)** | Minimum time the compressor must stay off before it's allowed to restart, even if the temperature calls for cooling. | 0 – 10 min | 3 min | Protects the compressor motor from rapid restart. Only lower this if your compressor's manufacturer explicitly allows shorter cycling. |
 | **Compressor Min Run Time** | Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. | 0 – 30 min | 2 min | Complements Off-Delay on the ON side. Set 0 to disable. |

@@ -346,6 +346,12 @@ esphome:
               id(input_door_light_enabled) = false;
               ESP_LOGW("config", "Door light cleared at boot (sensor was off)");
             }
+            // Coerce stale NVS: setpoint below the dial floor (was -30..15).
+            if (id(ctl_setpoint) < ${dial_min_c}) {
+              ESP_LOGW("config", "Setpoint %.1f°C raised to dial floor %.0f°C",
+                       id(ctl_setpoint), (float) ${dial_min_c});
+              id(ctl_setpoint) = ${dial_min_c};
+            }
     - priority: -150
       then:
         # Settle after mipi_dsi's shared LCD/touch reset (GPIO33) before GT911
@@ -2638,7 +2644,10 @@ number:
     name: "Setpoint (°C)"
     icon: "mdi:thermometer"
     unit_of_measurement: "°C"
-    min_value: -30
+    # Floor matches the home-gauge dial (dial_min_c) so every legal setpoint
+    # has a visible position on the cyan arc. Ceiling stays at 15 °C — dial
+    # max is higher only so summer ambient does not peg the pink ring.
+    min_value: ${dial_min_c}
     max_value: 15
     step: 0.5
     web_server:
@@ -3542,6 +3551,12 @@ button:
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en,
               p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en)) {
+              // Clamp to the live dial floor (backup may pre-date the clamp).
+              if (sp < ${dial_min_c}) {
+                ESP_LOGW("config", "Restore: setpoint %.1f°C raised to %.0f°C",
+                         sp, (float) ${dial_min_c});
+                sp = ${dial_min_c};
+              }
               id(ctl_setpoint)         = sp;
               id(ctl_comp_diff)        = cd;
               id(ctl_alarm_high_delta) = ah;
