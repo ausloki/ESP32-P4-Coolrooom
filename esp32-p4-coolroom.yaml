@@ -5604,9 +5604,6 @@ color:
     hex: "FFFFFF"
   - id: col_subtext    # Secondary text
     hex: "8E8E93"
-  - id: col_glass_rim  # Soft white edge for glassmorphism arcs
-    hex: "FFFFFF"
-
 lvgl:
   displays:
     - main_display
@@ -5960,15 +5957,19 @@ lvgl:
               #     arc and the 430 plate both read as a grey ring around the
               #     gauge (white at ~20% over col_bg lands near #4E4E4E).
               #     The plate now stops exactly at the outer arc edge.
+              #   - Ring stack 440 / 396 / 352, arc_width 14 → 8px daylight
+              #     between rings (was 4px at 412/376/340). 440 leaves 20px
+              #     top+bottom margin in the 480-tall container, and the outer
+              #     edge (centre+220) still clears the right-hand labels.
 
               # Frosted glass underlay plate (fake depth behind the rings).
               # Width matches the outer arc so it never protrudes as a ring.
               - obj:
                   align: CENTER
                   y: 0
-                  width: 412
-                  height: 412
-                  radius: 206
+                  width: 440
+                  height: 440
+                  radius: 220
                   border_width: 0
                   bg_color: col_panel
                   bg_opa: 42%
@@ -5979,8 +5980,8 @@ lvgl:
                   id: home_temp_arc
                   align: CENTER
                   y: 0
-                  width: 412
-                  height: 412
+                  width: 440
+                  height: 440
                   bg_opa: TRANSP
                   arc_color: col_blue
                   arc_opa: 28%
@@ -6003,8 +6004,8 @@ lvgl:
                   id: home_setpoint_arc
                   align: CENTER
                   y: 0
-                  width: 376
-                  height: 376
+                  width: 396
+                  height: 396
                   bg_opa: TRANSP
                   arc_color: col_cyan
                   arc_opa: 28%
@@ -6027,8 +6028,8 @@ lvgl:
                   id: home_ambient_arc
                   align: CENTER
                   y: 0
-                  width: 340
-                  height: 340
+                  width: 352
+                  height: 352
                   bg_opa: TRANSP
                   arc_color: col_pink
                   arc_opa: 28%
@@ -6046,18 +6047,17 @@ lvgl:
                   knob:
                     bg_opa: TRANSP
 
-              # Center disc — same col_bg as the surrounding screen so the
-              # readout sits on flat background, not a lighter panel. Still
-              # opaque: it masks the inner stub of the ambient ring.
+              # Center disc — same col_bg as the surrounding screen and no
+              # border, so the readout sits on flat background with nothing
+              # outlining it. Still opaque: it masks the inner stub of the
+              # ambient ring (radius 165 vs the ring's inner edge at 162).
               - obj:
                   align: CENTER
                   y: 0
-                  width: 318
-                  height: 318
-                  radius: 159
-                  border_width: 1
-                  border_color: col_glass_rim
-                  border_opa: 22%
+                  width: 330
+                  height: 330
+                  radius: 165
+                  border_width: 0
                   bg_color: col_bg
                   bg_opa: COVER
                   clickable: false

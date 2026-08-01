@@ -4,6 +4,19 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Bigger Rings, Wider Gaps, No Centre Border
+
+- Centre disc border removed (`border_width: 0`); disc grown 318 → **330** (radius 165) to
+  keep masking the ambient ring's inner edge at 162.
+- Ring stack **412/376/340 → 440/396/352**, `arc_width` still 14, so daylight between rings
+  goes **4px → 8px**. Plate follows the outer arc at 440.
+- Fits: 440 leaves 20px top/bottom in the 480-tall container; outer edge sits at
+  centre+220 while the right-hand labels are centred at centre+328.
+- `col_glass_rim` had no remaining references after the border went, so the colour
+  definition is deleted.
+
+---
+
 ## 2026-08-01 (Afternoon) — Centre Disc Matches Screen Background
 
 Centre disc was `col_panel` (#2C2C2E) at 78% — a visibly lighter plate under the big
