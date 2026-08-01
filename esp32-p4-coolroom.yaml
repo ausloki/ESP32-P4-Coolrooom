@@ -32,8 +32,9 @@
 #   Internal (secondary/humidity)— I2C SHT31 @ 0x44 (probe_internal_temp)
 #
 # RELAY MAP (Waveshare Modbus RTU Relay 4-CH, addr 1)
-#   Coil 0 = Defrost   Coil 1 = Compressor
+#   Coil 0 = Fan       Coil 1 = Compressor
 #   Coil 2 = Light     Coil 3 = Siren
+#   Defrost is always passive (no heater coil on this controller).
 #
 # PHASE STATUS
 #   Phase 1: WiFi, HA native API, web server, OTA            ✓

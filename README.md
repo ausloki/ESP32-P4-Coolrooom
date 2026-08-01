@@ -31,11 +31,14 @@ This project targets the **Waveshare ESP32-P4-WIFI6-Touch-LCD-7B** board specifi
 
 | Phase | Feature Set | Status |
 | ----- | ----------- | ------ |
-| 1 | WiFi provisioning, HA native API, web server, OTA, NTP | **Current** |
-| 2 | RS485 Modbus: relay board + RTD temp sensor | Planned |
-| 3 | Coolroom control logic (setpoint, compressor, defrost, alarms) | Planned |
-| 4 | LVGL touchscreen UI on 7" MIPI-DSI display | Planned |
-| 5 | SD card logging, ntfy notifications, SD backup/restore | Planned |
+| 1 | WiFi provisioning, HA native API, web server, OTA, NTP | Done |
+| 2 | RS485 Modbus: relay board + RTD temp sensor | Done (boards not on current bench) |
+| 3 | Coolroom control logic (setpoint, compressor, passive defrost, fan, alarms) | Done |
+| 4 | LVGL touchscreen UI on 7" MIPI-DSI display | Done |
+| 5 | SD card logging, ntfy notifications, SD backup/restore | **Current** |
+
+Operator docs: `reference/USER_MANUAL.md`, `reference/QUICK_START_GUIDE.md`,
+`reference/CAREL_CONTROL_DECISIONS.md` (hysteresis / min-run / fan / door-hold choices).
 
 ## Key Differences from S3 Project
 
@@ -70,7 +73,7 @@ Connect to that AP and navigate to **192.168.4.1** to:
 
 Main control logic is designed to run locally even when there is no Wi-Fi or Home Assistant connection.
 
-- Compressor, defrost, alarm, sensor-fault handling, and SD logging run from the 10s local control loop.
+- Compressor, passive defrost, optional evaporator fan, alarm, sensor-fault handling, and SD logging run from the 10s local control loop.
 - Wi-Fi/API disconnect does not reboot firmware (`wifi.reboot_timeout: 0s`, `api.reboot_timeout: 0s`).
 - Time sync (SNTP) and push notifications (ntfy) are treated as optional network features.
 - While offline, ntfy requests are skipped; notification edge flags reset so active alarms can notify after reconnect.
@@ -78,6 +81,7 @@ Main control logic is designed to run locally even when there is no Wi-Fi or Hom
 Operational note:
 
 - Probe validity and RS485 health still determine safe operation; network presence is not part of compressor/defrost decisions.
+- Opt-in **Hold Compressor While Door Open** (default off) can force the compressor off while the reed reads open; fan follows the compressor when **Fan Relay Enabled** is on.
 
 ## Site-to-Site VPN Routing (Preferred)
 
@@ -219,6 +223,11 @@ The project uses `code-review-graph` for change-impact analysis (same workflow a
 ## RS485 Hardware (same as S3 project)
 
 - **Relay board**: Waveshare RTU relay board, Modbus RTU slave address 1
+  - Coil 0 = **Fan** (enable default off; follows compressor; off during defrost/drip)
+  - Coil 1 = **Compressor**
+  - Coil 2 = **Light**
+  - Coil 3 = **Siren**
+  - Defrost is **passive** (no heater coil on this controller)
 - **RTD temp sensor**: Waveshare RS485 RTD transmitter, slave address 100
   - CH1 register 01 = coolroom temperature × 0.1 °C
   - CH2 register 02 = evaporator temperature × 0.1 °C

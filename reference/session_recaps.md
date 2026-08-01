@@ -4,6 +4,13 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Evening) — Docs pass for Carel C/D + fan/door-hold
+
+- Updated USER_MANUAL (§2.3 setup, §4.1/§4.6/§4.13, troubleshooting, Document Map),
+  QUICK_START (checklist, groups, worked example, diagrams), README status + coil map,
+  hardware_pins coil roles, Modbus register-map mapping, yaml header RELAY MAP,
+  CAREL_CONTROL_DECISIONS operator setup notes, NS diagram door-hold/fan.
+
 ## 2026-08-01 (Evening) — Carel D + fan relay; A closed, B confirmed
 
 - **A** asymmetric hysteresis: not required (keep symmetric).

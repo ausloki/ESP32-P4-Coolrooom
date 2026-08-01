@@ -53,10 +53,13 @@ Network behavior is optional:
 │  Centre status "RELAY BOARD OFFLINE" while !hw_rs485_relay_ok                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  COMPRESSOR CONTROL  (skip if probe_fault OR defrost active)                │
+│  door_hold = Hold Comp While Door Open AND door open → force OFF            │
 │  p4_ctl_compressor_eval(t, setpoint, diff, compressor_on, last_ms, stale)  │
 │  ┌────── result == +1 ──────┐  ┌──── result == -1 ────┐  ┌── result == 0 ─┐│
 │  │ relay_compressor → ON    │  │ relay_compressor → OFF│  │  (hold state)  ││
+│  │ (blocked if door_hold)   │  │ (also if min-run due) │  │                ││
 │  └──────────────────────────┘  └──────────────────────┘  └────────────────┘│
+│  FAN: if Fan Relay Enabled → follows compressor; OFF during defrost/drip    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  DOOR ALARM  (every tick — independent of probe_fault / grace)              │
 │  door_sensor_enabled AND door open >= door_alarm_delay → ctl_door_alarm_active│

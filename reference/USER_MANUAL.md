@@ -5,6 +5,7 @@
 **Companion document:** `reference/QUICK_START_GUIDE.md` — condensed setup steps and
 recommended-settings worked examples. Read this manual for the full explanation of what
 each function does and why; use the Quick Guide when you just need a fast answer.
+Product choices vs Carel-style baselines: `reference/CAREL_CONTROL_DECISIONS.md`.
 
 ---
 
@@ -74,10 +75,11 @@ With nothing wrong it shows **COOLING**, **DEFROST**, **LOCKOUT**, or **OK**.
 
 ## 1. Overview — What This Controller Does
 
-The controller keeps a coolroom at a target temperature, defrosts the evaporator coil on a
-schedule, watches for problems (door left open, sensor failure, no cooling, ice buildup),
-and tells you about it — on the touchscreen, on a web dashboard, and via push notification
-to your phone.
+The controller keeps a coolroom at a target temperature, runs **passive** defrost on the
+evaporator coil on a schedule (compressor held off; optional evaporator fan follows the
+compressor when enabled), watches for problems (door left open, sensor failure, no cooling,
+ice buildup), and tells you about it — on the touchscreen, on a web dashboard, and via push
+notification to your phone.
 
 **Two ways to reach it:**
 
@@ -135,6 +137,24 @@ touchscreen — they are two independent locks by design (see §4.11).
 > 📷 **Screenshot placeholder — Touchscreen PIN entry keypad**
 > *(to be added once hardware is connected)*
 
+### 2.3 Relay wiring and opt-in door/fan features
+
+Before relying on cooling or fan output:
+
+1. Wire the Waveshare 4-CH Modbus relay as **coil 0 = evaporator fan**, **coil 1 =
+   compressor**, **coil 2 = light**, **coil 3 = siren**. Defrost on this controller is
+   always **passive** (no heater coil) — do not treat channel 1 as a defrost heater.
+2. Leave **Fan Relay Enabled** **off** (factory default) until coil 0 is confirmed as a
+   fan. Then enable it from touchscreen Settings 1/7, web **Compressor**, or **Hardware**.
+   When on, the fan follows the compressor and is forced off during defrost and drip.
+3. Door features default **off**: enable **Door Sensor Enabled** only when the reed is
+   fitted and **Door Sensor Mode** matches NC/NO wiring. **Hold Compressor While Door Open**
+   is separate and also defaults off — turn it on only if you want cooling paused whenever
+   the door reads open (§4.6).
+
+Full decision log vs Carel-style controllers: `reference/CAREL_CONTROL_DECISIONS.md`.
+Condensed checklist: `reference/QUICK_START_GUIDE.md` §2.
+
 ---
 
 ## 3. How to Read the Diagrams In This Manual
@@ -182,6 +202,7 @@ the compressor.
 | **Compressor Differential** | The "dead band" around the setpoint. Compressor switches ON at setpoint + half the differential, OFF at setpoint − half. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing. Narrower = tighter temperature control but more frequent cycling. |
 | **Compressor Off-Delay (Lockout)** | Minimum time the compressor must stay off before it's allowed to restart, even if the temperature calls for cooling. | 0 – 10 min | 3 min | Protects the compressor motor from rapid restart. Only lower this if your compressor's manufacturer explicitly allows shorter cycling. |
 | **Compressor Min Run Time** | Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. | 0 – 30 min | 2 min | Complements Off-Delay on the ON side. Set 0 to disable. |
+| **Fan Relay Enabled** | Whether Modbus coil 0 (evaporator fan) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. | On/Off | **Off** | Same control as §4.13 Hardware → Fan. Confirm coil 0 is a fan before enabling. Also on touchscreen Settings 1/7. |
 | **Sensor Fallback Duty-Cycle Enabled** | If the main probe fails, run the compressor on a fixed timer instead of stopping cooling completely. | On/Off | On | Leave on unless you'd rather the room simply stop cooling during a sensor fault (some sites prefer that so staff notice immediately). |
 | **Fallback Compressor ON Time** | How long the compressor runs per fallback cycle when the probe has failed. | 1 – 30 min | 3 min | Works together with OFF time below — together they set a safe average duty cycle without real temperature feedback. |
 | **Fallback Compressor OFF Time** | How long the compressor rests per fallback cycle when the probe has failed. | 1 – 60 min | 27 min | Default 3 min ON / 27 min OFF ≈ 10% duty cycle — a conservative "keep it cold-ish, don't ice up or overwork the compressor" fallback. |
@@ -207,6 +228,9 @@ the compressor.
 │ Before turning ON: has it been at least "Compressor Off-Delay"       │
 │ since it last turned off? If not, wait — hold current state.         │
 │ (A power-up counts as "it last turned off" — see below.)             │
+│ Before turning OFF: has Min Run Time elapsed? If not, keep ON.       │
+│ If Hold Compressor While Door Open is on and the door is open:       │
+│ force compressor OFF (fan follows if Fan Relay Enabled).             │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -253,7 +277,7 @@ periodic defrosting. This group controls the basic on/off timer for that.
 | **Defrost Max Duration** | Safety cap — defrost stops after this long even if it hasn't finished. | 5 – 60 min | 30 min | Raise slightly if defrost is being cut off before the coil is properly clear (check evaporator temp after a cycle). |
 | **Defrost Early Termination by Temperature** | Ends defrost as soon as the evaporator reaches the target temp below, instead of always running the full Max Duration. | On/Off | On | Recommended on — avoids unnecessarily warming the room once the coil is already clear. |
 | **Defrost Termination Temp** | The evaporator temperature that counts as "coil is clear" when the above is on. | 0.0 – 15.0 °C | 5.0 °C | Only relevant if Early Termination is on. |
-| **Defrost Drip-Drain Phase Enabled** | After defrost heat turns off, hold before resuming cooling so melted frost can drain instead of refreezing immediately. | On/Off | On | Recommended on for any room where meltwater could re-ice on a cold coil. |
+| **Defrost Drip-Drain Phase Enabled** | After a passive defrost cycle ends, hold before resuming cooling so melted frost can drain instead of refreezing immediately. | On/Off | On | Recommended on for any room where meltwater could re-ice on a cold coil. |
 
 **Defrost cycle, start to finish:**
 
@@ -300,7 +324,7 @@ they never replace the timer, only supplement it.
 | **Smart Defrost Delta Threshold** | How large the coolroom-to-evaporator gap must get before it counts as "frosted up". | 1.0 – 20.0 °C | 8.0 °C | Lower = triggers more readily (more frequent smart defrosts); higher = more tolerant. |
 | **Smart Defrost Dwell Time** | How long that gap must stay above the threshold before triggering — avoids reacting to a brief spike. | 1 – 120 min | 30 min | Raise if smart defrost is triggering on short-lived temperature blips (e.g. right after a door opens). |
 | **Dew Point Early Defrost Trigger** | Starts defrost early when the evaporator is below freezing *and* below the air dew point (from the internal SHT31). | On/Off | Off | Enable in humid rooms where frost forms between scheduled cycles. |
-| **Defrost Skip-If-Cold** | When a *scheduled* interval is due but the evaporator is already at/below the skip threshold, skip that cycle and roll the timer forward. | On/Off | Off | Saves unnecessary heater runs when the coil is already clear/cold. Manual / smart / dew / frost-rate / force-max starts are never skipped. |
+| **Defrost Skip-If-Cold** | When a *scheduled* interval is due but the evaporator is already at/below the skip threshold, skip that cycle and roll the timer forward. | On/Off | Off | Saves unnecessary defrost cycles when the coil is already clear/cold. Manual / smart / dew / frost-rate / force-max starts are never skipped. |
 | **Skip-If-Cold Below** | Evaporator temperature at or below which a due scheduled defrost is skipped. | −30 – 0 °C | −10 °C | Needs Probe 2. Lower = skip more often. |
 | **Defrost Max Interval Override (Force-Max)** | Safety net: force a defrost if this many minutes have passed since the last cycle, even when skip-if-cold keeps postponing. | 720 – 1440 min | 720 (12 h) | Raise toward 24 h only if you intentionally allow long skip stretches. |
 | **Frost Rate Monitoring** | Early defrost when humidity drops sharply over a sample window while room temperature stays nearly stable (frost forming). | On/Off | Off | Needs internal SHT31 humidity. Complements dew-point trigger. |
@@ -432,7 +456,7 @@ place updates the other.
 
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
-| **Door Sensor Enabled** | Master switch for the door reed: door-open **alarm**, and a prerequisite for Door-Triggered Light. Turning this **off** also turns Door-Triggered Light off. | On/Off | **Off** | Enable when a door sensor is fitted. Leave off if the reed is disconnected or faulty. |
+| **Door Sensor Enabled** | Master switch for the door reed: door-open **alarm**, and a prerequisite for Door-Triggered Light and Hold Compressor While Door Open. Turning this **off** also turns Door-Triggered Light and door-hold off. | On/Off | **Off** | Enable when a door sensor is fitted. Leave off if the reed is disconnected or faulty. |
 | **Door Sensor Mode (NC or NO)** | Tells the controller whether your physical door switch is Normally Closed or Normally Open wiring. | NC or NO | NC | Must match how the door switch is actually wired, or "open" and "closed" will read backwards. |
 | **Door-Triggered Light Enabled** | When on (and Door Sensor Enabled is on), opening the door turns the cabinet light on; closing it turns the light off. Turning light on while the sensor is off **auto-enables** the sensor. | On/Off | **Off** | Turn on for automatic cabinet lighting with staff traffic. Use the Home screen light button for manual control instead. |
 | **Hold Compressor While Door Open** | When on (and Door Sensor Enabled is on), the compressor stays off for as long as the door reed reads open. The fan (if Fan Relay Enabled) follows the compressor, so it also stops. | On/Off | **Off** | Use for busy doors / less humid air through a cold coil. Leave **off** if the reed can stick open — that would starve cooling. Auto-disables when Door Sensor is turned off. |
@@ -475,6 +499,20 @@ place updates the other.
 The door alarm depends only on the reed and the delay, so it still fires during a
 probe fault or the start-up grace period — a failed temperature probe does not
 disable it.
+
+**Hold compressor while door open** (also gated by Door Sensor Enabled; default off):
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│         Is Door Sensor Enabled AND Hold Compressor While Door Open?  │
+├─────────────────────────────────┬────────────────────────────────────┤
+│ NO — door never holds cooling    │ YES AND door reads open            │
+│                                  │  → compressor forced OFF           │
+│                                  │  → fan follows (if Fan Relay on)   │
+│                                  │ Door closed → normal hysteresis    │
+│                                  │ resumes (subject to Off-Delay)     │
+└─────────────────────────────────┴────────────────────────────────────┘
+```
 
 ---
 
@@ -750,10 +788,21 @@ both humidity sensors, SD card, chip temperature, free memory and uptime — plu
 control over the four relay outputs, the touchscreen PIN, and a **Controller** section
 holding **Restart Controller** and **Factory Reset** (both described in §4.12).
 
+**Modbus coil map (Waveshare RTU 4-CH, address 1):**
+
+| Coil | Output | Notes |
+|---|---|---|
+| 0 | Fan | Evaporator fan. Enable default **off**. Follows compressor when enabled; off during defrost/drip. |
+| 1 | Compressor | Cooling. Enable default on. |
+| 2 | Light | Cabinet light. |
+| 3 | Siren | External alarm. |
+
+Defrost is always passive — there is no heater coil on this controller.
+
 | Setting | What it does | Default | When to change it |
 |---|---|---|---|
 | **Compressor Relay Enabled** | Whether the compressor output may energise at all. | On | Turn off to isolate the compressor for maintenance without disabling the control logic behind it. |
-| **Fan Relay Enabled** | Whether the evaporator **fan** output (Modbus coil 0) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. Default **off**. | **Off** | Confirm the plant wires a fan (not a heater) to coil 0 before enabling. |
+| **Fan Relay Enabled** | Whether the evaporator **fan** output (Modbus coil 0) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. Default **off**. Also on §4.1 / web Compressor. | **Off** | Confirm the plant wires a fan (not a heater) to coil 0 before enabling. |
 | **Light Relay Enabled** | Whether the light output may energise at all. | On | Turn off if the room light is switched by something else. |
 | **Siren Relay Enabled** | Whether the alarm output may energise at all. | On | Turn off where the alarm relay drives an external siren you don't want sounding every time — see below. |
 
@@ -777,8 +826,8 @@ off-delay that is supposed to be holding it off.
 
 The light is the one output that isn't simply forced open at startup: if Door Sensor and
 Door-Triggered Light are both on (§4.6) and the door is already open when the controller
-comes back, the light is switched on to match. Everything else — compressor, defrost, siren —
-starts open.
+comes back, the light is switched on to match. Everything else — compressor, fan, siren —
+starts open (fan stays off until Fan Relay Enabled and the compressor call for it).
 
 > **If the light comes on by itself after a reboot, check the door input first.** With
 > Door Sensor and Door-Triggered Light both enabled, an open door is *supposed* to light the
@@ -803,6 +852,8 @@ starts open.
 | Coil visibly frosting between scheduled defrosts | Enable Smart Defrost and/or Dew Point Trigger | §4.3 |
 | Room warms noticeably after every defrost | Turn on Early Termination by Temperature, or shorten Max Duration | §4.2 |
 | Door alarm never fires | Door Sensor Enabled is off by default — check §4.6 | §4.6 |
+| Compressor stops whenever the door is open | Hold Compressor While Door Open is on — intentional if you enabled it; turn off if a stuck reed is starving cooling | §4.6 |
+| Fan never runs even though the compressor does | Fan Relay Enabled is off (default) or coil 0 is not wired to a fan | §4.1, §4.13 |
 | Light is on by itself after every reboot | Door Sensor + Door-Triggered Light are both on and the door reads open — an unfitted or miswired reed reads open permanently. Check Door Reed Sensor, NC/NO, or turn Door-Triggered Light off | §4.6, §4.11 |
 | No push notifications arriving | Confirm ntfy topic subscription (§4.8); confirm WiFi is connected (§4.10) | §4.8, §4.10 |
 | SD card seems to have "given up" | Check for the SD Card Failure push — auto-remount retries every 60s once the card is working again, no reboot needed | §4.9 |
@@ -824,13 +875,13 @@ starts open.
 | Group | Touchscreen page | Web dashboard section |
 |---|---|---|
 | Home icons (status / light / mute) | Home left rail | — (touchscreen only) |
-| Temperature Control & Compressor | Settings 1/7 | Temperature Control, Compressor |
+| Temperature Control & Compressor | Settings 1/7 | Temperature Control, Compressor (incl. Fan Relay Enabled) |
 | Defrost Schedule | Settings 2/7 | Defrost |
 | Defrost — Smart & Drip | Settings 3/7 | Defrost |
 | Alarm Thresholds | Settings 4/7 | Alarms |
 | Alarms — Advanced | Settings 5/7 | Alarms |
 | Audio Alerts (speaker) | — (web only for now) | Audio tab |
-| Door | Settings 6/7 | Door |
+| Door (sensor, light, hold compressor) | Settings 6/7 | Door |
 | Probes & Sensors | Settings 7/7 | Probes & Sensors |
 | Notifications | Alarms & Notify tab | — (web only; push goes to phone) |
 | Data & SD Card | Info (status only) | SD Card tab |
@@ -838,10 +889,11 @@ starts open.
 | Wireless | Info (status only) | Wireless tab |
 | Access Control & Security | Settings PIN entry | Login; PIN on Hardware tab |
 | System & Diagnostics | Info | System, Diagnostics |
-| Hardware & Relay Outputs | — | Hardware tab |
+| Hardware & Relay Outputs (coil map / enables) | — | Hardware tab |
 
 ---
 
 *See also: `reference/QUICK_START_GUIDE.md` for first-time setup steps and worked
-recommended-settings examples; `reference/RBAC_USER_GUIDE.md` and
+recommended-settings examples; `reference/CAREL_CONTROL_DECISIONS.md` for hysteresis /
+min-run / fan / door-hold product choices; `reference/RBAC_USER_GUIDE.md` and
 `reference/AUTHENTICATION_GUIDE.md` for full detail on the web login model.*

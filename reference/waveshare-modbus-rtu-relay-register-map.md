@@ -86,10 +86,13 @@ Response:     01 01 01 <byte> CRC CRC
 
 In the ESPHome config this project uses:
 - `register_type: coil`
-- Relay 0 (coil addr 0) → compressor
-- Relay 1 (coil addr 1) → defrost
+- Relay 0 (coil addr 0) → **fan** (evaporator; enable default off — follows compressor)
+- Relay 1 (coil addr 1) → compressor
 - Relay 2 (coil addr 2) → light
 - Relay 3 (coil addr 3) → siren
+
+Defrost on this controller is **passive** (compressor held off during a cycle). There is
+no dedicated defrost-heater coil; do not wire a heater to coil 0 expecting defrost heat.
 
 Write coil via modbus_controller uses function code 0x05 automatically.
 Read coil via modbus_controller uses function code 0x01 automatically.

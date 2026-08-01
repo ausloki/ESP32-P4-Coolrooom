@@ -243,6 +243,20 @@ This project uses two DIN-mounted power supplies:
 | 5V DIN PSU | ESP32-P4 controller via PH2.0 12PIN header (`Core_5V` + `GND`) |
 | 12V DIN PSU | RS485 RTU-4 relay module and RS485 RTD PT100 modules |
 
+### Modbus relay coil roles (firmware)
+
+Waveshare Modbus RTU Relay 4-CH, slave address **1**:
+
+| Coil | Role | Enable default | Behaviour |
+| --- | --- | --- | --- |
+| 0 | Evaporator **Fan** | Off | Follows compressor when enabled; forced off during defrost + drip |
+| 1 | **Compressor** | On | Hysteresis / fallback / door-hold |
+| 2 | **Light** | On | Manual + optional door-triggered |
+| 3 | **Siren** | On | Alarm output |
+
+Defrost is always **passive** on this controller (compressor held off; no heater coil).
+See `reference/USER_MANUAL.md` §4.13 and `reference/CAREL_CONTROL_DECISIONS.md`.
+
 #### Grounding Requirement
 
 Yes, the supplies should share a **common ground reference** for reliable RS485/UART-referenced communication in this architecture.

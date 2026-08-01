@@ -8,10 +8,11 @@
 ## 1. What This Thing Does, In One Paragraph
 
 It watches your coolroom's temperature and keeps a compressor cycling to hold a setpoint,
-defrosts the coil on a schedule (plus two optional "smart" early triggers), watches for
-problems (door open too long, sensor failure, no cooling, ice buildup), and pushes an alert
-to your phone when something needs attention. You can control it from the 7" touchscreen on
-the unit, or from a web page on any browser on your network.
+runs **passive** defrost on a schedule (plus optional "smart" early triggers), optionally
+drives an evaporator fan with the compressor, watches for problems (door open too long,
+sensor failure, no cooling, ice buildup), and pushes an alert to your phone when something
+needs attention. You can control it from the 7" touchscreen on the unit, or from a web page
+on any browser on your network.
 
 ---
 
@@ -36,6 +37,14 @@ the unit, or from a web page on any browser on your network.
       only once those are wired). If you don't want
       the alarm relay driving an external siren, turn **Siren Relay Enabled** off here:
       alarms and push notifications carry on as normal. See §4.13.
+- [ ] **Wire the Modbus relay coils correctly** — channel / coil **0 = evaporator fan**,
+      **1 = compressor**, **2 = light**, **3 = siren**. Defrost is passive on this
+      controller (no heater coil). Leave **Fan Relay Enabled** off until coil 0 is
+      confirmed as a fan. See User Manual §4.13 and `reference/CAREL_CONTROL_DECISIONS.md`.
+- [ ] **Door features are opt-in** — **Door Sensor Enabled**, **Door-Triggered Light**, and
+      **Hold Compressor While Door Open** all default **off**. Turn the sensor on only when
+      the reed is fitted and NC/NO mode matches the wiring. Leave door-hold off unless you
+      want cooling paused while the door is open (a stuck reed would starve cooling).
 - [ ] **Subscribe to push notifications** — log in → **Alarms & Notify** tab → set topic
       (and server if not using ntfy.sh) → optionally tune each alert's priority →
       **Send Test Notification**. Install the free ntfy app and subscribe to that same
@@ -54,12 +63,12 @@ the unit, or from a web page on any browser on your network.
 
 | # | Group | Touchscreen | What lives here |
 |---|---|---|---|
-| 1 | Compressor & Fallback | Settings 1/7 | Setpoint, differential, lockout, sensor-fault fallback |
+| 1 | Compressor & Fallback | Settings 1/7 | Setpoint, differential, lockout, min run, Fan Relay Enable, sensor-fault fallback |
 | 2 | Defrost Schedule | Settings 2/7 | On/off, fixed interval, max duration, early-stop-by-temp, drip |
 | 3 | Defrost Smart & Drip | Settings 3/7 | Drip time, delta-triggered defrost, dew-point trigger |
 | 4 | Alarm Thresholds | Settings 4/7 | High/low temp alarm deltas, persist time, siren |
 | 5 | Alarms Advanced | Settings 5/7 | Ice alarm, no-cool alarm, startup/defrost grace, hysteresis |
-| 6 | Door | Settings 6/7 | Door sensor on/off, NC/NO mode, alarm delay |
+| 6 | Door | Settings 6/7 | Sensor on/off, NC/NO, door light, hold compressor while open, alarm delay |
 | 7 | Probes | Settings 7/7 | Calibration offsets, probe/humidity sensor enables |
 
 WiFi, the web login password, and SD card log-delete are **web-dashboard only** — by design,
@@ -67,18 +76,20 @@ not an oversight. Full explanation: User Manual §4.11. The web dashboard also c
 with no touchscreen equivalent: **Hardware**, **Wireless**, and **Events** (live alarm/fault
 log as it happens).
 
-**Door Sensor Enabled is the master for the reed.** Door-open alarm and Door-Triggered
-Light both require it. Enabling Door-Triggered Light turns the sensor on if needed;
-turning the sensor off turns Door-Triggered Light off too. The home light icon animates
-only while the light relay is actually on — tap it to toggle the light manually (when
-Light Relay Enabled is on). Snowflake and flame are status-only; tap the bell to soft-mute
-the siren (bell stays red, stops jiggling;
-a new alarm type re-animates).
+**Door Sensor Enabled is the master for the reed.** Door-open alarm, Door-Triggered Light,
+and Hold Compressor While Door Open all require it. Enabling Door-Triggered Light turns
+the sensor on if needed; turning the sensor off turns Door-Triggered Light **and** door-hold
+off too. The home light icon animates only while the light relay is actually on — tap it to
+toggle the light manually (when Light Relay Enabled is on). Snowflake and flame are
+status-only; tap the bell to soft-mute the siren (bell stays red, stops jiggling; a new
+alarm type re-animates).
 
 **Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/7 — not the
-home flame icon. Defrost System Enabled gates automatic starts only; the Hardware tab's
-Defrost is always passive here (compressor held off). Fan Relay Enabled (coil 0, default off)
-gates the evaporator fan — when on, the fan follows the compressor and stops during defrost/drip.
+home flame icon. Defrost System Enabled gates automatic starts only. Defrost is always
+**passive** here (compressor held off; any heater is external). **Fan Relay Enabled**
+(coil 0, default **off**) gates the evaporator fan — when on, the fan follows the compressor
+and stops during defrost/drip. Same toggle on touchscreen Settings 1/7, web Compressor, and
+Hardware → Fan.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before
@@ -104,6 +115,7 @@ suffer freeze damage a little below 0 °C.
 | **Compressor Differential** | `1.0 °C` (default) | Keeps the swing tight around 0.5 °C without excessive compressor cycling. |
 | **Compressor Off-Delay** | `3 min` (default) | No produce-specific reason to change this. |
 | **Compressor Min Run Time** | `2 min` (default) | Leave on; pairs with Off-Delay to stop short-cycling. |
+| **Fan Relay Enabled** | Leave `Off` until coil 0 is confirmed as a fan; then `On` if the plant has an evaporator fan on that channel | Default off is intentional — miswiring a heater to coil 0 must not run heat unsupervised. |
 | **Defrost System Enabled** | `On` | Needed — a near-0 °C, high-humidity room frosts the coil steadily. |
 | **Defrost Interval** | `480 min` (default, 8 h) | Reasonable baseline; shorten if you see visible frost buildup between cycles. |
 | **Defrost Early Termination by Temp** | `On` (default) | Avoids over-warming the room on every cycle — important for a chill-sensitive but not frost-tolerant product. |
@@ -117,8 +129,9 @@ suffer freeze damage a little below 0 °C.
 | **Ice Alarm Delta** | `15 °C` (default) | Large coolroom−evap gap while cooling = iced coil (Precision polarity). Raise toward 18–20 if you get false alarms during heavy pull-down; enable Ice Detection + leave Dwell at 10 min. |
 | **Ice Alarm Dwell** | `10 min` (default) | Condition must hold this long before the alarm fires. |
 | **No-Cool Alarm Timeout** | `45 min` (tighter than default 60) | Stone fruit is high-value enough to justify catching a refrigeration failure a bit faster. |
-| **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. Required if you want Door-Triggered Light. |
+| **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. Required if you want Door-Triggered Light or door-hold. |
 | **Door-Triggered Light Enabled** | `On` | Convenient for staff picking/sorting fruit — light comes on automatically while the door's open. Turns Door Sensor Enabled on if it was off. |
+| **Hold Compressor While Door Open** | Leave `Off` unless the reed is reliable and you want cooling paused on open doors | Opt-in. Busy loading doors / less humid air across a cold coil can benefit; a stuck-open reed would starve cooling. |
 | **Door Alarm Delay** | `300 s` (default) | Fine for routine loading/unloading; shorten if the room should never be open long. |
 | **Internal/External Humidity Sensors** | `On` (default) | Monitor toward a target ~90–95% RH — remember this controller only *reports* humidity, it doesn't control it (User Manual §4.7). Pair with your own humidification setup if the room runs dry. |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |
@@ -156,6 +169,9 @@ the less this list matches your actual product and packaging.
 │                                   │  in between → hold current state  │
 ├─────────────────────────────────┴────────────────────────────────────┤
 │ Off-Delay lockout still active? → wait, don't restart yet            │
+│ Min Run Time not elapsed? → refuse cut-out until the ON window ends  │
+│ Hold Compressor While Door Open + door open? → force compressor OFF  │
+│ Fan Relay Enabled? → fan follows compressor (off during defrost/drip)│
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -172,12 +188,13 @@ the less this list matches your actual product and packaging.
 ├────────────────────────┴───────────────────────┴─────────────────────┤
 │ Force-Max Interval Override (safety net)  OR  Manual Start Now       │
 ├──────────────────────────────────────────────────────────────────────┤
-│ → Defrost starts. Ends at Max Duration, or earlier if Early           │
-│   Termination by Temp is on and the coil reaches its target.         │
+│ → Passive defrost starts (compressor held off; fan off). Ends at Max   │
+│   Duration, or earlier if Early Termination by Temp is on and the    │
+│   coil reaches its target. Optional drip hold before cooling resumes.│
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Also: Min Run Time holds the compressor ON until its minimum ON window elapses (pairs with Off-Delay).
+Also: Min Run Time holds the compressor ON until its minimum ON window elapses (pairs with Off-Delay). Decision log vs Carel: `reference/CAREL_CONTROL_DECISIONS.md`.
 
 ---
 
