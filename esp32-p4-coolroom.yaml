@@ -3666,7 +3666,8 @@ interval:
               fault, id(input_fallback_enabled),
               id(ctl_fallback_phase_on), id(ctl_fallback_last_toggle_ms),
               (uint32_t)(id(ctl_fallback_on_min)  * 60000.0f),
-              (uint32_t)(id(ctl_fallback_off_min) * 60000.0f));
+              (uint32_t)(id(ctl_fallback_off_min) * 60000.0f),
+              locked_out);
           if (fault) {
               id(ctl_sensor_fallback_active) = id(input_fallback_enabled);
               if (!id(ctl_defrost_active)) {

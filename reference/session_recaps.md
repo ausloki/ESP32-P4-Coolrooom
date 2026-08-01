@@ -4,6 +4,20 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-01 (Afternoon) — Sensor fallback starved by the compressor off-delay
+
+- Bench symptom: probe fault + fallback enabled + lockout expired, compressor never ran.
+- `p4_ctl_fallback_should_run()` seeded `phase_on`/`last_toggle_ms` on the first tick after
+  boot, but the caller gates the start on `locked_out`. Boot seeds
+  `ctl_comp_last_off_ms = ctl_boot_ms`, and both the off-delay and the fallback ON window
+  default to 3 min — so the ON phase burned down inside the lockout and flipped to the
+  27 min OFF phase without a single run.
+- Helper now takes `compressor_locked_out`: won't start the phase clock while locked out,
+  and freezes an in-progress ON window instead of spending it.
+- USER_MANUAL §4.1/§4.7 + NS diagram gained the off-delay/fallback blocks.
+
+---
+
 ## 2026-08-01 (Afternoon) — Door alarm independent of probe fault
 
 - Soft-mute re-jiggle failed on bench: door alarm lived inside `!fault && !in_grace`,

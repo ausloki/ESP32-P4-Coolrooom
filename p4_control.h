@@ -384,20 +384,34 @@ inline float p4_ctl_calibration_offset(float sht31_ref_c, float probe_avg_c) {
 /// When the primary probe is faulted and fallback is enabled, run the compressor
 /// on a timed duty cycle (on_ms ON, off_ms OFF).
 /// Mutates phase_on and last_toggle_ms in-place; returns true if compressor should run.
+///
+/// compressor_locked_out is the off-delay state from p4_ctl_comp_locked_out().
+/// The ON window must not burn down while the off-delay still forbids a start —
+/// the boot off-delay and the default ON time are both 3 min, so an unaware
+/// timer spent the whole ON phase locked out and the room got no run at all
+/// before flipping to the 27 min OFF phase.
 inline bool p4_ctl_fallback_should_run(
     bool      fault_active,
     bool      fallback_enabled,
     bool&     phase_on,
     uint32_t& last_toggle_ms,
     uint32_t  on_ms,
-    uint32_t  off_ms
+    uint32_t  off_ms,
+    bool      compressor_locked_out = false
 ) {
     if (!fault_active || !fallback_enabled) return false;
     if (last_toggle_ms == 0U) {
-        // Start of fallback: begin with ON phase
+        // Start of fallback: begin with ON phase, but not before the
+        // compressor is actually allowed to start.
+        if (compressor_locked_out) return false;
         phase_on       = true;
         last_toggle_ms = millis();
         return true;
+    }
+    if (phase_on && compressor_locked_out) {
+        // Hold the ON window open until the off-delay clears.
+        last_toggle_ms = millis();
+        return false;
     }
     uint32_t period_ms = phase_on ? on_ms : off_ms;
     if ((millis() - last_toggle_ms) >= period_ms) {

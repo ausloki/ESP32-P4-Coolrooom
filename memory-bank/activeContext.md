@@ -20,13 +20,18 @@ compile + NVS-safe flash (`./tools/esphome_flash.sh`, never plain USB `esphome u
 1. ✅ Soft-mute + second alarm jiggle (2026-08-01): door alarm was gated behind
    `!fault`, so probe fault blocked mute-lift; door eval now runs every tick.
    Confirmed on glass: mute → hold reed open → bell jiggling again.
-2. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
+2. ✅ Sensor fallback duty cycle (2026-08-01): the ON window used to burn down inside the
+   compressor off-delay (both default to 3 min, and boot seeds the off-delay), so the
+   compressor never ran under probe fault. `p4_ctl_fallback_should_run()` now takes
+   `compressor_locked_out` and holds the ON window instead of spending it.
+3. Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 
 ## Leave for later
 
 - RS485 / external I2C not on bench
 - Manual screenshots still placeholders
-- CPU % spike on hard browser refresh is expected (SSE full reconnect); smooth later if desired
+- CPU % spike on hard browser refresh is expected (SSE full reconnect); web UI
+  now EMA-smooths the displayed value (firmware sensor unchanged)
 
 ## Key commands
 

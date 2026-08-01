@@ -202,7 +202,9 @@ room stays uncooled for up to the full Compressor Off-Delay after every restart.
 countdown is shown under the snowflake on the touchscreen home screen and as *Compressor
 Lockout Remaining* on the web dashboard, and the snowflake is **amber** while it runs
 (grey = idle, blue = running, red = the relay has been disabled in §4.13). This applies to
-the fallback duty cycle in §4.7 as well.
+the fallback duty cycle in §4.7 as well — its ON window is **held**, not spent, while the
+off-delay is counting, so a fallback cycle that comes due during the lockout still gets its
+full ON Time once the lockout clears rather than being skipped.
 
 > 📷 **Screenshot placeholder — Web Dashboard: Temperature Control & Compressor sections**
 > 📷 **Screenshot placeholder — Touchscreen: Settings 1/7**
@@ -490,6 +492,12 @@ physical range, the controller treats it as a fault:
 └─────────────────────────────────┴────────────────────────────────────┘
 ```
 
+The fallback duty cycle needs no temperature reading at all — that is the whole point of it.
+It starts its first ON period as soon as the compressor off-delay allows a start (§4.1),
+which after a restart means up to the full Compressor Off-Delay of waiting first. Until
+then the snowflake stays amber with the lockout counting down, then turns blue for the
+Fallback Compressor ON Time.
+
 > 📷 **Screenshot placeholder — Web Dashboard: Probes & Sensors section**
 > 📷 **Screenshot placeholder — Touchscreen: Settings 7/7**
 
@@ -683,7 +691,7 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 | Item | What it shows |
 |---|---|
 | System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. Wall clock uses the ESP32-P4 internal LP RTC; NTP over Wi‑Fi keeps it accurate. With a cell in the board’s RTC battery holder, time can survive power cuts; without it, expect pending time until first NTP after every hard power loss. |
-| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU is the average busy percentage across both P4 cores over the last sample window (typically a few seconds). |
+| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU is the average busy percentage across both P4 cores over the last sample window (typically a few seconds). The web dashboard EMA-smooths the displayed CPU so a hard page refresh does not briefly flash a reconnect spike; the touchscreen Info page shows the raw windowed value. |
 | SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9) |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
 | System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 = humidity sensors detected on the I2C header. |

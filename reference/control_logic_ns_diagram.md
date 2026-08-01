@@ -33,6 +33,22 @@ Network behavior is optional:
 │  │ relay_siren      → ON         │                                           │
 │  └───────────────────────────────┘                                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
+│  COMPRESSOR OFF-DELAY   locked_out = p4_ctl_comp_locked_out(               │
+│                             ctl_comp_last_off_ms, comp_lockout_min)        │
+│  Boot seeds ctl_comp_last_off_ms = ctl_boot_ms, so a restart locks out too. │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  SENSOR FALLBACK DUTY CYCLE  (only while probe_fault, skip during defrost)  │
+│  p4_ctl_fallback_should_run(fault, fallback_enabled, phase_on,             │
+│                             last_toggle_ms, on_ms, off_ms, locked_out)     │
+│  ┌────── locked_out ────────────────────┐  ┌────── not locked out ────────┐│
+│  │ ON window is HELD, not spent:        │  │ ON/OFF phases advance on the ││
+│  │  • before first run → don't start    │  │ on_ms / off_ms timers        ││
+│  │    the phase clock at all            │  │ run = phase_on               ││
+│  │  • mid ON phase → push last_toggle   │  └──────────────────────────────┘│
+│  │ run = false                          │                                   │
+│  └──────────────────────────────────────┘                                   │
+│  run AND !locked_out → relay_compressor ON   |   !run → relay_compressor OFF│
+├─────────────────────────────────────────────────────────────────────────────┤
 │  COMPRESSOR CONTROL  (skip if probe_fault OR defrost active)                │
 │  p4_ctl_compressor_eval(t, setpoint, diff, compressor_on, last_ms, stale)  │
 │  ┌────── result == +1 ──────┐  ┌──── result == -1 ────┐  ┌── result == 0 ─┐│
