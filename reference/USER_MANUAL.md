@@ -37,13 +37,14 @@ in its sensor's colour so the ring and the matching text readout agree at a glan
 | Middle | Cyan | Setpoint |
 | Inner | Pink | Ambient |
 
-Swipe **up** on the centre gauge for an alternate cooling view: cyan fill to
-**setpoint**, blue **current** overlay on the same ring (current covers past set
-when the room is warm), pink ambient inside, and Nest-style handles — **large**
-circle at setpoint, **small** at current (small moves toward large as it cools).
-Swipe **down** to return. On both home views the large centre temperature stays
-**blue** (same as the coolroom arc) and follows **Temperature Display Unit**
-(°C or °F). The web Coolroom Status gauge stays on the classic three-arc layout.
+Swipe **up** on the centre gauge for an alternate **Home Assistant–style**
+thermostat view on one outer ring: soft cyan fill to **setpoint**, a blue band
+between **current** and setpoint, a cyan-rim thumb at setpoint and a blue pip at
+current (display-only — you cannot drag the ring to change the setpoint), with a
+thinner pink ambient ring inside. Swipe **down** to return. On both home views
+the large centre temperature stays **blue** (same as the coolroom arc) and
+follows **Temperature Display Unit** (°C or °F). The web Coolroom Status gauge
+stays on the classic three-arc layout.
 
 A reading colder than −10 °C or warmer than +30 °C sits pinned at the end of its arc — the
 numeric readouts remain exact. A sensor that is offline leaves its ring empty. The dial

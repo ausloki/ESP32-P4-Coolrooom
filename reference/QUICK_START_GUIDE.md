@@ -102,8 +102,9 @@ available in Home Assistant as `select.temperature_display_unit`; HA converts it
 temperature sensors according to HA's own unit-system setting.
 
 **Home gauge:** the classic three-arc view (coolroom / setpoint / ambient) is the default.
-Swipe **up** on the centre for a cooling view (set vs current on one ring with Nest-style
-handles); swipe **down** to return. Centre temperature stays blue like the coolroom arc.
+Swipe **up** on the centre for an HA-style thermostat view (set vs current on one ring with
+display-only thumb/pip — not drag-to-set); swipe **down** to return. Centre temperature
+stays blue like the coolroom arc.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before

@@ -37,13 +37,15 @@ aligned**. Change one → update the other in the same change.
 ## Alternate LVGL view (glass only)
 
 Swipe up on the centre gauge for a second horseshoe: **no middle setpoint ring**.
-Cooling Nest-style on the outer radius: cyan fill to setpoint, blue current
-overlay (`home2_set_arc` / `home2_temp_arc`, stroke **22**), cyan delta band,
-**large** knob at setpoint and **small** at current (`p4_ui_update_home2_cooling`).
-Ambient pink at **384** / stroke 16 (small daylight gap to outer). Web stays on the
-classic three-arc gauge.
+**HA thermostat-style** on the outer radius (display-only — **no** drag-to-set):
+dim blue track + soft cyan fill to setpoint (`home2_set_arc`, stroke **22**),
+blue active band between current↔setpoint (`home2_temp_delta_arc`), cyan-rim
+**thumb** @ set and blue **pip** @ coolroom current — both placed with
+`lv_arc_align_obj_to_angle` on the **440** coolroom arcs (never ambient).
+Ambient pink at **368** / stroke **12**; its native LVGL knob is forced hidden.
+Web stays on the classic three-arc gauge.
 
-**Revisit when RTD / ambient hardware is on the bench:** prove Nest knobs + delta
+**Revisit when RTD / ambient hardware is on the bench:** prove HA thumb/pip + gap
 band with live temps, C/F unit switch on both home views, and scroll snap feel.
 
 ## Hard rule — do not reintroduce translucent chrome

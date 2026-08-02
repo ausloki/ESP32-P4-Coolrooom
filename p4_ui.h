@@ -49,27 +49,19 @@ inline float p4_ui_arc_pct_to_angle_(int pct) {
     return a;
 }
 
-/// Place a knob so its centre sits on the coolroom horseshoe (arc_size = widget
-/// width, e.g. 440). LVGL angles: 0° at 3 o'clock, clockwise, y grows down.
-inline void p4_ui_place_horseshoe_dot_(lv_obj_t *dot, int pct, lv_coord_t arc_size,
-                                      lv_coord_t stroke_w = 22) {
-    if (dot == nullptr) return;
-    lv_obj_t *par = lv_obj_get_parent(dot);
-    if (par == nullptr) return;
-    const float ang = p4_ui_arc_pct_to_angle_(pct) * (float) M_PI / 180.0f;
-    const float r = (float) arc_size * 0.5f - (float) stroke_w * 0.5f;
-    const float cx = (float) lv_obj_get_width(par) * 0.5f;
-    const float cy = (float) lv_obj_get_height(par) * 0.5f;
-    const float x = cx + r * cosf(ang);
-    const float y = cy + r * sinf(ang);
-    const lv_coord_t w = lv_obj_get_width(dot);
-    const lv_coord_t h = lv_obj_get_height(dot);
-    lv_obj_set_pos(dot, (lv_coord_t) lroundf(x - w * 0.5f),
-                   (lv_coord_t) lroundf(y - h * 0.5f));
+/// Pin a marker to an LVGL arc's indicator tip using the arc's own geometry
+/// (same radius/centre as that widget — never the ambient ring).
+inline void p4_ui_place_dot_on_arc_(lv_obj_t *arc, lv_obj_t *dot, int pct) {
+    if (arc == nullptr || dot == nullptr) return;
+    const int32_t prev = lv_arc_get_value(arc);
+    lv_arc_set_value(arc, pct);
+    lv_arc_align_obj_to_angle(arc, dot, 0);
+    lv_arc_set_value(arc, prev);
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(dot);
 }
 
-/// Delta band between current and setpoint (Nest-style capsule on the ring).
+/// Active segment between current and setpoint (HA thermostat gap on the ring).
 inline void p4_ui_arc_set_delta_overlay(lv_obj_t *arc, int pct_temp, int pct_set) {
     if (arc == nullptr) return;
     int lo = pct_temp < pct_set ? pct_temp : pct_set;
@@ -81,34 +73,56 @@ inline void p4_ui_arc_set_delta_overlay(lv_obj_t *arc, int pct_temp, int pct_set
     lv_arc_set_angles(arc, p4_ui_arc_pct_to_angle_(lo), p4_ui_arc_pct_to_angle_(hi));
 }
 
-/// Alt home gauge (cooling Nest-style):
-///   - set_arc: cyan fill to setpoint (under)
-///   - cur_arc: blue fill to current (overlays set — cooling direction)
-///   - delta_arc: cyan band between the two
-///   - knob_set: larger circle at setpoint; knob_cur: smaller at current
-///     (cooling: small moves toward big as the room approaches set).
+/// Hide LVGL's built-in arc knob so ambient (or any ring) cannot show a fake tip dot.
+inline void p4_ui_hide_arc_knob_(lv_obj_t *arc) {
+    if (arc == nullptr) return;
+    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_obj_set_style_border_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(arc, 0, LV_PART_KNOB);
+    lv_obj_set_style_width(arc, 0, LV_PART_KNOB);
+    lv_obj_set_style_height(arc, 0, LV_PART_KNOB);
+}
+
+/// Alt home gauge (HA thermostat-style, display-only — no drag-to-set):
+///   - set_arc: dim track + soft cyan fill to setpoint (target path)
+///   - cur_arc: invisible fill; used only as the coolroom radius reference for the current pip
+///   - delta_arc: blue band between current and setpoint (active gap)
+///   - knob_set / knob_cur: aligned to set_arc / cur_arc via lv_arc_align_obj_to_angle
 inline void p4_ui_update_home2_cooling(lv_obj_t *set_arc, lv_obj_t *cur_arc,
                                       lv_obj_t *delta_arc, lv_obj_t *knob_set,
                                       lv_obj_t *knob_cur, float temp_c, float sp_c,
-                                      float lo_c, float hi_c) {
+                                      float lo_c, float hi_c,
+                                      lv_obj_t *ambient_arc = nullptr) {
     const int pct_sp = p4_ui_setpoint_to_arc_pct(sp_c, lo_c, hi_c);
     const bool temp_ok = p4_rtd_valid(temp_c);
     const int pct_t = temp_ok ? p4_ui_temp_to_arc_pct(temp_c, lo_c, hi_c) : 0;
 
+    // Ambient must never show LVGL's native tip knob (reads as "dot on pink ring").
+    p4_ui_hide_arc_knob_(ambient_arc);
+    p4_ui_hide_arc_knob_(set_arc);
+    p4_ui_hide_arc_knob_(cur_arc);
+    p4_ui_hide_arc_knob_(delta_arc);
+
     if (set_arc != nullptr) lv_arc_set_value(set_arc, pct_sp);
-    if (cur_arc != nullptr) lv_arc_set_value(cur_arc, temp_ok ? pct_t : 0);
+    // Keep indicator invisible; value is set only while placing the current pip.
+    if (cur_arc != nullptr) lv_arc_set_value(cur_arc, 0);
+
+    // Bind setpoint thumb to the OUTER coolroom set_arc (440), not ambient.
+    if (set_arc != nullptr && knob_set != nullptr) {
+        lv_arc_align_obj_to_angle(set_arc, knob_set, 0);
+        lv_obj_clear_flag(knob_set, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(knob_set);
+    }
 
     if (!temp_ok) {
         if (delta_arc != nullptr) lv_arc_set_angles(delta_arc, 0, 0);
-        if (knob_set != nullptr) lv_obj_add_flag(knob_set, LV_OBJ_FLAG_HIDDEN);
         if (knob_cur != nullptr) lv_obj_add_flag(knob_cur, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
     p4_ui_arc_set_delta_overlay(delta_arc, pct_t, pct_sp);
-    // Big = setpoint (target), small = current (moves toward big while cooling).
-    p4_ui_place_horseshoe_dot_(knob_set, pct_sp, 440);
-    p4_ui_place_horseshoe_dot_(knob_cur, pct_t, 440);
+    // Bind current pip to cur_arc (same 440 coolroom geometry as set_arc).
+    p4_ui_place_dot_on_arc_(cur_arc, knob_cur, pct_t);
 }
 
 // ─── Header clock / date ───────────────────────────────────────────────────

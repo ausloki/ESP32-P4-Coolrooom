@@ -2051,7 +2051,8 @@ sensor:
           p4_ui_update_home2_cooling(
               id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
               id(home2_knob_set), id(home2_knob_cur),
-              x, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
+              x, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c},
+              id(home2_ambient_arc));
 
   - platform: template
     id: probe2_temp
@@ -2782,7 +2783,8 @@ number:
           p4_ui_update_home2_cooling(
               id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
               id(home2_knob_set), id(home2_knob_cur),
-              id(probe1_temp).state, x, ${dial_min_c}, ${dial_max_c});
+              id(probe1_temp).state, x, ${dial_min_c}, ${dial_max_c},
+              id(home2_ambient_arc));
 
   - platform: template
     id: compressor_differential
@@ -4805,7 +4807,8 @@ interval:
           p4_ui_update_home2_cooling(
               id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
               id(home2_knob_set), id(home2_knob_cur),
-              id(probe1_temp).state, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
+              id(probe1_temp).state, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c},
+              id(home2_ambient_arc));
       - lvgl.widget.update:
           id: lbl_home_alarm_banner
           hidden: !lambda |-
@@ -6459,8 +6462,8 @@ lvgl:
 
         # Center Arc Gauge — vertical snap-scroll between two horseshoe views.
         #   View 1 (y=0): classic coolroom / setpoint / ambient (unchanged).
-        #   View 2 (y=480): coolroom + ambient only; cyan delta overlay on the
-        #   coolroom ring spans current↔setpoint (no knobs/dots).
+        #   View 2 (y=480): HA thermostat-style outer ring (set fill + current↔set
+        #   gap + display-only thumbs) with thinner pink ambient inside.
         - obj:
             x: 80
             y: 64
@@ -6661,7 +6664,10 @@ lvgl:
                         text_font: font_small
                         text_color: col_subtext
 
-              # ── View 2: cooling Nest-style (set under, current overlay) ───
+              # ── View 2: HA thermostat-style (display-only) ────────────────
+              # Outer ring = coolroom track/fill with current + setpoint overlays.
+              # No drag-to-set: arcs and thumbs are non-clickable; swipe only
+              # scrolls back to the classic three-arc page.
               - obj:
                   x: 0
                   y: 480
@@ -6674,9 +6680,8 @@ lvgl:
                   scrollbar_mode: "OFF"
                   clickable: false
                   widgets:
-                    # Setpoint fill (under) — dim blue track + cyan to setpoint.
-                    # Stroke 22 (thicker than classic 14); ambient at 400 closes
-                    # the former middle-ring gap and opens the centre disc.
+                    # Track + soft cyan fill to setpoint (HA target path).
+                    # Stroke 22 so the outer ring dominates; ambient stays thin.
                     - arc:
                         id: home2_set_arc
                         align: CENTER
@@ -6684,6 +6689,7 @@ lvgl:
                         width: 440
                         height: 440
                         bg_opa: TRANSP
+                        clickable: false
                         arc_color: col_blue
                         arc_opa: 28%
                         arc_width: 22
@@ -6694,14 +6700,14 @@ lvgl:
                         value: 50
                         indicator:
                           arc_color: col_cyan
-                          arc_opa: 70%
+                          arc_opa: 55%
                           arc_width: 22
                           arc_rounded: true
                         knob:
                           bg_opa: TRANSP
 
-                    # Current temp overlay — no track; blue fill to current
-                    # (covers past set when room is warm — cooling direction).
+                    # Placeholder arc (value forced 0 in p4_ui_update_home2_cooling).
+                    # Kept so call sites / id stay stable; no progressive fill.
                     - arc:
                         id: home2_temp_arc
                         align: CENTER
@@ -6709,31 +6715,8 @@ lvgl:
                         width: 440
                         height: 440
                         bg_opa: TRANSP
+                        clickable: false
                         arc_color: col_blue
-                        arc_opa: 0%
-                        arc_width: 22
-                        arc_rounded: true
-                        rotation: 0
-                        start_angle: 150
-                        end_angle: 30
-                        value: 50
-                        indicator:
-                          arc_color: col_blue
-                          arc_opa: 92%
-                          arc_width: 22
-                          arc_rounded: true
-                        knob:
-                          bg_opa: TRANSP
-
-                    # Delta capsule between set and current (angles in C++)
-                    - arc:
-                        id: home2_temp_delta_arc
-                        align: CENTER
-                        y: 0
-                        width: 440
-                        height: 440
-                        bg_opa: TRANSP
-                        arc_color: col_cyan
                         arc_opa: 0%
                         arc_width: 22
                         arc_rounded: true
@@ -6742,21 +6725,88 @@ lvgl:
                         end_angle: 30
                         value: 0
                         indicator:
-                          arc_color: col_cyan
-                          arc_opa: 92%
+                          arc_color: col_blue
+                          arc_opa: 0%
                           arc_width: 22
                           arc_rounded: true
                         knob:
                           bg_opa: TRANSP
 
-                    # Nest-style handles: large = setpoint, small = current
+                    # Active gap between current and setpoint (angles in C++)
+                    - arc:
+                        id: home2_temp_delta_arc
+                        align: CENTER
+                        y: 0
+                        width: 440
+                        height: 440
+                        bg_opa: TRANSP
+                        clickable: false
+                        arc_color: col_blue
+                        arc_opa: 0%
+                        arc_width: 22
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 0
+                        indicator:
+                          arc_color: col_blue
+                          arc_opa: 90%
+                          arc_width: 22
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
+
+                    # Ambient — thinner inner ring so the HA outer track dominates.
+                    # arc_rounded false on indicator: rounded tip looks like a fake
+                    # "dot" on the pink ring and was mistaken for the coolroom pip.
+                    - arc:
+                        id: home2_ambient_arc
+                        align: CENTER
+                        y: 0
+                        width: 368
+                        height: 368
+                        bg_opa: TRANSP
+                        clickable: false
+                        arc_color: col_pink
+                        arc_opa: 28%
+                        arc_width: 12
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_pink
+                          arc_opa: 92%
+                          arc_width: 12
+                          arc_rounded: false
+                        knob:
+                          bg_opa: TRANSP
+                          border_width: 0
+                          pad_all: 0
+
+                    - obj:
+                        align: CENTER
+                        y: 0
+                        width: 336
+                        height: 336
+                        radius: 168
+                        border_width: 0
+                        bg_color: col_bg
+                        bg_opa: COVER
+                        clickable: false
+
+                    # Display-only markers — positioned in C++ with
+                    # lv_arc_align_obj_to_angle against the 440 coolroom arcs
+                    # (never ambient). Larger pip so it reads clearly on the outer stroke.
                     - obj:
                         id: home2_knob_set
                         x: 0
                         y: 0
-                        width: 26
-                        height: 26
-                        radius: 13
+                        width: 22
+                        height: 22
+                        radius: 11
                         bg_color: col_text
                         bg_opa: COVER
                         border_width: 3
@@ -6767,51 +6817,15 @@ lvgl:
                         id: home2_knob_cur
                         x: 0
                         y: 0
-                        width: 14
-                        height: 14
-                        radius: 7
-                        bg_color: col_text
+                        width: 16
+                        height: 16
+                        radius: 8
+                        bg_color: col_blue
                         bg_opa: COVER
                         border_width: 2
-                        border_color: col_blue
+                        border_color: col_text
                         clickable: false
                         hidden: true
-
-                    # Ambient — larger diameter closes gap to outer ring; inner
-                    # opening grows so the centre disc (and readout) can widen.
-                    - arc:
-                        id: home2_ambient_arc
-                        align: CENTER
-                        y: 0
-                        width: 384
-                        height: 384
-                        bg_opa: TRANSP
-                        arc_color: col_pink
-                        arc_opa: 28%
-                        arc_width: 16
-                        arc_rounded: true
-                        rotation: 0
-                        start_angle: 150
-                        end_angle: 30
-                        value: 50
-                        indicator:
-                          arc_color: col_pink
-                          arc_opa: 92%
-                          arc_width: 16
-                          arc_rounded: true
-                        knob:
-                          bg_opa: TRANSP
-
-                    - obj:
-                        align: CENTER
-                        y: 0
-                        width: 348
-                        height: 348
-                        radius: 174
-                        border_width: 0
-                        bg_color: col_bg
-                        bg_opa: COVER
-                        clickable: false
 
                     - label:
                         id: lbl_coolroom_temp_large_v2
