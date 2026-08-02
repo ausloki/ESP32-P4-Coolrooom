@@ -218,18 +218,37 @@ inline float p4_free_psram_kb() {
     return static_cast<float>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)) / 1024.0f;
 }
 
-// ─── CPU utilisation (windowed, average across cores) ─────────────────────
+// ─── CPU utilisation (windowed, average + per-core) ───────────────────────
 // Needs CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS. Samples idle-task counters
-// between calls and returns busy% = 100 − mean idle fraction. First call
-// after boot (or after enabling the option) returns NAN until a second
-// sample lands — callers should treat that as "unknown".
+// between calls and returns busy% = 100 − idle fraction. First call after
+// boot returns NAN until a second sample lands — callers treat that as
+// "unknown". One shared sampler so avg / core0 / core1 stay in sync; a short
+// debounce avoids three back-to-back sensor lambdas carving tiny windows.
 
 #if (configGENERATE_RUN_TIME_STATS == 1) && (INCLUDE_xTaskGetIdleTaskHandle == 1) && !defined(CONFIG_FREERTOS_SMP)
 
-inline float p4_cpu_usage_pct() {
+inline float &p4_cpu_snap_avg_ref_() {
+    static float v = NAN;
+    return v;
+}
+inline float *p4_cpu_snap_core_ref_() {
+    static float v[configNUMBER_OF_CORES];
+    static bool init = false;
+    if (!init) {
+        for (int i = 0; i < (int) configNUMBER_OF_CORES; i++) v[i] = NAN;
+        init = true;
+    }
+    return v;
+}
+
+inline void p4_cpu_refresh_() {
     static uint32_t last_idle[configNUMBER_OF_CORES] = {};
     static uint32_t last_total = 0;
-    static float last_pct = NAN;
+    static uint32_t last_refresh_ms = 0;
+
+    const uint32_t now_ms = millis();
+    // Same-tick callers (avg + C0 + C1 sensors, or fmt) share one snapshot.
+    if (last_total != 0 && (now_ms - last_refresh_ms) < 400) return;
 
     uint32_t total_now = (uint32_t) portGET_RUN_TIME_COUNTER_VALUE();
     uint32_t idle_now[configNUMBER_OF_CORES];
@@ -237,26 +256,40 @@ inline float p4_cpu_usage_pct() {
         idle_now[c] = (uint32_t) ulTaskGetIdleRunTimeCounterForCore(c);
     }
 
+    float &snap_avg = p4_cpu_snap_avg_ref_();
+    float *snap_core = p4_cpu_snap_core_ref_();
+
     if (last_total == 0 || total_now <= last_total) {
-        for (int c = 0; c < configNUMBER_OF_CORES; c++) last_idle[c] = idle_now[c];
+        for (int c = 0; c < (int) configNUMBER_OF_CORES; c++) last_idle[c] = idle_now[c];
         last_total = total_now;
-        return last_pct;  // NAN until we have a real window
+        last_refresh_ms = now_ms;
+        return;
     }
 
     const float dt = (float) (total_now - last_total);
     float idle_sum = 0.0f;
-    for (int c = 0; c < configNUMBER_OF_CORES; c++) {
-        idle_sum += (float) (idle_now[c] - last_idle[c]);
+    for (int c = 0; c < (int) configNUMBER_OF_CORES; c++) {
+        float idle_frac = (float) (idle_now[c] - last_idle[c]) / dt;
+        if (idle_frac < 0.0f) idle_frac = 0.0f;
+        if (idle_frac > 1.0f) idle_frac = 1.0f;
+        snap_core[c] = (1.0f - idle_frac) * 100.0f;
+        idle_sum += idle_frac;
         last_idle[c] = idle_now[c];
     }
     last_total = total_now;
+    last_refresh_ms = now_ms;
+    snap_avg = (1.0f - idle_sum / (float) configNUMBER_OF_CORES) * 100.0f;
+}
 
-    // Each core contributes one wall-time worth of idle; average across cores.
-    float idle_frac = idle_sum / (dt * (float) configNUMBER_OF_CORES);
-    if (idle_frac < 0.0f) idle_frac = 0.0f;
-    if (idle_frac > 1.0f) idle_frac = 1.0f;
-    last_pct = (1.0f - idle_frac) * 100.0f;
-    return last_pct;
+inline float p4_cpu_usage_pct() {
+    p4_cpu_refresh_();
+    return p4_cpu_snap_avg_ref_();
+}
+
+inline float p4_cpu_usage_core_pct(int core) {
+    p4_cpu_refresh_();
+    if (core < 0 || core >= (int) configNUMBER_OF_CORES) return NAN;
+    return p4_cpu_snap_core_ref_()[core];
 }
 
 #else
@@ -265,13 +298,23 @@ inline float p4_cpu_usage_pct() {
     return NAN;  // run-time stats not compiled in
 }
 
+inline float p4_cpu_usage_core_pct(int /*core*/) {
+    return NAN;
+}
+
 #endif
 
-/// Format "CPU: 23%" / "CPU: --%" into buf (for LVGL info page).
+/// Format "CPU: 45%  C0:40% C1:50%" / "CPU: --%" into buf (LVGL Info page).
 inline void p4_fmt_cpu_usage(char *buf, size_t n) {
     float pct = p4_cpu_usage_pct();
+    float c0 = p4_cpu_usage_core_pct(0);
+    float c1 = p4_cpu_usage_core_pct(1);
     if (!std::isfinite(pct)) {
         snprintf(buf, n, "CPU: --%%");
+        return;
+    }
+    if (std::isfinite(c0) && std::isfinite(c1)) {
+        snprintf(buf, n, "CPU: %.0f%%  C0:%.0f%% C1:%.0f%%", pct, c0, c1);
         return;
     }
     snprintf(buf, n, "CPU: %.0f%%", pct);

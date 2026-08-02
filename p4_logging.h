@@ -13,8 +13,15 @@
 //
 // Log layout on SD card:
 //   /sdcard/YYYY-MM-DD.csv        — daily temperature + state log (appended)
+//   /sdcard/nodate.csv            — samples taken before wall clock is valid
 //   /sdcard/events.csv            — alarm / fault / defrost events (appended)
 //   /sdcard/backup.json           — last saved control parameters
+//
+// Safeguards:
+//   - Daily YYYY-MM-DD.csv files older than the retention setting are pruned
+//     (events.csv / nodate.csv / backup.json are never auto-deleted).
+//   - Appends and backup writes are skipped when free space is below
+//     P4_SD_MIN_FREE_MB (card stays "mounted OK" — full ≠ dead).
 //
 // Board: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
 // ============================================================================
@@ -23,6 +30,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <ctime>
 #include <string>
 #include <inttypes.h>
 #include <sys/stat.h>
@@ -278,6 +286,155 @@ inline bool p4_sd_handle_open_failure(const char* where, const char* path) {
     return false;
 }
 
+// ─── Free space + write gate + daily-log prune ─────────────────────────────
+
+/// Minimum free space (MB) required before appending logs or writing backup.
+/// Fixed threshold — not a user setting. Documented in USER_MANUAL §4.9.
+static constexpr float P4_SD_MIN_FREE_MB = 32.0f;
+
+/// Latched for the current low-space episode so we only emit SD_SPACE_LOW once
+/// until free space recovers above the threshold (e.g. after prune / delete).
+static bool p4_sd_space_low_latched = false;
+
+/// Day-key of the last successful prune pass (year<<9 | yday). -1 = never.
+static int p4_sd_last_prune_day_key = -1;
+
+/// Returns free space on the SD card in megabytes, or -1 if not mounted.
+inline float p4_sd_free_mb() {
+    if (!p4_sd_ready) return -1.0f;
+    FATFS* fs;
+    DWORD  free_clust;
+    if (f_getfree("0:", &free_clust, &fs) != FR_OK) return -1.0f;
+    const uint64_t free_bytes =
+        (uint64_t)free_clust * fs->csize * 512UL;  // 512 bytes per sector (standard)
+    return static_cast<float>(free_bytes) / (1024.0f * 1024.0f);
+}
+
+/// Returns total SD capacity in megabytes, or -1 if not mounted.
+inline float p4_sd_total_mb() {
+    if (!p4_sd_ready || p4_sd_card == nullptr) return -1.0f;
+    const uint64_t total_bytes =
+        ((uint64_t)p4_sd_card->csd.capacity) * p4_sd_card->csd.sector_size;
+    return static_cast<float>(total_bytes) / (1024.0f * 1024.0f);
+}
+
+/// True when the card has enough free space for a log/backup write.
+/// On the first low reading of an episode, pushes SD_SPACE_LOW to the live
+/// event ring (not events.csv — that write is also gated). Does not flip
+/// sd_card_ok / p4_sd_ready: a full card is still mounted and readable.
+inline bool p4_sd_allow_write(const char* where) {
+    if (!p4_sd_ready) return false;
+    const float free_mb = p4_sd_free_mb();
+    // If free-space query fails, do not block writes — the fopen path still
+    // has p4_sd_handle_open_failure() for genuine I/O failure.
+    if (free_mb < 0.0f) return true;
+    if (free_mb >= P4_SD_MIN_FREE_MB) {
+        if (p4_sd_space_low_latched) {
+            p4_sd_space_low_latched = false;
+            ESP_LOGI(TAG_SD, "SD free space recovered (%.1f MB)", free_mb);
+        }
+        return true;
+    }
+    if (!p4_sd_space_low_latched) {
+        p4_sd_space_low_latched = true;
+        char detail[56];
+        snprintf(detail, sizeof(detail), "free=%.0fMB min=%.0fMB",
+                 free_mb, P4_SD_MIN_FREE_MB);
+        ESP_LOGW(TAG_SD,
+                 "SD free space low (%.1f MB < %.0f MB) — skipping write in %s",
+                 free_mb, P4_SD_MIN_FREE_MB, where ? where : "?");
+        p4_event_ring_push("SD_SPACE_LOW", detail);
+    }
+    return false;
+}
+
+/// True if name is exactly YYYY-MM-DD.csv with plausible digits.
+inline bool p4_sd_is_daily_temp_log_name(const char* name, int* y, int* m, int* d) {
+    if (name == nullptr) return false;
+    if (std::strlen(name) != 14) return false;
+    if (name[4] != '-' || name[7] != '-' || std::strcmp(name + 10, ".csv") != 0)
+        return false;
+    static const int digit_idx[] = {0, 1, 2, 3, 5, 6, 8, 9};
+    for (int idx : digit_idx) {
+        if (name[idx] < '0' || name[idx] > '9') return false;
+    }
+    const int yy = (name[0] - '0') * 1000 + (name[1] - '0') * 100 +
+                   (name[2] - '0') * 10 + (name[3] - '0');
+    const int mm = (name[5] - '0') * 10 + (name[6] - '0');
+    const int dd = (name[8] - '0') * 10 + (name[9] - '0');
+    if (yy < 2020 || yy > 2100 || mm < 1 || mm > 12 || dd < 1 || dd > 31)
+        return false;
+    if (y) *y = yy;
+    if (m) *m = mm;
+    if (d) *d = dd;
+    return true;
+}
+
+/// Days since civil 1970-01-01 (UTC-independent calendar arithmetic).
+inline int p4_sd_civil_days(int y, int m, int d) {
+    y -= m <= 2;
+    const int era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(y - era * 400);
+    const unsigned doy =
+        (153U * static_cast<unsigned>(m + (m > 2 ? -3 : 9)) + 2U) / 5U +
+        static_cast<unsigned>(d) - 1U;
+    const unsigned doe = yoe * 365U + yoe / 4U - yoe / 100U + doy;
+    return era * 146097 + static_cast<int>(doe) - 719468;
+}
+
+/// Delete /sdcard/YYYY-MM-DD.csv files older than keep_days.
+/// Does not touch events.csv, nodate.csv, or backup.json.
+/// Returns the number of files deleted, or -1 if the card is not ready /
+/// the wall clock is not trustworthy (avoids mass-delete under epoch time).
+inline int p4_sd_prune_temp_logs(int keep_days) {
+    if (!p4_sd_ready) return -1;
+    if (keep_days < 1) keep_days = 1;
+
+    struct timeval tv{};
+    gettimeofday(&tv, nullptr);
+    struct tm now_tm{};
+    localtime_r(&tv.tv_sec, &now_tm);
+    const int year = now_tm.tm_year + 1900;
+    if (year < 2020) {
+        ESP_LOGW(TAG_SD, "Skipping temp-log prune — wall clock not set");
+        return -1;
+    }
+
+    const int today = p4_sd_civil_days(year, now_tm.tm_mon + 1, now_tm.tm_mday);
+    DIR* dir = opendir("/sdcard");
+    if (dir == nullptr) {
+        ESP_LOGE(TAG_SD, "Cannot opendir /sdcard for prune");
+        return -1;
+    }
+
+    int deleted = 0;
+    while (dirent* ent = readdir(dir)) {
+        if (ent->d_name[0] == '.') continue;
+        int fy = 0, fm = 0, fd = 0;
+        if (!p4_sd_is_daily_temp_log_name(ent->d_name, &fy, &fm, &fd)) continue;
+        const int age = today - p4_sd_civil_days(fy, fm, fd);
+        if (age < keep_days) continue;
+
+        // Name already validated as exactly "YYYY-MM-DD.csv" (14 chars).
+        char path[24];
+        snprintf(path, sizeof(path), "/sdcard/%.14s", ent->d_name);
+        if (unlink(path) == 0) {
+            ++deleted;
+            ESP_LOGI(TAG_SD, "Pruned old temp log %s (age=%d days, keep=%d)",
+                     ent->d_name, age, keep_days);
+        } else {
+            ESP_LOGW(TAG_SD, "Failed to prune %s", path);
+        }
+    }
+    closedir(dir);
+
+    if (deleted > 0) {
+        ESP_LOGI(TAG_SD, "Temp-log prune removed %d file(s), retention=%d days",
+                 deleted, keep_days);
+    }
+    return deleted;
+}
+
 // ─── Temperature logging ───────────────────────────────────────────────────
 
 /// Append one CSV row to the daily log file (/sdcard/YYYY-MM-DD.csv).
@@ -295,6 +452,7 @@ inline bool p4_sd_log_temps(
     bool  probe_fault
 ) {
     if (!p4_sd_ready) return false;
+    if (!p4_sd_allow_write("p4_sd_log_temps")) return false;
 
     // Build date-stamped filename. Before NTP/RTC sync the clock reads 1970,
     // and dating a day's readings 1970-01-01 buries real data in a file that
@@ -360,6 +518,7 @@ inline bool p4_sd_log_event(const char* event_type, const char* detail = "") {
     p4_event_ring_push(event_type, detail);
 
     if (!p4_sd_ready) return false;
+    if (!p4_sd_allow_write("p4_sd_log_event")) return false;
 
     static bool header_written = false;
     FILE* f = fopen("/sdcard/events.csv", "a");
@@ -381,6 +540,31 @@ inline bool p4_sd_log_event(const char* event_type, const char* detail = "") {
     fclose(f);
     ESP_LOGI(TAG_SD, "Event logged: %s %s", event_type, detail);
     return true;
+}
+
+/// Run prune at most once per local calendar day (or force=true after mount /
+/// retention change). Logs SD_PRUNE when any file was removed.
+inline void p4_sd_prune_temp_logs_if_due(int keep_days, bool force = false) {
+    if (!p4_sd_ready) return;
+
+    struct timeval tv{};
+    gettimeofday(&tv, nullptr);
+    struct tm now_tm{};
+    localtime_r(&tv.tv_sec, &now_tm);
+    const int year = now_tm.tm_year + 1900;
+    if (year < 2020) return;
+
+    const int day_key = (year << 9) | now_tm.tm_yday;
+    if (!force && day_key == p4_sd_last_prune_day_key) return;
+
+    const int deleted = p4_sd_prune_temp_logs(keep_days);
+    if (deleted >= 0)
+        p4_sd_last_prune_day_key = day_key;
+    if (deleted > 0) {
+        char detail[48];
+        snprintf(detail, sizeof(detail), "deleted=%d keep=%d", deleted, keep_days);
+        p4_sd_log_event("SD_PRUNE", detail);
+    }
 }
 
 // ─── Backup / restore control parameters ──────────────────────────────────
@@ -431,6 +615,11 @@ inline bool p4_sd_backup_params(
             ESP_LOGE(TAG_SD, "Cannot write backup.json — SD card not mounted");
             return false;
         }
+    }
+    if (!p4_sd_allow_write("p4_sd_backup_params")) {
+        ESP_LOGW(TAG_SD, "Cannot write backup.json — free space below %.0f MB",
+                 P4_SD_MIN_FREE_MB);
+        return false;
     }
 
     FILE* f = fopen("/sdcard/backup.json", "w");
@@ -747,26 +936,7 @@ inline bool p4_sd_restore_params(
     return true;
 }
 
-// ─── SD card free space ────────────────────────────────────────────────────
-
-/// Returns free space on the SD card in megabytes, or -1 if not mounted.
-inline float p4_sd_free_mb() {
-    if (!p4_sd_ready) return -1.0f;
-    FATFS* fs;
-    DWORD  free_clust;
-    if (f_getfree("0:", &free_clust, &fs) != FR_OK) return -1.0f;
-    const uint64_t free_bytes =
-        (uint64_t)free_clust * fs->csize * 512UL;  // 512 bytes per sector (standard)
-    return static_cast<float>(free_bytes) / (1024.0f * 1024.0f);
-}
-
-/// Returns total SD capacity in megabytes, or -1 if not mounted.
-inline float p4_sd_total_mb() {
-    if (!p4_sd_ready || p4_sd_card == nullptr) return -1.0f;
-    const uint64_t total_bytes =
-        ((uint64_t)p4_sd_card->csd.capacity) * p4_sd_card->csd.sector_size;
-    return static_cast<float>(total_bytes) / (1024.0f * 1024.0f);
-}
+// ─── SD card identity / I/O stats ──────────────────────────────────────────
 
 /// Card name from CID (empty string if not mounted).
 inline const char* p4_sd_card_name() {

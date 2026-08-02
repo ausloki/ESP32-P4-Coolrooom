@@ -646,7 +646,8 @@ Every alarm type reaches ntfy — none are event-log-only any more.
 
 ### 4.9 Data & SD Card
 
-*Web dashboard: **System** section (buttons) + touchscreen Info page (status only).*
+*Web dashboard: **SD Card** tab (retention setting + file browser + Backup/Restore) +
+touchscreen Info page (status + Backup/Restore).*
 
 The SD card is entirely **optional** — the controller runs normally without one. If no card
 is present at boot, or a card fails while running, logging and backup/restore simply become
@@ -659,17 +660,19 @@ no-ops (silently skipped) rather than crashing or affecting cooling control.
 > settings-preserving flash method (`tools/esphome_flash.sh`) or update over the air; a
 > Backup makes recovery a single Restore press either way.
 
-| Feature | What it does |
-|---|---|
-| **Event Log** | Every alarm, defrost start/end, and compressor on/off is written to a daily CSV file on the SD card, with the sensor readings behind the decision — useful for troubleshooting after the fact. |
-| **Temperature Log** | Periodic temperature/humidity samples logged the same way, to one file per day named for that date. Samples taken before the controller has learned the time (briefly at boot, or for longer if it can't reach a time server) go to a single `nodate.csv` file instead, so they aren't filed under a wrong date. It appears in the log browser alongside the dated files. |
-| **Backup All Settings to SD** *(button)* | Saves every setting in this manual to a `backup.json` file on the card. Confirms success in-place — it does **not** force a browser download. Download a copy yourself from the file list below when you want one. Settings themselves live in flash (NVS) and survive reboots without this button; Backup is an off-device copy for factory-reset recovery or cloning to another unit. |
-| **Restore All Settings from SD** *(button)* | Loads settings back from that file — useful after a factory reset or when cloning settings to another unit. If there is no backup on the card, it tells you rather than doing nothing. The card is **never** applied automatically at boot: an old backup on the card used to silently overwrite every change made since the last Backup press, which is why Restore is now operator-only. |
-| **SD Card on Info (touchscreen)** | Mount status, free space, whether `backup.json` is present, plus **Backup SD** / **Restore SD**. Full directory listing stays on the web SD Card tab. |
-| **SD Card browser** | The web dashboard **SD Card** tab lists every managed file (logs + `backup.json`) with size and modified time (local timezone — Australia/Perth on this build), plus card stats: mounted/name, used/free/total space, bus speed, and this-boot read/write counts (for lifespan estimation — consumer cards do not expose wear SMART data). Download and delete are available from the same table; `backup.json` can be downloaded but not deleted. |
-| **Events tab** *(live)* | Web **Events** tab streams the same alarm / fault / defrost / WiFi lines that are appended to `events.csv`, as they happen this boot. Pause or clear the view without touching the SD file. |
-| **Auto-Remount** | If the card fails mid-session (removed, corrupted), the controller checks every 60 seconds and automatically resumes logging/backup the moment a working card is present again — **no reboot needed**. It does *not* automatically restore your settings on reconnect (to avoid overwriting anything you changed while the card was out); it only resumes logging and lets you press Restore manually if you want to. |
-| **SD Card Failure Alert** | You'll get a push notification (§4.8) the moment the card is missing or fails — so a dead/removed card doesn't go unnoticed. The card is only reported failed when it genuinely stops accepting writes; a single file that can't be written no longer takes the whole card offline. |
+| Feature / Setting | Range / Default | What it does |
+|---|---|---|
+| **Event Log** | — | Alarm, defrost, compressor, and similar events append to `events.csv` on the card (also streamed live on the web **Events** tab). This file is **not** auto-pruned — download or delete it from the SD Card browser if it grows large. |
+| **Temperature Log** | — | Periodic temperature/state samples go to one file per day named `YYYY-MM-DD.csv`. Samples taken before the controller has learned the time go to `nodate.csv` instead (small; not auto-pruned). |
+| **SD Temp Log Retention (days)** | 7–365 / **60** | Keeps only the last N daily `YYYY-MM-DD.csv` temperature logs. Older dated files are deleted on successful mount, after auto-remount, at most once per calendar day while the card is OK, and immediately when you change this value. Never deletes `events.csv`, `nodate.csv`, or `backup.json`. |
+| **Free-space write gate** | fixed **32 MB** free | Before appending temperature/event logs or writing `backup.json`, the controller checks free space. Below 32 MB it **skips the write** (once per low-space episode it also records `SD_SPACE_LOW` on the live Events tab). The card stays reported as mounted — a full card is not treated as a failed card. Cooling is unaffected. Free space usually recovers after retention prune or manual delete. |
+| **Backup All Settings to SD** *(button)* | — | Saves every setting in this manual to a `backup.json` file on the card. Confirms success in-place — it does **not** force a browser download. Download a copy yourself from the file list below when you want one. Settings themselves live in flash (NVS) and survive reboots without this button; Backup is an off-device copy for factory-reset recovery or cloning to another unit. Skipped when free space is below the gate above. |
+| **Restore All Settings from SD** *(button)* | — | Loads settings back from that file — useful after a factory reset or when cloning settings to another unit. If there is no backup on the card, it tells you rather than doing nothing. The card is **never** applied automatically at boot: an old backup on the card used to silently overwrite every change made since the last Backup press, which is why Restore is now operator-only. |
+| **SD Card on Info (touchscreen)** | — | Mount status, free space, whether `backup.json` is present, plus **Backup SD** / **Restore SD**. Full directory listing and the retention setting stay on the web SD Card tab. |
+| **SD Card browser** | — | The web dashboard **SD Card** tab lists every managed file (logs + `backup.json`) with size and modified time (local timezone — Australia/Perth on this build), plus card stats: mounted/name, used/free/total space, bus speed, and this-boot read/write counts (for lifespan estimation — consumer cards do not expose wear SMART data). Download and delete are available from the same table; `backup.json` can be downloaded but not deleted. |
+| **Events tab** *(live)* | — | Web **Events** tab streams the same alarm / fault / defrost / WiFi lines that are appended to `events.csv`, as they happen this boot. Pause or clear the view without touching the SD file. |
+| **Auto-Remount** | — | If the card fails mid-session (removed, corrupted), the controller checks every 60 seconds and automatically resumes logging/backup the moment a working card is present again — **no reboot needed**. It does *not* automatically restore your settings on reconnect (to avoid overwriting anything you changed while the card was out); it only resumes logging, runs a retention prune, and lets you press Restore manually if you want to. |
+| **SD Card Failure Alert** | — | You'll get a push notification (§4.8) the moment the card is missing or fails — so a dead/removed card doesn't go unnoticed. The card is only reported failed when it genuinely stops accepting writes; a single file that can't be written no longer takes the whole card offline. Low free space uses the write gate above instead of this failure alert. |
 
 **Auto-remount cycle:**
 
@@ -788,7 +791,7 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 | Item | What it shows |
 |---|---|
 | System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. Wall clock uses the ESP32-P4 internal LP RTC; NTP over Wi‑Fi keeps it accurate. With a cell in the board’s RTC battery holder, time can survive power cuts; without it, expect pending time until first NTP after every hard power loss. The Info page **System Time** line shows how long ago the last NTP sync landed — the controller polls every **60 s** until the first sync, then settles to **weekly** once the clock is valid. |
-| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU is the average busy percentage across both P4 cores over the last sample window (typically a few seconds). The web dashboard EMA-smooths the displayed CPU so a hard page refresh does not briefly flash a reconnect spike; the touchscreen Info page shows the raw windowed value. |
+| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU shows the average busy percentage across both P4 cores over the last sample window (typically a few seconds), plus per-core busy% (`C0` / `C1`) on the Info page and web Hardware / System Health lines. The web dashboard EMA-smooths the average so a hard page refresh does not briefly flash a reconnect spike; per-core values are the raw windowed samples. |
 | SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9). The touchscreen Info page shows card total plus used/free in MB **and percent**, and whether a `backup.json` is present. |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
 | System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 = humidity sensors detected on the I2C header. |
@@ -908,7 +911,7 @@ starts open (fan stays off until Fan Relay Enabled and the compressor call for i
 | Door (sensor, light, hold compressor) | Settings 6/8 | Door |
 | Probes & Sensors | Settings 7/8 | Probes & Sensors |
 | Notifications | — (web only; no keyboard on LVGL) | Alarms & Notify tab |
-| Data & SD Card | Info (status + Backup/Restore) | SD Card tab (full file list) |
+| Data & SD Card | Info (status + Backup/Restore) | SD Card tab (retention setting + file list) |
 | Events (live log) | — (home alarms cover live status) | Events tab |
 | Wireless | Info (SSID/signal/IP only) | Wireless tab (change Wi‑Fi) |
 | Access Control & Security | Settings PIN entry | Login; PIN on Hardware tab |

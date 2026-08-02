@@ -173,6 +173,9 @@ substitutions:
   # Speaker volume as percent of the ES8311 register scale (50–90). 85 matches
   # the measured on-board level; the media player clamps to the same window.
   default_audio_volume_pct:    "85"
+  # Keep the last N daily /sdcard/YYYY-MM-DD.csv temperature logs (7–365).
+  # Pruned on mount / auto-remount and at most once per calendar day.
+  default_sd_temp_log_retention_days: "60"
   # ── Phase 3: Defrost scheduling & probe health ────────────────────
   defrost_interval_h:  "8"      # hours between defrost cycles
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
@@ -259,6 +262,8 @@ esphome:
             // operator presses Restore All Settings from SD.
             if (p4_sd_mount()) {
                 id(sd_card_ok) = true;
+                p4_sd_prune_temp_logs_if_due(
+                    (int) id(ctl_sd_temp_log_retention_days), true);
                 size_t backup_size = 0;
                 if (p4_sd_backup_present(&backup_size)) {
                     ESP_LOGI("sd", "Settings backup on card (%u bytes) — press "
@@ -1949,6 +1954,30 @@ sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 13
 
+  - platform: template
+    name: "CPU Usage Core 0"
+    id: cpu_usage_core0_pct
+    lambda: 'return p4_cpu_usage_core_pct(0);'
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 5s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 14
+
+  - platform: template
+    name: "CPU Usage Core 1"
+    id: cpu_usage_core1_pct
+    lambda: 'return p4_cpu_usage_core_pct(1);'
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 5s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 15
+
   - platform: uptime
     name: "System Uptime"
     id: system_uptime
@@ -3282,6 +3311,30 @@ number:
       - lambda: |-
           id(ctl_smart_dwell_min) = x;
 
+      - script.execute: persist_config_to_nvs
+
+  # How many daily YYYY-MM-DD.csv temperature logs to keep on the SD card.
+  # Prune runs on mount / remount, once per day while the card is OK, and
+  # immediately when this value changes. events.csv / nodate.csv / backup.json
+  # are never auto-deleted by this setting.
+  - platform: template
+    id: sd_temp_log_retention_days
+    name: "SD Temp Log Retention (days)"
+    icon: "mdi:calendar-clock"
+    unit_of_measurement: "d"
+    min_value: 7
+    max_value: 365
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_system_info
+      sorting_weight: 25
+    lambda: 'return id(ctl_sd_temp_log_retention_days);'
+    set_action:
+      - lambda: |-
+          id(ctl_sd_temp_log_retention_days) = x;
+          if (id(sd_card_ok))
+              p4_sd_prune_temp_logs_if_due((int) x, true);
       - script.execute: persist_config_to_nvs
 ##############################################################################
 # Text — web-side "Change PIN" control (touchscreen has its own keypad, see
@@ -5046,11 +5099,17 @@ interval:
           if (!id(sd_card_ok) && p4_sd_mount()) {
               id(sd_card_ok) = true;
               ESP_LOGI("ctl", "SD card auto-remounted successfully");
+              p4_sd_prune_temp_logs_if_due(
+                  (int) id(ctl_sd_temp_log_retention_days), true);
               p4_sd_log_event("SD_REMOUNTED", "auto");
               if (id(ctl_wifi_connected) && id(input_ntfy_enabled)) {
                   id(ntfy_sd_recovered_request).trigger();
               }
               id(ntfy_sd_failure_sent) = false;
+          } else if (id(sd_card_ok)) {
+              // At most once per local calendar day (see p4_logging.h).
+              p4_sd_prune_temp_logs_if_due(
+                  (int) id(ctl_sd_temp_log_retention_days), false);
           }
 
 ##############################################################################
@@ -5271,6 +5330,12 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
+
+  # Keep the last N daily /sdcard/YYYY-MM-DD.csv temperature logs.
+  - id: ctl_sd_temp_log_retention_days
+    type: float
+    restore_value: yes
+    initial_value: ${default_sd_temp_log_retention_days}
 
   # Alarm state tracking for ntfy edge detection (avoid repeat notifications)
   - id: ntfy_alarm_hi_sent
@@ -11260,6 +11325,7 @@ script:
           input_defrost_term_temp_enabled->update();
           input_defrost_drip_enabled->update();
           input_smart_defrost_enabled->update();
+          ctl_sd_temp_log_retention_days->update();
           if (esphome::global_preferences != nullptr)
             esphome::global_preferences->sync();
 

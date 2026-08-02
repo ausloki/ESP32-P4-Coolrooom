@@ -847,7 +847,8 @@
                 <div class="adv-settings-host"></div>
             </div>
 
-            <div id="tab-sd" class="settings-tab-panel hidden">
+            <div id="tab-sd" class="settings-tab-panel hidden" data-adv-group="Data & SD Card">
+                <div class="adv-settings-host" style="margin-bottom: 16px;"></div>
                 <div class="sd-stats" id="sdStatsGrid">
                     <div class="sd-stat"><div class="label">Status</div><div class="value" id="sdStatMounted">—</div></div>
                     <div class="sd-stat"><div class="label">Card</div><div class="value" id="sdStatCard">—</div></div>
@@ -1178,9 +1179,14 @@
             cpuUsageEma = alpha * raw + (1 - alpha) * cpuUsageEma;
             return cpuUsageEma;
         }
-        function formatCpuUsagePct(raw) {
+        function formatCpuUsagePct(raw, core0, core1) {
             const v = smoothCpuUsagePct(raw);
-            return Number.isFinite(v) ? `${Math.round(v)}%` : '--';
+            if (!Number.isFinite(v)) return '--';
+            const avg = `${Math.round(v)}%`;
+            const c0 = Number.isFinite(core0) ? Math.round(core0) : null;
+            const c1 = Number.isFinite(core1) ? Math.round(core1) : null;
+            if (c0 !== null && c1 !== null) return `${avg} (C0:${c0}% C1:${c1}%)`;
+            return avg;
         }
         let eventSource = null;
         let dashboardRefreshTimer = null;
@@ -1852,6 +1858,8 @@
             'sensor-external_humidity__sht20_': 'ext_humidity',
             'sensor-free_heap__kb_': 'heap_free_kb',
             'sensor-cpu_usage': 'cpu_usage_pct',
+            'sensor-cpu_usage_core_0': 'cpu_usage_core0_pct',
+            'sensor-cpu_usage_core_1': 'cpu_usage_core1_pct',
             'number-high_temp_alarm_delta____c_': 'alarm_high',
             'number-low_temp_alarm_delta____c_': 'alarm_low',
             'number-compressor_differential____c_': 'comp_diff',
@@ -2142,7 +2150,8 @@
             rs485Html += `Time: <span class="status-badge ${data.system_time_ok ? 'status-ok' : 'status-error'}">${data.system_time_ok ? '✓' : '✗'}</span>`;
             setHtml('rs485Status', rs485Html);
 
-            const cpuTxt = formatCpuUsagePct(data.cpu_usage_pct);
+            const cpuTxt = formatCpuUsagePct(
+                data.cpu_usage_pct, data.cpu_usage_core0_pct, data.cpu_usage_core1_pct);
             const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>CPU: ${cpuTxt}<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
             setHtml('memoryStatus', memHtml);
 
@@ -2196,7 +2205,8 @@
             setText('hwChipTemp',
                 fmtTemp(data.chip_temp));
             setText('hwHeap', data.heap_free_kb ? `${data.heap_free_kb} KB` : '--');
-            setText('hwCpu', formatCpuUsagePct(data.cpu_usage_pct));
+            setText('hwCpu', formatCpuUsagePct(
+                data.cpu_usage_pct, data.cpu_usage_core0_pct, data.cpu_usage_core1_pct));
             setText('hwPsram', data.psram_free_kb ? `${data.psram_free_kb} KB` : '--');
             if (typeof data.uptime_seconds === 'number' && !isNaN(data.uptime_seconds)) {
                 const d = Math.floor(data.uptime_seconds / 86400);
@@ -2676,6 +2686,13 @@
                       help: 'Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point / frost-rate triggers and auto-calibrate need this enabled. SHT31 is not a substitute for Probe 1.' },
                     { type: 'switch', entity: 'external_sht20_sensor_enabled', name: 'External SHT20 Sensor Enabled', label: 'External SHT20 Sensor Enabled',
                       help: 'Whether the external (ambient) SHT20 temperature/humidity sensor is read.' },
+                ],
+            },
+            {
+                title: 'Data & SD Card',
+                fields: [
+                    { type: 'number', entity: 'sd_temp_log_retention__days_', name: 'SD Temp Log Retention (days)', label: 'SD Temp Log Retention (days)', min: 7, max: 365, step: 1,
+                      help: 'How many daily temperature log files (/sdcard/YYYY-MM-DD.csv) to keep. Older dated files are deleted automatically on mount, after auto-remount, once per day while the card is OK, and immediately when you change this value. Does not delete events.csv, nodate.csv, or backup.json. Default 60. Separately, log and backup writes are skipped when free space drops below 32 MB (card stays mounted — full is not the same as failed).' },
                 ],
             },
         ];

@@ -231,10 +231,11 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 ## 2026-08-01 (Afternoon) — CPU Utilisation on Info + Web
 
 - Enabled `CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS` (P4 is non-SMP FreeRTOS).
-- `p4_cpu_usage_pct()` / `p4_fmt_cpu_usage()` in `p4_helpers.h`: windowed busy% from
-  per-core idle counters, averaged across both HP cores. First sample returns NAN.
-- New diagnostic sensor `cpu_usage_pct` (5 s). LVGL Info page: **CPU** row under Memory.
-- Web: System Health + Hardware Device Status show CPU %. USER_MANUAL §4.12 updated.
+- `p4_cpu_usage_pct()` / `p4_cpu_usage_core_pct()` / `p4_fmt_cpu_usage()` in `p4_helpers.h`:
+  shared windowed sampler for average + per-core busy% (C0/C1). First sample returns NAN.
+- Diagnostic sensors `cpu_usage_pct`, `cpu_usage_core0_pct`, `cpu_usage_core1_pct` (5 s).
+  LVGL Info: `CPU: 45%  C0:40% C1:50%`. Web Hardware / System Health show avg + cores.
+- USER_MANUAL §4.12 updated.
 
 ---
 

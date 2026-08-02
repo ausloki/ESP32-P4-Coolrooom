@@ -651,6 +651,9 @@
         { type: "switch", entity: "internal_sht31_sensor_enabled", label: "Internal SHT31 Sensor Enabled", def: true, help: "Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point / frost-rate triggers and auto-calibrate need this enabled. SHT31 is not a substitute for Probe 1." },
         { type: "switch", entity: "external_sht20_sensor_enabled", label: "External SHT20 Sensor Enabled", def: true, help: "Whether the external (ambient) SHT20 temperature/humidity sensor is read." },
       ]},
+      { title: "Data & SD Card", fields: [
+        { type: "number", entity: "sd_temp_log_retention__days_", label: "SD Temp Log Retention (days)", def: 60, help: "How many daily temperature log files (/sdcard/YYYY-MM-DD.csv) to keep. Older dated files are pruned on mount / remount and once per day. Does not delete events.csv, nodate.csv, or backup.json. Log and backup writes are skipped below 32 MB free." },
+      ]},
     ];
 
     function renderAdvancedSettings() {
