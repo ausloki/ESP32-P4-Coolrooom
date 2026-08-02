@@ -1343,6 +1343,99 @@
             }
         }
 
+        // ESPHome's SSE /events stream publishes each entity once on connect, but
+        // config switches (Audio Speak toggles, etc.) often do NOT emit a follow-up
+        // `state` event after POST …/toggle. Without a refresh, liveEntities stays
+        // stale and the ON/OFF buttons never update even though the device flipped.
+        //
+        // Also: a GET issued immediately after toggle still returns the *old* state
+        // for ~100–200 ms (template switch publish lag). Passing expectOn retries
+        // until the device catches up so we don't clobber the optimistic paint.
+        async function refreshSwitchFromDevice(entityName, expectOn) {
+            const path = `/switch/${encodeURIComponent(entityName)}`;
+            const waitsMs = (expectOn === undefined) ? [0] : [120, 200, 350, 500];
+            for (let attempt = 0; attempt < waitsMs.length; attempt++) {
+                if (waitsMs[attempt] > 0) {
+                    await new Promise((r) => setTimeout(r, waitsMs[attempt]));
+                }
+                let got = null;
+                for (const url of buildApiCandidates(path)) {
+                    try {
+                        const response = await fetchWithTimeout(url, 2500);
+                        if (!response.ok) continue;
+                        const text = await response.text();
+                        ingestEntityPayload(text);
+                        try { got = JSON.parse(text); } catch (e) { got = null; }
+                        break;
+                    } catch (error) {
+                        // try next candidate
+                    }
+                }
+                if (!got) continue;
+                if (expectOn === undefined || entityIsOn(got) === !!expectOn) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function paintAdvSwitchButton(objectId, isOn) {
+            const btn = document.getElementById(`adv_${objectId}_btn`);
+            if (!btn) return;
+            btn.textContent = isOn ? 'ON' : 'OFF';
+            btn.classList.toggle('is-on', !!isOn);
+        }
+
+        function paintHaApiButton(isOn) {
+            const haBtn = document.getElementById('haApiToggleBtn');
+            if (!haBtn) return;
+            haBtn.textContent = isOn ? 'ENABLED' : 'DISABLED';
+            haBtn.classList.toggle('is-on', !!isOn);
+        }
+
+        function paintRelayEnableButton(key, isOn) {
+            const btn = document.getElementById(`relay_en_${key}_btn`);
+            if (!btn) return;
+            btn.textContent = isOn ? 'ENABLED' : 'DISABLED';
+            btn.classList.toggle('is-on', !!isOn);
+        }
+
+        function paintLightIcon(isOn) {
+            setTileIconState('iconLight', isOn ? 'is-warn' : null);
+            const lightEl = document.getElementById('iconLight');
+            if (lightEl && currentRole === 'operator') {
+                lightEl.title = isOn ? 'Turn light off' : 'Turn light on';
+            }
+        }
+
+        function setLiveSwitchOptimistic(objectId, name, isOn) {
+            const id = `switch-${objectId}`;
+            const prev = liveEntities.get(id) || {};
+            const next = Object.assign({}, prev, {
+                id,
+                name: name || prev.name || '',
+                value: !!isOn,
+                state: isOn ? 'ON' : 'OFF',
+            });
+            liveEntities.set(id, next);
+            if (next.name) liveEntities.set(`name:${next.name}`, next);
+        }
+
+        function advSwitchObjectIdForName(entityName) {
+            for (const group of ADVANCED_SETTINGS_GROUPS) {
+                for (const f of group.fields) {
+                    if (f.type === 'switch' && (f.name === entityName || f.label === entityName)) {
+                        return f.entity;
+                    }
+                }
+            }
+            return null;
+        }
+
+        function relayMetaForName(entityName) {
+            return RELAY_OUTPUTS.find((r) => r.name === entityName) || null;
+        }
+
         function scheduleDashboardRefresh(immediate = false) {
             // Coalesce bursts of SSE events into one render after the stream
             // settles — BUT the initial state_detail_all flood used to keep
@@ -1931,18 +2024,10 @@
             if (inner) inner.setAttribute('d', gaugeArcPath(GAUGE_RADII.inner, GAUGE_START_ANGLE, fullEnd));
         }
 
-        // Same alarm-relative color coding as the LVGL center label: red above
-        // setpoint+alarm_high, blue below setpoint-alarm_low, green otherwise.
-        // The coolroom *arc* stays col_blue — only the label recolors.
-        function temperatureStateColor(data) {
-            const hasTemp = typeof data.temperature === 'number' && !isNaN(data.temperature);
-            if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_high === 'number' && data.temperature > data.setpoint + data.alarm_high) {
-                return '#FF453A'; // col_red
-            }
-            if (hasTemp && typeof data.setpoint === 'number' && typeof data.alarm_low === 'number' && data.temperature < data.setpoint - data.alarm_low) {
-                return '#0A84FF'; // col_blue
-            }
-            return '#30D158'; // col_green (default/healthy, including when temp is unknown)
+        // Centre coolroom readout stays col_blue (same as the outer arc) on web
+        // and LVGL — alarm state is the status line / bell, not this label.
+        function temperatureStateColor(_data) {
+            return '#0A84FF'; // col_blue
         }
 
         function updateGauge(data) {
@@ -2146,7 +2231,7 @@
                         <td>${relay.label}</td>
                         <td><span class="status-badge ${stateClass}">${stateText}</span></td>
                         <td>
-                            <button class="adv-switch-btn${enabled ? ' is-on' : ''}"${disabledAttr}
+                            <button id="relay_en_${relay.key}_btn" class="adv-switch-btn${enabled ? ' is-on' : ''}"${disabledAttr}
                                     onclick="toggleRelayEnable('${nameEsc}')">${btnLabel}</button>
                         </td>
                     </tr>`;
@@ -2158,12 +2243,38 @@
                 showAlert('warning', 'Login required to change relay enables');
                 return;
             }
-            const ok = await postWithFallback(entityActionPath('switch', entityName, 'toggle'));
-            if (!ok) {
-                showAlert('error', `Could not reach the device to change ${entityName}`);
-                return;
+            const meta = relayMetaForName(entityName);
+            const objectId = meta ? `${meta.key}_relay_enabled` : null;
+            const btn = meta ? document.getElementById(`relay_en_${meta.key}_btn`) : null;
+            if (btn && btn.dataset.toggleBusy === '1') return;
+            if (btn) {
+                if (btn.disabled) return;
+                btn.dataset.toggleBusy = '1';
             }
-            fetchStatus();
+            const prev = objectId
+                ? liveEntities.get(`switch-${objectId}`)
+                : [...liveEntities.values()].find((e) => e && e.name === entityName);
+            const prevOn = prev ? entityIsOn(prev) : undefined;
+            const wantOn = prevOn !== undefined ? !prevOn : undefined;
+            if (objectId && wantOn !== undefined) {
+                setLiveSwitchOptimistic(objectId, entityName, wantOn);
+                if (meta) paintRelayEnableButton(meta.key, wantOn);
+            }
+            try {
+                const ok = await postWithFallback(entityActionPath('switch', entityName, 'toggle'));
+                if (!ok) {
+                    if (objectId && prevOn !== undefined) {
+                        setLiveSwitchOptimistic(objectId, entityName, prevOn);
+                        if (meta) paintRelayEnableButton(meta.key, prevOn);
+                    }
+                    showAlert('error', `Could not reach the device to change ${entityName}`);
+                    return;
+                }
+                await refreshSwitchFromDevice(entityName, wantOn);
+                fetchStatus();
+            } finally {
+                if (btn) delete btn.dataset.toggleBusy;
+            }
         }
 
         function updateWifiPanel(data) {
@@ -2184,13 +2295,33 @@
                 showAlert('warning', 'Login required to change Home Assistant API');
                 return;
             }
-            const ok = await postWithFallback(
-                entityActionPath('switch', 'Home Assistant API Enabled', 'toggle'));
-            if (!ok) {
-                showAlert('error', 'Could not reach the device to change Home Assistant API');
-                return;
+            const haId = 'home_assistant_api_enabled';
+            const haBtn = document.getElementById('haApiToggleBtn');
+            if (haBtn && haBtn.dataset.toggleBusy === '1') return;
+            if (haBtn) haBtn.dataset.toggleBusy = '1';
+            const prev = liveEntities.get(`switch-${haId}`);
+            const prevOn = prev ? entityIsOn(prev) : undefined;
+            const wantOn = prevOn !== undefined ? !prevOn : undefined;
+            if (wantOn !== undefined) {
+                setLiveSwitchOptimistic(haId, 'Home Assistant API Enabled', wantOn);
+                paintHaApiButton(wantOn);
             }
-            fetchStatus();
+            try {
+                const ok = await postWithFallback(
+                    entityActionPath('switch', 'Home Assistant API Enabled', 'toggle'));
+                if (!ok) {
+                    if (prevOn !== undefined) {
+                        setLiveSwitchOptimistic(haId, 'Home Assistant API Enabled', prevOn);
+                        paintHaApiButton(prevOn);
+                    }
+                    showAlert('error', 'Could not reach the device to change Home Assistant API');
+                    return;
+                }
+                await refreshSwitchFromDevice('Home Assistant API Enabled', wantOn);
+                fetchStatus();
+            } finally {
+                if (haBtn) delete haBtn.dataset.toggleBusy;
+            }
         }
 
         function formatCountdown(seconds) {
@@ -2260,14 +2391,30 @@
                 return;
             }
             const btn = document.getElementById('iconLight');
-            if (btn) btn.disabled = true;
-            const ok = await postWithFallback(entityActionPath('switch', 'Light Relay', 'toggle'));
-            if (btn) btn.disabled = false;
-            if (!ok) {
-                showAlert('error', 'Could not reach the device to toggle the light');
-                return;
+            if (btn && btn.dataset.toggleBusy === '1') return;
+            if (btn) btn.dataset.toggleBusy = '1';
+            const prev = liveEntities.get('switch-light_relay');
+            const prevOn = prev ? entityIsOn(prev) : undefined;
+            const wantOn = prevOn !== undefined ? !prevOn : undefined;
+            if (wantOn !== undefined) {
+                setLiveSwitchOptimistic('light_relay', 'Light Relay', wantOn);
+                paintLightIcon(wantOn);
             }
-            fetchStatus();
+            try {
+                const ok = await postWithFallback(entityActionPath('switch', 'Light Relay', 'toggle'));
+                if (!ok) {
+                    if (prevOn !== undefined) {
+                        setLiveSwitchOptimistic('light_relay', 'Light Relay', prevOn);
+                        paintLightIcon(prevOn);
+                    }
+                    showAlert('error', 'Could not reach the device to toggle the light');
+                    return;
+                }
+                await refreshSwitchFromDevice('Light Relay', wantOn);
+                fetchStatus();
+            } finally {
+                if (btn) delete btn.dataset.toggleBusy;
+            }
         }
 
         // Touchscreen PIN change — the other control wired to a real endpoint.
@@ -2777,12 +2924,35 @@
                 showAlert('warning', `Login required to change ${label}`);
                 return;
             }
-            const ok = await postWithFallback(entityActionPath('switch', entityName, 'toggle'));
-            if (!ok) {
-                showAlert('error', `Could not reach the device to change ${label}`);
-                return;
+            const objectId = advSwitchObjectIdForName(entityName);
+            const btn = objectId ? document.getElementById(`adv_${objectId}_btn`) : null;
+            // Ignore re-entry while a toggle is still confirming — rapid clicks were
+            // flipping the device multiple times and racing the stale GET.
+            if (btn && btn.dataset.toggleBusy === '1') return;
+            if (btn) btn.dataset.toggleBusy = '1';
+            const prev = objectId ? liveEntities.get(`switch-${objectId}`) : null;
+            const prevOn = prev ? entityIsOn(prev) : undefined;
+            const wantOn = prevOn !== undefined ? !prevOn : undefined;
+            // Optimistic paint — SSE does not reliably re-emit these config switches.
+            if (objectId && wantOn !== undefined) {
+                setLiveSwitchOptimistic(objectId, entityName, wantOn);
+                paintAdvSwitchButton(objectId, wantOn);
             }
-            fetchStatus();
+            try {
+                const ok = await postWithFallback(entityActionPath('switch', entityName, 'toggle'));
+                if (!ok) {
+                    if (objectId && prevOn !== undefined) {
+                        setLiveSwitchOptimistic(objectId, entityName, prevOn);
+                        paintAdvSwitchButton(objectId, prevOn);
+                    }
+                    showAlert('error', `Could not reach the device to change ${label}`);
+                    return;
+                }
+                await refreshSwitchFromDevice(entityName, wantOn);
+                fetchStatus();
+            } finally {
+                if (btn) delete btn.dataset.toggleBusy;
+            }
         }
 
         // Populates every rendered Advanced Settings field from the latest poll.

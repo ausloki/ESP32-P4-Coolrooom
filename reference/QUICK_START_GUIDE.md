@@ -93,10 +93,15 @@ and stops during defrost/drip. Same toggle on touchscreen Settings 1/8, web Comp
 Hardware → Fan.
 
 **Celsius / Fahrenheit:** use **Temperature Display Unit** on touchscreen Settings 7/8
-or web **Probes & Sensors**. Celsius is the default. The choice changes LVGL/web readouts,
-not the controller's Celsius calculations or saved thresholds. It is also available in
-Home Assistant as `select.temperature_display_unit`; HA converts its temperature sensors
-according to HA's own unit-system setting.
+or web **Probes & Sensors**. Celsius is the default. The choice changes LVGL/web readouts
+(including the large home-gauge centre temperature on both the classic and swipe-up
+cooling views), not the controller's Celsius calculations or saved thresholds. It is also
+available in Home Assistant as `select.temperature_display_unit`; HA converts its
+temperature sensors according to HA's own unit-system setting.
+
+**Home gauge:** the classic three-arc view (coolroom / setpoint / ambient) is the default.
+Swipe **up** on the centre for a cooling view (set vs current on one ring with Nest-style
+handles); swipe **down** to return. Centre temperature stays blue like the coolroom arc.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before

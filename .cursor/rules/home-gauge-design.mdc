@@ -15,9 +15,11 @@ aligned**. Change one → update the other in the same change.
   CURRENT/SET/AMB ring labels.
 - **Colours match the sensor text**: coolroom outer = `col_blue` `#0A84FF`,
   setpoint middle = `col_cyan` `#00BCD4`, ambient inner = `col_pink` `#FF1493`.
-  Dim track + bright fill (same hue at lower opacity). The coolroom *value arc*
-  stays blue; only the centre temperature *label* recolors (green / blue / red
-  for normal / low / high).
+  Dim track + bright fill (same hue at lower opacity). The coolroom centre
+  temperature *label* stays `col_blue` (same as the outer arc) on both classic
+  and alt home views — alarm state is shown by the status line / bell, not by
+  recoloring the big readout. Unit follows **Temperature Display Unit** (°C/°F);
+  `font_huge` must include `F` for Fahrenheit.
 - **Dial range** is substitutions `dial_min_c` / `dial_max_c` in
   `esp32-p4-coolroom.yaml` (currently **−10 … +30 °C**). Bottom-left end of the
   horseshoe = dial floor. Setpoint number `min_value` is locked to `dial_min_c`.
@@ -31,6 +33,18 @@ aligned**. Change one → update the other in the same change.
 - **Web gauge size**: wrap `min(420px, 88vw)`; SVG radii **140 / 120 / 100**,
   stroke 12 (same sweep as LVGL). No bottom guest login banner — header **🔐 Login**
   unlocks settings.
+
+## Alternate LVGL view (glass only)
+
+Swipe up on the centre gauge for a second horseshoe: **no middle setpoint ring**.
+Cooling Nest-style on the outer radius: cyan fill to setpoint, blue current
+overlay (`home2_set_arc` / `home2_temp_arc`, stroke **22**), cyan delta band,
+**large** knob at setpoint and **small** at current (`p4_ui_update_home2_cooling`).
+Ambient pink at **384** / stroke 16 (small daylight gap to outer). Web stays on the
+classic three-arc gauge.
+
+**Revisit when RTD / ambient hardware is on the bench:** prove Nest knobs + delta
+band with live temps, C/F unit switch on both home views, and scroll snap feel.
 
 ## Hard rule — do not reintroduce translucent chrome
 

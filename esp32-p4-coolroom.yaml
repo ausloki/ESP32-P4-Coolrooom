@@ -2009,29 +2009,20 @@ sensor:
           text: !lambda |-
             return p4_fmt_temp(
                 x, id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_coolroom_temp_large_v2
+          text: !lambda |-
+            return p4_fmt_temp(
+                x, id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.arc.update:
           id: home_temp_arc
           value: !lambda |-
             return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});
-      - if:
-          condition:
-            lambda: 'return p4_rtd_valid(x) && x > id(ctl_setpoint) + id(ctl_alarm_high_delta);'
-          then:
-            - lvgl.label.update:
-                id: lbl_coolroom_temp_large
-                text_color: col_red
-          else:
-            - if:
-                condition:
-                  lambda: 'return p4_rtd_valid(x) && x < id(ctl_setpoint) - id(ctl_alarm_low_delta);'
-                then:
-                  - lvgl.label.update:
-                      id: lbl_coolroom_temp_large
-                      text_color: col_blue
-                else:
-                  - lvgl.label.update:
-                      id: lbl_coolroom_temp_large
-                      text_color: col_green
+      - lambda: |-
+          p4_ui_update_home2_cooling(
+              id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
+              id(home2_knob_set), id(home2_knob_cur),
+              x, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
 
   - platform: template
     id: probe2_temp
@@ -2195,6 +2186,9 @@ sensor:
                    p4_fmt_humidity(id(probe_external_humidity).state);
       - lvgl.arc.update:
           id: home_ambient_arc
+          value: !lambda 'return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
+      - lvgl.arc.update:
+          id: home2_ambient_arc
           value: !lambda 'return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
 
   - platform: template
@@ -2746,9 +2740,20 @@ number:
             char buf[12];
             snprintf(buf, sizeof(buf), "Set: %.1f\u00b0C", x);
             return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_setpoint_status_v2
+          text: !lambda |-
+            char buf[12];
+            snprintf(buf, sizeof(buf), "Set: %.1f\u00b0C", x);
+            return std::string(buf);
       - lvgl.arc.update:
           id: home_setpoint_arc
           value: !lambda 'return p4_ui_setpoint_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
+      - lambda: |-
+          p4_ui_update_home2_cooling(
+              id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
+              id(home2_knob_set), id(home2_knob_cur),
+              id(probe1_temp).state, x, ${dial_min_c}, ${dial_max_c});
 
   - platform: template
     id: compressor_differential
@@ -4715,12 +4720,14 @@ interval:
           std::string st = p4_ui_home_status_text(
               st_in, id(ui_status_rotate_idx), id(ui_status_rotate_ms));
           lv_label_set_text(id(lbl_status_text), st.c_str());
+          lv_label_set_text(id(lbl_status_text_v2), st.c_str());
           const bool faultish = p4_ui_home_status_is_fault(st_in);
           lv_color_t col = id(col_green);
           if (faultish) col = id(col_red);
           else if (st_in.defrost || st_in.lockout) col = id(col_orange);
           else if (st_in.compressor_on) col = id(col_blue);
           lv_obj_set_style_text_color(id(lbl_status_text), col, 0);
+          lv_obj_set_style_text_color(id(lbl_status_text_v2), col, 0);
           if (id(status_text).state != st) id(status_text).publish_state(st);
       # Home setpoint readout. Previously updated only inside the Setpoint
       # number's set_action, so it kept its "Set: --°C" placeholder after every
@@ -4732,10 +4739,20 @@ interval:
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
             return "Set: " + p4_fmt_temp(id(ctl_setpoint), f);
+      - lvgl.label.update:
+          id: lbl_setpoint_status_v2
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return "Set: " + p4_fmt_temp(id(ctl_setpoint), f);
       - lvgl.arc.update:
           id: home_setpoint_arc
           value: !lambda |-
             return p4_ui_setpoint_to_arc_pct(id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
+      - lambda: |-
+          p4_ui_update_home2_cooling(
+              id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
+              id(home2_knob_set), id(home2_knob_cur),
+              id(probe1_temp).state, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
       - lvgl.widget.update:
           id: lbl_home_alarm_banner
           hidden: !lambda |-
@@ -5994,22 +6011,22 @@ font:
     id: font_huge
     size: 80
     # Include '*' so PIN masking (p4_pin_masked) actually draws.
-    # °C required by p4_fmt_temp() on the home centre readout.
-    glyphs: "0123456789.-+NA *°C"
+    # °C / °F required by p4_fmt_temp() on the home centre readout.
+    glyphs: "0123456789.-+NAF *°C"
   - file: "gfonts://Roboto"
     id: font_large
     size: 28
     # '|' (memory line) and '—' (info/status text) render as tofu boxes when
     # missing — keep them in every text font that shows generated strings.
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|—"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|^—"
   - file: "gfonts://Roboto"
     id: font_medium
     size: 20
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|—"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|^—"
   - file: "gfonts://Roboto"
     id: font_small
     size: 15
-    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|—"
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-:/%+°()*[],'?!#_=&@<>|^—"
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: font_mdi
     size: 28
@@ -6164,8 +6181,10 @@ lvgl:
       bg_color: col_bg
       width: 1024
       height: 600
-      scrollable: true
-      scrollbar_mode: "AUTO"
+      # Centre gauge scrolls between classic / delta views; page itself stays put
+      # so the left icon rail and tab bar do not move.
+      scrollable: false
+      scrollbar_mode: "OFF"
       widgets:
         # Header: date left; 12h time (same size/colour) just left of WiFi icon.
         - obj:
@@ -6373,7 +6392,10 @@ lvgl:
                   ESP_LOGI("ui", "Alarm silenced from home screen (mask=0x%02X)",
                            id(ctl_alarm_silenced_mask));
 
-        # Center Arc Gauge Container - Horseshoe Meter Display
+        # Center Arc Gauge — vertical snap-scroll between two horseshoe views.
+        #   View 1 (y=0): classic coolroom / setpoint / ambient (unchanged).
+        #   View 2 (y=480): coolroom + ambient only; cyan delta overlay on the
+        #   coolroom ring spans current↔setpoint (no knobs/dots).
         - obj:
             x: 80
             y: 64
@@ -6382,183 +6404,373 @@ lvgl:
             bg_color: col_bg
             border_width: 0
             radius: 0
-            scrollable: false
+            scrollable: true
+            scroll_dir: VER
+            scroll_snap_y: START
             scrollbar_mode: "OFF"
-            # Let empty gauge chrome pass hits through; child buttons/labels
-            # remain clickable. Without this the 864×496 box eats taps that
-            # should reach the left icon rail near x≈80.
-            clickable: false
+            # Must be clickable so vertical drags scroll the two gauge pages.
+            # Left icon rail ends at x≈81 — only a 1 px overlap with this box.
+            clickable: true
             widgets:
-              # Home gauge (2026-08-01)
-              #   - Orientation unchanged: 150→30 (gap at 6 o'clock).
-              #   - Rings only: dim track + bright value indicator, drawn
-              #     straight onto col_bg. Every decorative layer that was
-              #     tried here has been removed — the 448 white rim arc and
-              #     the frosted underlay plate both composited to grey over
-              #     col_bg (#FFFFFF at 22% → ~#4E4E4E; col_panel at 42% →
-              #     ~#232325) and read as a ring / disc behind the arcs.
-              #     A radial tick scale (LVGL meter) was tried and dropped
-              #     as too busy. Don't reintroduce translucent backdrops.
-              #   - Ring colours match their sensor: blue coolroom, cyan
-              #     setpoint, pink ambient (same as the text readouts).
-              #   - Ring stack 440 / 396 / 352, arc_width 14 → 8px daylight
-              #     between rings. 440 leaves 20px top+bottom margin in the
-              #     480-tall container, and the outer edge (centre+220) still
-              #     clears the right-hand labels (centred at centre+328).
-              #   - Left rail + touch targets untouched (container stays
-              #     x:80, clickable false).
-
-              # Arc 1: Coolroom temp — dim blue track + bright fill
-              - arc:
-                  id: home_temp_arc
-                  align: CENTER
-                  y: 0
-                  width: 440
-                  height: 440
-                  bg_opa: TRANSP
-                  arc_color: col_blue
-                  arc_opa: 28%
-                  arc_width: 14
-                  arc_rounded: true
-                  rotation: 0
-                  start_angle: 150
-                  end_angle: 30
-                  value: 50
-                  indicator:
-                    arc_color: col_blue
-                    arc_opa: 92%
-                    arc_width: 14
-                    arc_rounded: true
-                  knob:
-                    bg_opa: TRANSP
-
-              # Arc 2: Setpoint — dim cyan track + bright fill
-              - arc:
-                  id: home_setpoint_arc
-                  align: CENTER
-                  y: 0
-                  width: 396
-                  height: 396
-                  bg_opa: TRANSP
-                  arc_color: col_cyan
-                  arc_opa: 28%
-                  arc_width: 14
-                  arc_rounded: true
-                  rotation: 0
-                  start_angle: 150
-                  end_angle: 30
-                  value: 50
-                  indicator:
-                    arc_color: col_cyan
-                    arc_opa: 92%
-                    arc_width: 14
-                    arc_rounded: true
-                  knob:
-                    bg_opa: TRANSP
-
-              # Arc 3: Ambient — dim pink track + bright fill
-              - arc:
-                  id: home_ambient_arc
-                  align: CENTER
-                  y: 0
-                  width: 352
-                  height: 352
-                  bg_opa: TRANSP
-                  arc_color: col_pink
-                  arc_opa: 28%
-                  arc_width: 14
-                  arc_rounded: true
-                  rotation: 0
-                  start_angle: 150
-                  end_angle: 30
-                  value: 50
-                  indicator:
-                    arc_color: col_pink
-                    arc_opa: 92%
-                    arc_width: 14
-                    arc_rounded: true
-                  knob:
-                    bg_opa: TRANSP
-
-              # Center disc — same col_bg as the surrounding screen and no
-              # border, so the readout sits on flat background with nothing
-              # outlining it. Still opaque: it masks the inner stub of the
-              # ambient ring (radius 165 vs the ring's inner edge at 162).
+              # ── View 1: classic three-arc gauge ───────────────────────────
               - obj:
-                  align: CENTER
+                  x: 0
                   y: 0
-                  width: 330
-                  height: 330
-                  radius: 165
-                  border_width: 0
+                  width: 864
+                  height: 480
                   bg_color: col_bg
-                  bg_opa: COVER
+                  border_width: 0
+                  radius: 0
+                  scrollable: false
+                  scrollbar_mode: "OFF"
                   clickable: false
+                  widgets:
+                    # Home gauge (2026-08-01)
+                    #   - Orientation unchanged: 150→30 (gap at 6 o'clock).
+                    #   - Rings only: dim track + bright value indicator, drawn
+                    #     straight onto col_bg. Every decorative layer that was
+                    #     tried here has been removed — the 448 white rim arc and
+                    #     the frosted underlay plate both composited to grey over
+                    #     col_bg (#FFFFFF at 22% → ~#4E4E4E; col_panel at 42% →
+                    #     ~#232325) and read as a ring / disc behind the arcs.
+                    #     A radial tick scale (LVGL meter) was tried and dropped
+                    #     as too busy. Don't reintroduce translucent backdrops.
+                    #   - Ring colours match their sensor: blue coolroom, cyan
+                    #     setpoint, pink ambient (same as the text readouts).
+                    #   - Ring stack 440 / 396 / 352, arc_width 14 → 8px daylight
+                    #     between rings. 440 leaves 20px top+bottom margin in the
+                    #     480-tall container, and the outer edge (centre+220) still
+                    #     clears the right-hand labels (centred at centre+328).
+                    #   - Left rail + touch targets untouched (container stays
+                    #     x:80, clickable false).
 
-              # CENTER: Large temperature display
-              - label:
-                  id: lbl_coolroom_temp_large
-                  text: "--°C"
-                  align: CENTER
-                  y: -28
-                  text_font: font_huge
-                  text_color: col_blue
+                    # Arc 1: Coolroom temp — dim blue track + bright fill
+                    - arc:
+                        id: home_temp_arc
+                        align: CENTER
+                        y: 0
+                        width: 440
+                        height: 440
+                        bg_opa: TRANSP
+                        arc_color: col_blue
+                        arc_opa: 28%
+                        arc_width: 14
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_blue
+                          arc_opa: 92%
+                          arc_width: 14
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
 
-              # Setpoint label below temperature
-              - label:
-                  id: lbl_setpoint_status
-                  text: "Set: --°C"
-                  align: CENTER
-                  y: 48
-                  text_font: font_large
-                  text_color: col_cyan
+                    # Arc 2: Setpoint — dim cyan track + bright fill
+                    - arc:
+                        id: home_setpoint_arc
+                        align: CENTER
+                        y: 0
+                        width: 396
+                        height: 396
+                        bg_opa: TRANSP
+                        arc_color: col_cyan
+                        arc_opa: 28%
+                        arc_width: 14
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_cyan
+                          arc_opa: 92%
+                          arc_width: 14
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
 
-              # Status text (Running/Fault)
-              - label:
-                  id: lbl_status_text
-                  text: "OK"
-                  align: CENTER
-                  y: 86
-                  text_font: font_medium
-                  text_color: col_orange
+                    # Arc 3: Ambient — dim pink track + bright fill
+                    - arc:
+                        id: home_ambient_arc
+                        align: CENTER
+                        y: 0
+                        width: 352
+                        height: 352
+                        bg_opa: TRANSP
+                        arc_color: col_pink
+                        arc_opa: 28%
+                        arc_width: 14
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_pink
+                          arc_opa: 92%
+                          arc_width: 14
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
 
-              # RIGHT PANEL: Secondary Readings — nudged out so the larger
-              # outer rim (~448) keeps ~80px clearance from these labels.
-              - label:
-                  id: lbl_evap_temp_large
-                  text: "Evap\n--°C"
-                  align: CENTER
-                  x: 328
-                  y: 80
-                  text_font: font_small
-                  text_color: col_text
+                    # Center disc — same col_bg as the surrounding screen and no
+                    # border, so the readout sits on flat background with nothing
+                    # outlining it. Still opaque: it masks the inner stub of the
+                    # ambient ring (radius 165 vs the ring's inner edge at 162).
+                    - obj:
+                        align: CENTER
+                        y: 0
+                        width: 330
+                        height: 330
+                        radius: 165
+                        border_width: 0
+                        bg_color: col_bg
+                        bg_opa: COVER
+                        clickable: false
 
-              - label:
-                  id: lbl_int_humidity_large
-                  text: "Int --°C\n--%RH"
-                  align: CENTER
-                  x: 328
-                  y: 196
-                  text_font: font_small
-                  text_color: col_text
+                    # CENTER: Large temperature display
+                    - label:
+                        id: lbl_coolroom_temp_large
+                        text: "--°C"
+                        align: CENTER
+                        y: -28
+                        text_font: font_huge
+                        text_color: col_blue
 
-              - label:
-                  id: lbl_ext_humidity_large
-                  text: "Ext --°C\n--%RH"
-                  align: CENTER
-                  x: 328
-                  y: 312
-                  text_font: font_small
-                  text_color: col_pink
+                    # Setpoint label below temperature
+                    - label:
+                        id: lbl_setpoint_status
+                        text: "Set: --°C"
+                        align: CENTER
+                        y: 48
+                        text_font: font_large
+                        text_color: col_cyan
 
-              - label:
-                  id: lbl_power_info
-                  text: "Heap: ---"
-                  align: CENTER
-                  x: 328
-                  y: 428
-                  text_font: font_small
-                  text_color: col_subtext
+                    # Status text (Running/Fault)
+                    - label:
+                        id: lbl_status_text
+                        text: "OK"
+                        align: CENTER
+                        y: 86
+                        text_font: font_medium
+                        text_color: col_orange
+
+                    # RIGHT PANEL: Secondary Readings — nudged out so the larger
+                    # outer rim (~448) keeps ~80px clearance from these labels.
+                    - label:
+                        id: lbl_evap_temp_large
+                        text: "Evap\n--°C"
+                        align: CENTER
+                        x: 328
+                        y: 80
+                        text_font: font_small
+                        text_color: col_text
+
+                    - label:
+                        id: lbl_int_humidity_large
+                        text: "Int --°C\n--%RH"
+                        align: CENTER
+                        x: 328
+                        y: 196
+                        text_font: font_small
+                        text_color: col_text
+
+                    - label:
+                        id: lbl_ext_humidity_large
+                        text: "Ext --°C\n--%RH"
+                        align: CENTER
+                        x: 328
+                        y: 312
+                        text_font: font_small
+                        text_color: col_pink
+
+                    - label:
+                        id: lbl_power_info
+                        text: "Heap: ---"
+                        align: CENTER
+                        x: 328
+                        y: 428
+                        text_font: font_small
+                        text_color: col_subtext
+
+              # ── View 2: cooling Nest-style (set under, current overlay) ───
+              - obj:
+                  x: 0
+                  y: 480
+                  width: 864
+                  height: 480
+                  bg_color: col_bg
+                  border_width: 0
+                  radius: 0
+                  scrollable: false
+                  scrollbar_mode: "OFF"
+                  clickable: false
+                  widgets:
+                    # Setpoint fill (under) — dim blue track + cyan to setpoint.
+                    # Stroke 22 (thicker than classic 14); ambient at 400 closes
+                    # the former middle-ring gap and opens the centre disc.
+                    - arc:
+                        id: home2_set_arc
+                        align: CENTER
+                        y: 0
+                        width: 440
+                        height: 440
+                        bg_opa: TRANSP
+                        arc_color: col_blue
+                        arc_opa: 28%
+                        arc_width: 22
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_cyan
+                          arc_opa: 70%
+                          arc_width: 22
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
+
+                    # Current temp overlay — no track; blue fill to current
+                    # (covers past set when room is warm — cooling direction).
+                    - arc:
+                        id: home2_temp_arc
+                        align: CENTER
+                        y: 0
+                        width: 440
+                        height: 440
+                        bg_opa: TRANSP
+                        arc_color: col_blue
+                        arc_opa: 0%
+                        arc_width: 22
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_blue
+                          arc_opa: 92%
+                          arc_width: 22
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
+
+                    # Delta capsule between set and current (angles in C++)
+                    - arc:
+                        id: home2_temp_delta_arc
+                        align: CENTER
+                        y: 0
+                        width: 440
+                        height: 440
+                        bg_opa: TRANSP
+                        arc_color: col_cyan
+                        arc_opa: 0%
+                        arc_width: 22
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 0
+                        indicator:
+                          arc_color: col_cyan
+                          arc_opa: 92%
+                          arc_width: 22
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
+
+                    # Nest-style handles: large = setpoint, small = current
+                    - obj:
+                        id: home2_knob_set
+                        x: 0
+                        y: 0
+                        width: 26
+                        height: 26
+                        radius: 13
+                        bg_color: col_text
+                        bg_opa: COVER
+                        border_width: 3
+                        border_color: col_cyan
+                        clickable: false
+                        hidden: true
+                    - obj:
+                        id: home2_knob_cur
+                        x: 0
+                        y: 0
+                        width: 14
+                        height: 14
+                        radius: 7
+                        bg_color: col_text
+                        bg_opa: COVER
+                        border_width: 2
+                        border_color: col_blue
+                        clickable: false
+                        hidden: true
+
+                    # Ambient — larger diameter closes gap to outer ring; inner
+                    # opening grows so the centre disc (and readout) can widen.
+                    - arc:
+                        id: home2_ambient_arc
+                        align: CENTER
+                        y: 0
+                        width: 384
+                        height: 384
+                        bg_opa: TRANSP
+                        arc_color: col_pink
+                        arc_opa: 28%
+                        arc_width: 16
+                        arc_rounded: true
+                        rotation: 0
+                        start_angle: 150
+                        end_angle: 30
+                        value: 50
+                        indicator:
+                          arc_color: col_pink
+                          arc_opa: 92%
+                          arc_width: 16
+                          arc_rounded: true
+                        knob:
+                          bg_opa: TRANSP
+
+                    - obj:
+                        align: CENTER
+                        y: 0
+                        width: 348
+                        height: 348
+                        radius: 174
+                        border_width: 0
+                        bg_color: col_bg
+                        bg_opa: COVER
+                        clickable: false
+
+                    - label:
+                        id: lbl_coolroom_temp_large_v2
+                        text: "--°C"
+                        align: CENTER
+                        y: -28
+                        text_font: font_huge
+                        text_color: col_blue
+
+                    - label:
+                        id: lbl_setpoint_status_v2
+                        text: "Set: --°C"
+                        align: CENTER
+                        y: 48
+                        text_font: font_large
+                        text_color: col_cyan
+
+                    - label:
+                        id: lbl_status_text_v2
+                        text: "OK"
+                        align: CENTER
+                        y: 86
+                        text_font: font_medium
+                        text_color: col_orange
 
         # Hidden LED indicators for status updates
         - obj:
@@ -11366,7 +11578,19 @@ script:
                 id(probe1_temp).state,
                 id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
+          id: lbl_coolroom_temp_large_v2
+          text: !lambda |-
+            return p4_fmt_temp(
+                id(probe1_temp).state,
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
           id: lbl_setpoint_status
+          text: !lambda |-
+            return "Set: " + p4_fmt_temp(
+                id(ctl_setpoint),
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_setpoint_status_v2
           text: !lambda |-
             return "Set: " + p4_fmt_temp(
                 id(ctl_setpoint),

@@ -4,6 +4,26 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-02 — Home gauge alt view (delta overlay)
+
+- LVGL home centre: snap-scroll between classic 3-arc and alt cooling view
+  (cyan set under blue current; large knob @ set, small @ current). No swipe
+  hint glyphs. Centre readout stays blue on both views; °C/°F via settings
+  (`font_huge` includes F). **Revisit with live RTD/ambient hardware.**
+
+## 2026-08-02 — Web Audio toggles: UI not refreshing after click
+
+- Device POST `/switch/…/toggle` worked; SSE `/events` emits each config Speak /
+  Audio switch **once** on connect and does not re-emit after toggle, so
+  `fetchStatus()` kept painting stale `liveEntities` (buttons stuck / no flip).
+- Fix in `assets/dashboard.html`: optimistic ON/OFF paint + GET `/switch/<name>`
+  into `liveEntities` after toggle (`refreshSwitchFromDevice`). Same for HA API /
+  relay-enable toggles. Immediate GET was still stale (~150 ms) and wiped the
+  optimistic paint — retries until expected state; ignore re-clicks while busy.
+  Same full pattern on HA API, Hardware relay-enable buttons, and home Light chip.
+- Embedded, compiled, NVS-safe flashed (`/dev/cu.usbmodem213401`); served HTML
+  includes helpers; REST GET after toggle returns flipped state.
+
 ## 2026-08-02 — Anti-click soft-start (canonical) + Kokoro af_sarah
 
 - Glass: click gone, full phrase OK with PA-off → I2S into lead-in silence → PA on →

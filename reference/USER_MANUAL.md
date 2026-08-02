@@ -37,6 +37,14 @@ in its sensor's colour so the ring and the matching text readout agree at a glan
 | Middle | Cyan | Setpoint |
 | Inner | Pink | Ambient |
 
+Swipe **up** on the centre gauge for an alternate cooling view: cyan fill to
+**setpoint**, blue **current** overlay on the same ring (current covers past set
+when the room is warm), pink ambient inside, and Nest-style handles — **large**
+circle at setpoint, **small** at current (small moves toward large as it cools).
+Swipe **down** to return. On both home views the large centre temperature stays
+**blue** (same as the coolroom arc) and follows **Temperature Display Unit**
+(°C or °F). The web Coolroom Status gauge stays on the classic three-arc layout.
+
 A reading colder than −10 °C or warmer than +30 °C sits pinned at the end of its arc — the
 numeric readouts remain exact. A sensor that is offline leaves its ring empty. The dial
 range is set by the `dial_min_c` / `dial_max_c` substitutions at the top of
@@ -890,6 +898,7 @@ starts open (fan stays off until Fan Relay Enabled and the compressor call for i
 | Group | Touchscreen page | Web dashboard section |
 |---|---|---|
 | Home icons (status / light / mute) | Home left rail | — (touchscreen only) |
+| Home gauge (classic + swipe-up cooling view) | Home centre (swipe up/down) | Coolroom Status (classic 3-arc only) |
 | Temperature Control & Compressor | Settings 1/8 | Temperature Control, Compressor (incl. Fan Relay Enabled) |
 | Defrost Schedule | Settings 2/8 | Defrost |
 | Defrost — Smart & Drip | Settings 3/8 | Defrost |
