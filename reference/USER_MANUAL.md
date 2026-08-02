@@ -113,7 +113,7 @@ notification to your phone.
 | Internal humidity sensor (SHT31) | Cabinet humidity, informational (see §4.7 — no automatic humidity control) |
 | External humidity sensor (SHT20) | Room/ambient humidity, informational |
 | Compressor relay | Turns cooling on/off |
-| Fan relay | Evaporator fan (coil 0) — follows compressor when Fan Relay Enabled (§4.13) |
+| Fan relay | Coil 0 reserved for evaporator fan **if** you later switch from continuous hardwired fans to controller control (§4.13). Leave **Fan Relay Enabled** off while fans run constantly. |
 | Light relay | Cabinet light — home-screen tap and/or door-triggered (§0 home icons, §4.6) |
 | Siren relay | Audible alarm — automatic when Alarm Siren Enabled; mute from home bell (§0, §4.4) |
 | Door sensor | Optional — off by default, see §4.6 |
@@ -157,12 +157,15 @@ touchscreen — they are two independent locks by design (see §4.11).
 
 Before relying on cooling or fan output:
 
-1. Wire the Waveshare 4-CH Modbus relay as **coil 0 = evaporator fan**, **coil 1 =
-   compressor**, **coil 2 = light**, **coil 3 = siren**. Defrost on this controller is
-   always **passive** (no heater coil) — do not treat channel 1 as a defrost heater.
-2. Leave **Fan Relay Enabled** **off** (factory default) until coil 0 is confirmed as a
-   fan. Then enable it from touchscreen Settings 1/8, web **Compressor**, or **Hardware**.
-   When on, the fan follows the compressor and is forced off during defrost and drip.
+1. Wire the Waveshare 4-CH Modbus relay as **coil 0 = evaporator fan (future /
+   optional)**, **coil 1 = compressor**, **coil 2 = light**, **coil 3 = siren**.
+   Defrost on this controller is always **passive** (no heater coil) — do not treat
+   channel 0 or 1 as a defrost heater.
+2. **Plant today:** evaporator fans are wired to run **continuously** (not through the
+   Modbus board). Leave **Fan Relay Enabled** **off** (factory default). Coil 0 and the
+   Fan Relay setting exist so you can later move the fans onto the controller (fan
+   follows compressor; forced off during defrost/drip) without a firmware redesign —
+   only then wire coil 0 to the fan circuit and turn the enable on.
 3. Door features default **off**: enable **Door Sensor Enabled** only when the reed is
    fitted and **Door Sensor Mode** matches NC/NO wiring. **Hold Compressor While Door Open**
    is separate and also defaults off — turn it on only if you want cooling paused whenever
@@ -218,7 +221,7 @@ the compressor.
 | **Compressor Differential** | The "dead band" around the setpoint. Compressor switches ON at setpoint + half the differential, OFF at setpoint − half. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing. Narrower = tighter temperature control but more frequent cycling. |
 | **Compressor Off-Delay (Lockout)** | Minimum time the compressor must stay off before it's allowed to restart, even if the temperature calls for cooling. | 0 – 10 min | 3 min | Protects the compressor motor from rapid restart. Only lower this if your compressor's manufacturer explicitly allows shorter cycling. |
 | **Compressor Min Run Time** | Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. | 0 – 30 min | 2 min | Complements Off-Delay on the ON side. Set 0 to disable. |
-| **Fan Relay Enabled** | Whether Modbus coil 0 (evaporator fan) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. | On/Off | **Off** | Same control as §4.13 Hardware → Fan. Confirm coil 0 is a fan before enabling. Also on touchscreen Settings 1/8. |
+| **Fan Relay Enabled** | Whether Modbus coil 0 may energise an evaporator fan under controller control. When on, the fan follows the compressor and is forced off during defrost + drip. | On/Off | **Off** | **Keep off** while plant fans are hardwired continuous. Turn on only after rewiring fans through coil 0 for controller-managed cycling. Same control as §4.13. Also on touchscreen Settings 1/8. |
 | **Sensor Fallback Duty-Cycle Enabled** | If the main probe fails, run the compressor on a fixed timer instead of stopping cooling completely. | On/Off | On | Leave on unless you'd rather the room simply stop cooling during a sensor fault (some sites prefer that so staff notice immediately). |
 | **Fallback Compressor ON Time** | How long the compressor runs per fallback cycle when the probe has failed. | 1 – 30 min | 3 min | Works together with OFF time below — together they set a safe average duty cycle without real temperature feedback. |
 | **Fallback Compressor OFF Time** | How long the compressor rests per fallback cycle when the probe has failed. | 1 – 60 min | 27 min | Default 3 min ON / 27 min OFF ≈ 10% duty cycle — a conservative "keep it cold-ish, don't ice up or overwork the compressor" fallback. |
@@ -818,17 +821,20 @@ holding **Restart Controller** and **Factory Reset** (both described in §4.12).
 
 | Coil | Output | Notes |
 |---|---|---|
-| 0 | Fan | Evaporator fan. Enable default **off**. Follows compressor when enabled; off during defrost/drip. |
+| 0 | Fan (optional / future) | Reserved for evaporator fan **if** you later take fans off continuous hardwired power and put them on this relay. Enable default **off**. When enabled: follows compressor; off during defrost/drip. |
 | 1 | Compressor | Cooling. Enable default on. |
 | 2 | Light | Cabinet light. |
 | 3 | Siren | External alarm. |
+
+**Plant note (current install):** evaporator fans run **constantly** on their own supply —
+not through coil 0. Leave **Fan Relay Enabled** off until that wiring changes.
 
 Defrost is always passive — there is no heater coil on this controller.
 
 | Setting | What it does | Default | When to change it |
 |---|---|---|---|
 | **Compressor Relay Enabled** | Whether the compressor output may energise at all. | On | Turn off to isolate the compressor for maintenance without disabling the control logic behind it. |
-| **Fan Relay Enabled** | Whether the evaporator **fan** output (Modbus coil 0) may energise. When on, the fan follows the compressor and is forced off during defrost + drip. Default **off**. Also on §4.1 / web Compressor. | **Off** | Confirm the plant wires a fan (not a heater) to coil 0 before enabling. |
+| **Fan Relay Enabled** | Whether Modbus coil 0 may energise. When on, fan follows compressor and is forced off during defrost + drip. Default **off**. Also on §4.1 / web Compressor. | **Off** | Keep **off** while fans are continuous hardwired. Enable only after coil 0 is wired into the fan circuit for controller control. |
 | **Light Relay Enabled** | Whether the light output may energise at all. | On | Turn off if the room light is switched by something else. |
 | **Siren Relay Enabled** | Whether the alarm output may energise at all. | On | Turn off where the alarm relay drives an external siren you don't want sounding every time — see below. |
 
@@ -879,7 +885,7 @@ starts open (fan stays off until Fan Relay Enabled and the compressor call for i
 | Room warms noticeably after every defrost | Turn on Early Termination by Temperature, or shorten Max Duration | §4.2 |
 | Door alarm never fires | Door Sensor Enabled is off by default — check §4.6 | §4.6 |
 | Compressor stops whenever the door is open | Hold Compressor While Door Open is on — intentional if you enabled it; turn off if a stuck reed is starving cooling | §4.6 |
-| Fan never runs even though the compressor does | Fan Relay Enabled is off (default) or coil 0 is not wired to a fan | §4.1, §4.13 |
+| Fan never runs from the controller | Expected while fans are continuous hardwired and Fan Relay Enabled is off (default). Only a fault if you rewired coil 0 for controller fan control and enabled it | §4.1, §4.13 |
 | Light is on by itself after every reboot | Door Sensor + Door-Triggered Light are both on and the door reads open — an unfitted or miswired reed reads open permanently. Check Door Reed Sensor, NC/NO, or turn Door-Triggered Light off | §4.6, §4.11 |
 | No push notifications arriving | Confirm ntfy topic subscription (§4.8); confirm WiFi is connected (§4.10) | §4.8, §4.10 |
 | SD card seems to have "given up" | Check for the SD Card Failure push — auto-remount retries every 60s once the card is working again, no reboot needed | §4.9 |

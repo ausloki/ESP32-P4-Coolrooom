@@ -2487,7 +2487,7 @@
                     { type: 'number', entity: 'compressor_min_run_time__min_', name: 'Compressor Min Run Time (min)', label: 'Compressor Min Run Time (min)', min: 0, max: 30, step: 1,
                       help: 'Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. Complements Off-Delay. Set 0 to disable.' },
                     { type: 'switch', entity: 'fan_relay_enabled', name: 'Fan Relay Enabled', label: 'Fan Relay Enabled',
-                      help: 'When on, Modbus coil 0 (evaporator fan) follows the compressor and is forced off during defrost + drip. Default off — confirm coil 0 is wired to a fan before enabling. Same control as Hardware \u2192 Fan.' },
+                      help: 'Plant fans currently run continuously (hardwired) — keep this off. Coil 0 is ready if you later move fans onto the Modbus board: when on, fan follows the compressor and is forced off during defrost + drip. Same control as Hardware \u2192 Fan.' },
                     { type: 'switch', entity: 'sensor_fallback_duty-cycle_enabled', name: 'Sensor Fallback Duty-Cycle Enabled', label: 'Sensor Fallback Enabled',
                       help: 'When the main Coolroom Temperature probe goes stale or invalid, the compressor normally shuts off for safety. Enabling this instead runs it on a fixed duty cycle (the two settings below) so cooling continues, degraded, until the probe recovers.' },
                     { type: 'number', entity: 'sensor_fallback_compressor_on_time__min_', name: 'Sensor Fallback Compressor ON Time (min)', label: 'Fallback Compressor ON Time (min)', min: 1, max: 30, step: 1,

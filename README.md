@@ -73,7 +73,9 @@ Connect to that AP and navigate to **192.168.4.1** to:
 
 Main control logic is designed to run locally even when there is no Wi-Fi or Home Assistant connection.
 
-- Compressor, passive defrost, optional evaporator fan, alarm, sensor-fault handling, and SD logging run from the 10s local control loop.
+- Compressor, passive defrost, optional future evaporator-fan relay (fans are
+  continuous hardwired today), alarm, sensor-fault handling, and SD logging run
+  from the 10s local control loop.
 - Wi-Fi/API disconnect does not reboot firmware (`wifi.reboot_timeout: 0s`, `api.reboot_timeout: 0s`).
 - Time sync (SNTP) and push notifications (ntfy) are treated as optional network features.
 - While offline, ntfy requests are skipped; notification edge flags reset so active alarms can notify after reconnect.

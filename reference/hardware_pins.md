@@ -365,7 +365,7 @@ Waveshare Modbus RTU Relay 4-CH, slave address **1**:
 
 | Coil | Role | Enable default | Behaviour |
 | --- | --- | --- | --- |
-| 0 | Evaporator **Fan** | Off | Follows compressor when enabled; forced off during defrost + drip |
+| 0 | Evaporator **Fan** (optional / future) | Off | **Plant today:** fans run continuously hardwired — leave enable off. When later wired to coil 0 and enabled: follows compressor; forced off during defrost + drip |
 | 1 | **Compressor** | On | Hysteresis / fallback / door-hold |
 | 2 | **Light** | On | Manual + optional door-triggered |
 | 3 | **Siren** | On | Alarm output |

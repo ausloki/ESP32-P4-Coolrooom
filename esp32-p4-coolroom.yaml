@@ -709,9 +709,11 @@ modbus_controller:
 ##############################################################################
 
 switch:
-  # Coil 0 — formerly Defrost heater. Repurposed as evaporator Fan.
-  # Defrost cycles are always passive (compressor held off); flame UI follows
-  # ctl_defrost_active, not this coil. Fan may run together with the compressor.
+  # Coil 0 — Fan Relay (optional / future). Plant today: evaporator fans run
+  # continuously hardwired, not through this coil — leave Fan Relay Enabled off.
+  # When fans are later moved onto coil 0 and the enable is on: fan follows the
+  # compressor; forced off during defrost + drip. Defrost is always passive
+  # (compressor held off); flame UI follows ctl_defrost_active, not this coil.
   - platform: modbus_controller
     modbus_controller_id: relay_board
     id: relay_fan
@@ -2113,38 +2115,37 @@ sensor:
   # home_ambient_arc directly below. The dedicated ambient RTD board (probe3,
   # RTD board 2 @ 101) was decommissioned: SHT20 covers the same external-
   # reference role and adds humidity, which RTD never could.
-  # SHT31 (internal, inside the coolroom): fixed address 0x44 on most breakouts
-  # (ADDR pin low); some ship with ADDR pulled high = 0x45 instead — check the
-  # physical board/datasheet before flashing. Raw readings are internal; the
-  # public probe*_humidity/probe*_temp sensors below gate on their enable flag
-  # the same way probe2_temp already does.
-  # Bench-safe placeholders keep IDs stable when optional external I2C sensors
-  # are absent. Downstream template/UI logic already treats NaN as unavailable.
-  - platform: template
-    id: sht31_internal_temp_raw
-    internal: true
+  # Raw readings stay internal; public probe_* sensors below gate on their
+  # enable flags the same way probe2_temp already does. Absent breakouts log
+  # I2C communication errors and leave state NaN — firmware still boots.
+  #
+  # SHT31 (internal, coolroom cabinet): prefer 0x44 (ADDR pin low / default).
+  # Some breakouts strap ADDR high → 0x45 — change address: below if needed.
+  # See reference/hardware_pins.md (External I2C Header).
+  - platform: sht3xd
+    i2c_id: i2c_bus
+    address: 0x44
     update_interval: 30s
-    lambda: 'return NAN;'
+    temperature:
+      id: sht31_internal_temp_raw
+      internal: true
+    humidity:
+      id: sht31_internal_humidity_raw
+      internal: true
 
-  - platform: template
-    id: sht31_internal_humidity_raw
-    internal: true
+  # SHT20 (external ambient): HTU21D-compatible, fixed address 0x40
+  # (SHT20/SHT21/SHT25/HTU21D all use 0x40 — not configurable).
+  - platform: htu21d
+    i2c_id: i2c_bus
+    address: 0x40
+    model: HTU21D
     update_interval: 30s
-    lambda: 'return NAN;'
-
-  # SHT20 (external, ambient/outside reference): HTU21D-compatible, fixed
-  # address 0x40 (not configurable — SHT20/SHT21/SHT25/HTU21D all use 0x40).
-  - platform: template
-    id: sht20_external_temp_raw
-    internal: true
-    update_interval: 30s
-    lambda: 'return NAN;'
-
-  - platform: template
-    id: sht20_external_humidity_raw
-    internal: true
-    update_interval: 30s
-    lambda: 'return NAN;'
+    temperature:
+      id: sht20_external_temp_raw
+      internal: true
+    humidity:
+      id: sht20_external_humidity_raw
+      internal: true
 
   - platform: template
     id: probe_internal_temp

@@ -4,6 +4,21 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-02 — Docs: continuous evaporator fans (coil 0 future)
+
+- Plant fans run constantly hardwired today; coil 0 / Fan Relay Enabled kept off
+  for a possible later move to controller-managed fan. Updated USER_MANUAL,
+  QUICK_START, CAREL decisions, hardware_pins, relay register map, yaml comment.
+
+## 2026-08-02 — SHT31/SHT20 live I2C platforms (pending wiring)
+
+- Replaced bench-safe NAN template stubs with ESPHome `sht3xd` (SHT31 @ 0x44)
+  and `htu21d` (SHT20 @ 0x40) on `i2c_bus`; raw ids unchanged; enable gating
+  still on `input_humidity_*_enabled`. Hardware not connected yet — do not mark
+  bench status connected until Cory wires them.
+
+---
+
 ## 2026-08-02 — LVGL Defrost layout denser (pages 2/8 & 3/8)
 
 - Settings **2/8 Defrost Schedule**: Start / Stop Defrost Now side-by-side (half width);

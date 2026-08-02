@@ -86,7 +86,9 @@ Response:     01 01 01 <byte> CRC CRC
 
 In the ESPHome config this project uses:
 - `register_type: coil`
-- Relay 0 (coil addr 0) → **fan** (evaporator; enable default off — follows compressor)
+- Relay 0 (coil addr 0) → **fan** (optional / future controller control; enable
+  default off). **Current plant:** evaporator fans run continuously hardwired —
+  leave Fan Relay Enabled off until fans are moved onto this coil.
 - Relay 1 (coil addr 1) → compressor
 - Relay 2 (coil addr 2) → light
 - Relay 3 (coil addr 3) → siren

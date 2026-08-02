@@ -37,10 +37,12 @@ on any browser on your network.
       only once those are wired). If you don't want
       the alarm relay driving an external siren, turn **Siren Relay Enabled** off here:
       alarms and push notifications carry on as normal. See §4.13.
-- [ ] **Wire the Modbus relay coils correctly** — channel / coil **0 = evaporator fan**,
-      **1 = compressor**, **2 = light**, **3 = siren**. Defrost is passive on this
-      controller (no heater coil). Leave **Fan Relay Enabled** off until coil 0 is
-      confirmed as a fan. See User Manual §4.13 and `reference/CAREL_CONTROL_DECISIONS.md`.
+- [ ] **Wire the Modbus relay coils correctly** — channel / coil **0 = evaporator fan
+      (optional / future)**, **1 = compressor**, **2 = light**, **3 = siren**. Defrost is
+      passive on this controller (no heater coil). **Today the plant’s evaporator fans run
+      continuously** (hardwired, not through the relay) — leave **Fan Relay Enabled** off.
+      Coil 0 is ready if you later switch fans to controller control. See User Manual §4.13
+      and `reference/CAREL_CONTROL_DECISIONS.md`.
 - [ ] **Door features are opt-in** — **Door Sensor Enabled**, **Door-Triggered Light**, and
       **Hold Compressor While Door Open** all default **off**. Turn the sensor on only when
       the reed is fitted and NC/NO mode matches the wiring. Leave door-hold off unless you
@@ -90,8 +92,10 @@ alarm type re-animates).
 **Defrost Start / Stop** are on the web Defrost tab and touchscreen Settings 2/8 — not the
 home flame icon. Defrost System Enabled gates automatic starts only. Defrost is always
 **passive** here (compressor held off; any heater is external). **Fan Relay Enabled**
-(coil 0, default **off**) gates the evaporator fan — when on, the fan follows the compressor
-and stops during defrost/drip. Same toggle on touchscreen Settings 1/8, web Compressor, and
+(coil 0, default **off**) is for a **future** switch to controller-managed evaporator fans.
+**Current plant:** fans run continuously on their own supply — keep the enable off. If you
+later wire fans through coil 0 and turn the enable on, the fan follows the compressor and
+stops during defrost/drip. Same toggle on touchscreen Settings 1/8, web Compressor, and
 Hardware → Fan.
 
 **Celsius / Fahrenheit:** use **Temperature Display Unit** on touchscreen Settings 7/8
@@ -130,7 +134,7 @@ suffer freeze damage a little below 0 °C.
 | **Compressor Differential** | `1.0 °C` (default) | Keeps the swing tight around 0.5 °C without excessive compressor cycling. |
 | **Compressor Off-Delay** | `3 min` (default) | No produce-specific reason to change this. |
 | **Compressor Min Run Time** | `2 min` (default) | Leave on; pairs with Off-Delay to stop short-cycling. |
-| **Fan Relay Enabled** | Leave `Off` until coil 0 is confirmed as a fan; then `On` if the plant has an evaporator fan on that channel | Default off is intentional — miswiring a heater to coil 0 must not run heat unsupervised. |
+| **Fan Relay Enabled** | Leave `Off` | Fans currently run constantly (hardwired). Enable only after rewiring fans onto coil 0 for controller cycling. |
 | **Defrost System Enabled** | `On` | Needed — a near-0 °C, high-humidity room frosts the coil steadily. |
 | **Defrost Interval** | `480 min` (default, 8 h) | Reasonable baseline; shorten if you see visible frost buildup between cycles. |
 | **Defrost Early Termination by Temp** | `On` (default) | Avoids over-warming the room on every cycle — important for a chill-sensitive but not frost-tolerant product. |
