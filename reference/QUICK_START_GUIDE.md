@@ -64,8 +64,8 @@ on any browser on your network.
 | # | Group | Touchscreen | What lives here |
 |---|---|---|---|
 | 1 | Compressor & Fallback | Settings 1/8 | Setpoint, differential, lockout, min run, Fan Relay Enable, sensor-fault fallback |
-| 2 | Defrost Schedule | Settings 2/8 | On/off, interval, duration, early-stop, drip, Skip-If-Cold, Force-Max |
-| 3 | Defrost Smart & Drip | Settings 3/8 | Drip time, smart delta, dew-point, frost-rate |
+| 2 | Defrost Schedule | Settings 2/8 | On/off, interval, duration, early-stop, drip toggle; Start/Stop side-by-side + Force-Max; Skip-If-Cold row |
+| 3 | Defrost Smart & Drip | Settings 3/8 | Drip time, smart delta/dwell + Frost Window, dew-point, frost-rate (no scroll) |
 | 4 | Alarm Thresholds | Settings 4/8 | High/low temp alarm deltas, persist time, siren |
 | 5 | Alarms Advanced | Settings 5/8 | Ice enable/dwell/delta, no-cool, startup/defrost grace |
 | 6 | Door | Settings 6/8 | Sensor on/off, NC/NO, door light, hold compressor while open, alarm delay |
@@ -75,7 +75,9 @@ on any browser on your network.
 WiFi, the web login password, and SD card log-delete are **web-dashboard only** — by design,
 not an oversight. Full explanation: User Manual §4.11. The web dashboard also carries tabs
 with no touchscreen equivalent: **Hardware**, **Wireless**, and **Events** (live alarm/fault
-log as it happens).
+log as it happens). Optional SD temperature logs keep the last **N days** (default **60**,
+web SD Card tab); below **32 MB** free the controller skips new log/backup writes without
+treating the card as failed (User Manual §4.9).
 
 **Door Sensor Enabled is the master for the reed.** Door-open alarm, Door-Triggered Light,
 and Hold Compressor While Door Open all require it. Enabling Door-Triggered Light turns

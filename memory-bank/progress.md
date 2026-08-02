@@ -1,5 +1,16 @@
 # Progress Tracking
 
+## 2026-08-02 — LVGL Defrost layout denser + docs closeout
+
+- Densified LVGL Settings 2/8 (Start/Stop side-by-side, Force-Max right) and 3/8
+  (Frost Window under Smart Dwell; no scroll). USER_MANUAL subheads + Quick Start groups
+  + session_recaps; memory-bank refreshed. No reflash (already on glass).
+
+## 2026-08-02 — SD retention / free-space gate / per-core CPU
+
+- `c7d05c3`: prune `YYYY-MM-DD.csv` by tunable days (default 60); skip writes below 32 MB
+  free (`SD_SPACE_LOW`); expose C0/C1 CPU beside average. USER_MANUAL §4.9 / §4.12.
+
 ## 2026-08-01 — Per-phrase audio preview on LVGL + web
 
 - `preview_*` scripts / `btn_preview_*` buttons play a single clip regardless of master

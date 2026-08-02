@@ -4,6 +4,33 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-02 — LVGL Defrost layout denser (pages 2/8 & 3/8)
+
+- Settings **2/8 Defrost Schedule**: Start / Stop Defrost Now side-by-side (half width);
+  Force-Max Interval on the right of that row; Skip-If-Cold + Below on the next row
+  (slight scroll). Firmware already flashed for layout — no reflash in this closeout.
+- Settings **3/8 Defrost Smart**: Frost Window moved beside Smart Dwell (under that row);
+  Dew Point / Frost Rate / Frost RH Drop pack so the page fits without scrolling.
+- `USER_MANUAL.md` §4.2 / §4.3 touchscreen subheads updated; Quick Start groups table
+  notes the denser layout. No setting ranges/defaults changed.
+
+---
+
+## 2026-08-02 — SD temp-log retention, free-space write gate, per-core CPU
+
+- Tunable **SD Temp Log Retention** (7–365 days, default **60**): prunes older
+  `YYYY-MM-DD.csv` on mount / remount / daily / on change; never deletes `events.csv`,
+  `nodate.csv`, or `backup.json`.
+- Fixed **32 MB** free-space write gate: skip temperature/event append and `backup.json`
+  when free space is low; `SD_SPACE_LOW` once per low-space episode on Events; card stays
+  mounted (full ≠ failed). Cooling unaffected.
+- CPU diagnostics: average busy% plus per-core **C0/C1** on Info + web Hardware / System
+  Health (`cpu_usage_core0_pct` / `cpu_usage_core1_pct`). USER_MANUAL §4.9 / §4.12 already
+  describe retention, gate, and per-core CPU.
+- Commit: `c7d05c3` (firmware + manuals + dashboard embed).
+
+---
+
 ## 2026-08-02 — Home gauge alt view (delta overlay)
 
 - LVGL home centre: snap-scroll between classic 3-arc and alt cooling view

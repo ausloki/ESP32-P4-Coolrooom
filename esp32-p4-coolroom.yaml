@@ -7735,7 +7735,7 @@ lvgl:
               - button:
                   x: 0
                   y: 354
-                  width: 460
+                  width: 222
                   height: 56
                   bg_color: col_blue
                   radius: 8
@@ -7744,11 +7744,10 @@ lvgl:
                   widgets: [{label: {align: CENTER, text: "Start Defrost Now", text_font: font_medium, text_color: col_text}}]
                   on_click:
                     - button.press: btn_manual_defrost_start
-              - label: {x: 500, y: 324, width: 460, text: " ", text_font: font_medium, text_color: col_text}
               - button:
-                  x: 500
+                  x: 238
                   y: 354
-                  width: 460
+                  width: 222
                   height: 56
                   bg_color: col_red
                   radius: 8
@@ -7757,6 +7756,59 @@ lvgl:
                   widgets: [{label: {align: CENTER, text: "Stop Defrost Now", text_font: font_medium, text_color: col_text}}]
                   on_click:
                     - button.press: btn_manual_defrost_stop
+              - label: {x: 500, y: 324, width: 460, text: "Force-Max Interval (min)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 354
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_forcemax, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: defrost_force_max_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: defrost_force_max_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
               - label: {x: 0, y: 432, width: 460, text: "Skip-If-Cold", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -7846,59 +7898,6 @@ lvgl:
                         widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: defrost_skip_below_num, cycle: false}
-                          - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 540, width: 460, text: "Force-Max Interval (min)", text_font: font_medium, text_color: col_text}
-              - obj:
-                  x: 0
-                  y: 570
-                  width: 460
-                  height: 64
-                  bg_color: col_bg
-                  border_width: 0
-                  pad_all: 0
-                  widgets:
-                    - obj:
-                        x: 0
-                        y: 4
-                        width: 220
-                        height: 56
-                        bg_color: col_panel
-                        radius: 8
-                        border_width: 0
-                        pad_all: 0
-                        widgets:
-                          - label: {id: lbl_st_forcemax, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
-                    - button:
-                        x: 236
-                        y: 4
-                        width: 100
-                        height: 56
-                        bg_color: col_blue
-                        radius: 8
-                        border_width: 0
-                        pad_top: 0
-                        pad_bottom: 0
-                        pad_left: 0
-                        pad_right: 0
-                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
-                        on_click:
-                          - number.increment: {id: defrost_force_max_num, cycle: false}
-                          - script.execute: refresh_all_settings_labels
-                    - button:
-                        x: 348
-                        y: 4
-                        width: 100
-                        height: 56
-                        bg_color: col_blue
-                        radius: 8
-                        border_width: 0
-                        pad_top: 0
-                        pad_bottom: 0
-                        pad_left: 0
-                        pad_right: 0
-                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
-                        on_click:
-                          - number.decrement: {id: defrost_force_max_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
         - button:
             x: 0
@@ -8157,6 +8156,59 @@ lvgl:
                         on_click:
                           - number.decrement: {id: smart_dwell_min, cycle: false}
                           - script.execute: refresh_all_settings_labels
+              - label: {x: 500, y: 216, width: 460, text: "Frost Window (s)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 246
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_frostwin, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.increment: {id: frost_rate_window_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - number.decrement: {id: frost_rate_window_num, cycle: false}
+                          - script.execute: refresh_all_settings_labels
               - label: {x: 0, y: 216, width: 460, text: "Dew Point Trigger", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -8283,59 +8335,6 @@ lvgl:
                         widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
                           - number.decrement: {id: frost_rate_rh_num, cycle: false}
-                          - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 432, width: 460, text: "Frost Window (s)", text_font: font_medium, text_color: col_text}
-              - obj:
-                  x: 0
-                  y: 462
-                  width: 460
-                  height: 64
-                  bg_color: col_bg
-                  border_width: 0
-                  pad_all: 0
-                  widgets:
-                    - obj:
-                        x: 0
-                        y: 4
-                        width: 220
-                        height: 56
-                        bg_color: col_panel
-                        radius: 8
-                        border_width: 0
-                        pad_all: 0
-                        widgets:
-                          - label: {id: lbl_st_frostwin, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
-                    - button:
-                        x: 236
-                        y: 4
-                        width: 100
-                        height: 56
-                        bg_color: col_blue
-                        radius: 8
-                        border_width: 0
-                        pad_top: 0
-                        pad_bottom: 0
-                        pad_left: 0
-                        pad_right: 0
-                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
-                        on_click:
-                          - number.increment: {id: frost_rate_window_num, cycle: false}
-                          - script.execute: refresh_all_settings_labels
-                    - button:
-                        x: 348
-                        y: 4
-                        width: 100
-                        height: 56
-                        bg_color: col_blue
-                        radius: 8
-                        border_width: 0
-                        pad_top: 0
-                        pad_bottom: 0
-                        pad_left: 0
-                        pad_right: 0
-                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
-                        on_click:
-                          - number.decrement: {id: frost_rate_window_num, cycle: false}
                           - script.execute: refresh_all_settings_labels
         - button:
             x: 0

@@ -2,8 +2,9 @@
 
 **Date:** 2026-08-02  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** Closeout in progress — audio soft-start + web toggle refresh + home alt
-gauge. Next: RS485/RTD bench bring-up (revisit Nest alt gauge with live temps).
+**Status:** Docs/layout closeout — LVGL Defrost denser layout + SD retention/free-space
+gate + per-core CPU documented. Next: RS485/RTD bench bring-up (revisit Nest alt gauge
+with live temps).
 
 ## Working well
 
@@ -23,6 +24,8 @@ gauge. Next: RS485/RTD bench bring-up (revisit Nest alt gauge with live temps).
 - Temperature Display Unit: Celsius default / Fahrenheit, LVGL + web + HA
 - LVGL settings **1/8–8/8** on glass
 - Probe roles: **CH1 room air / CH2 evaporator**
+- SD: dated temp-log retention (default 60 d) + 32 MB free write gate; Info/web per-core CPU
+- LVGL Defrost 2/8–3/8 denser layout (Start/Stop + Force-Max; Frost Window under Smart Dwell)
 - Rule: `.cursor/rules/home-gauge-design.mdc` (always apply)
 
 ## Still open

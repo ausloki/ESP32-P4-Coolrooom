@@ -278,7 +278,7 @@ through them (§0).
 
 ### 4.2 Defrost Schedule
 
-*Touchscreen: Settings 2/8 — "Defrost Schedule" (scroll for Skip-If-Cold / Force-Max). Web: **Defrost** section.*
+*Touchscreen: Settings 2/8 — "Defrost Schedule" (Start/Stop side-by-side; Force-Max on the right of that row; slight scroll for Skip-If-Cold). Web: **Defrost** section.*
 
 Frost builds up on the evaporator coil over time and blocks airflow, so the coil needs
 periodic defrosting. This group controls the basic on/off timer for that.
@@ -326,7 +326,7 @@ periodic defrosting. This group controls the basic on/off timer for that.
 
 ### 4.3 Defrost — Smart & Drip
 
-*Touchscreen: Settings 3/8 — "Defrost Smart & Drip" (scroll for Frost Rate). Web: **Defrost** section (same
+*Touchscreen: Settings 3/8 — "Defrost Smart & Drip" (Frost Window under Smart Dwell; all controls fit without scrolling). Web: **Defrost** section (same
 group as §4.2 on the web dashboard).*
 
 These add two *extra* ways to trigger a defrost early, on top of the fixed timer in §4.2 —
@@ -339,13 +339,12 @@ they never replace the timer, only supplement it.
 | **Smart Defrost Delta Threshold** | How large the coolroom-to-evaporator gap must get before it counts as "frosted up". | 1.0 – 20.0 °C | 8.0 °C | Lower = triggers more readily (more frequent smart defrosts); higher = more tolerant. |
 | **Smart Defrost Dwell Time** | How long that gap must stay above the threshold before triggering — avoids reacting to a brief spike. | 1 – 120 min | 30 min | Raise if smart defrost is triggering on short-lived temperature blips (e.g. right after a door opens). |
 | **Dew Point Early Defrost Trigger** | Starts defrost early when the evaporator is below freezing *and* below the air dew point (from the internal SHT31). | On/Off | Off | Enable in humid rooms where frost forms between scheduled cycles. |
-| **Defrost Skip-If-Cold** | When a *scheduled* interval is due but the evaporator is already at/below the skip threshold, skip that cycle and roll the timer forward. | On/Off | Off | Saves unnecessary defrost cycles when the coil is already clear/cold. Manual / smart / dew / frost-rate / force-max starts are never skipped. |
-| **Skip-If-Cold Below** | Evaporator temperature at or below which a due scheduled defrost is skipped. | −30 – 0 °C | −10 °C | Needs Probe 2. Lower = skip more often. |
-| **Defrost Max Interval Override (Force-Max)** | Safety net: force a defrost if this many minutes have passed since the last cycle, even when skip-if-cold keeps postponing. | 720 – 1440 min | 720 (12 h) | Raise toward 24 h only if you intentionally allow long skip stretches. |
+| **Defrost Skip-If-Cold** *(Settings 2/8)* | When a *scheduled* interval is due but the evaporator is already at/below the skip threshold, skip that cycle and roll the timer forward. | On/Off | Off | Saves unnecessary defrost cycles when the coil is already clear/cold. Manual / smart / dew / frost-rate / force-max starts are never skipped. |
+| **Skip-If-Cold Below** *(Settings 2/8)* | Evaporator temperature at or below which a due scheduled defrost is skipped. | −30 – 0 °C | −10 °C | Needs Probe 2. Lower = skip more often. |
+| **Defrost Max Interval Override (Force-Max)** *(Settings 2/8)* | Safety net: force a defrost if this many minutes have passed since the last cycle, even when skip-if-cold keeps postponing. | 720 – 1440 min | 720 (12 h) | Raise toward 24 h only if you intentionally allow long skip stretches. |
 | **Frost Rate Monitoring** | Early defrost when humidity drops sharply over a sample window while room temperature stays nearly stable (frost forming). | On/Off | Off | Needs internal SHT31 humidity. Complements dew-point trigger. |
 | **Frost Rate Humidity Drop** | Humidity drop (%) over the window that counts as frost forming. | 1 – 20 % | 5 % | Lower = more sensitive. |
 | **Frost Rate Window** | Length of the humidity/temperature sample window. | 60 – 3600 s | 300 s | Longer windows ignore brief RH blips. |
-| **Dew Point Early Defrost Trigger** | Uses humidity + temperature to calculate the dew point, and starts a defrost the moment the evaporator is actually cold enough for frost to be forming — not just "probably frosted", but confirmed. | On/Off | **Off** | Turn on for humid environments (produce storage, anywhere with high moisture load) — this is the most targeted of the three triggers. |
 
 **Note:** both extra triggers default to **Off**. A brand-new install only defrosts on the
 fixed timer (§4.2) until you turn one or both of these on.
