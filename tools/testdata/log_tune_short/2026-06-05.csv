@@ -1,0 +1,2 @@
+timestamp,coolroom_c,evap_c,ambient_c,setpoint_c,compressor,defrost,alarm_hi,alarm_lo,probe_fault,cpu_pct,cpu_c0_pct,cpu_c1_pct
+05-06-2026 08:00:00,2.1,-2.4,18.0,2.0,0,0,0,0,0,10.0,9.0,11.0

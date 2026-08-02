@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recommended Settings — 2 °C Coolroom (All Sensors Online)</title>
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #555;
+      --rule: #ccc;
+      --bg: #fff;
+      --band: #f4f4f2;
+      --accent: #0b5fff;
+      --ok: #1b6b2a;
+      --warn: #8a5a00;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 11pt/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    }
+    .page {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 18mm 16mm 20mm;
+    }
+    header {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 18pt;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 9.5pt;
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    h2 {
+      margin: 22px 0 8px;
+      font-size: 12.5pt;
+      font-weight: 700;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 3px;
+      page-break-after: avoid;
+    }
+    p { margin: 0 0 10px; }
+    ul { margin: 0 0 12px; padding-left: 1.2em; }
+    li { margin-bottom: 3px; }
+    .callout {
+      background: var(--band);
+      border-left: 3px solid var(--accent);
+      padding: 10px 12px;
+      margin: 12px 0 16px;
+      font-size: 10pt;
+    }
+    .callout.warn {
+      border-left-color: var(--warn);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      margin: 0 0 6px;
+      page-break-inside: auto;
+    }
+    thead { display: table-header-group; }
+    th, td {
+      border-bottom: 1px solid var(--rule);
+      padding: 5px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    td.val {
+      white-space: nowrap;
+      font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+      font-size: 9pt;
+      font-weight: 600;
+    }
+    td.chg {
+      white-space: nowrap;
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 8.5pt;
+      color: var(--ok);
+    }
+    td.chg.same { color: var(--muted); }
+    .footer {
+      margin-top: 28px;
+      padding-top: 10px;
+      border-top: 1px solid var(--rule);
+      font-size: 9pt;
+      color: var(--muted);
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    .no-print { margin-top: 14px; }
+    .btn {
+      display: inline-block;
+      padding: 8px 14px;
+      background: var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      border: none;
+      cursor: pointer;
+    }
+    @media print {
+      body { font-size: 10pt; }
+      .page { max-width: none; padding: 12mm 12mm 14mm; }
+      .no-print { display: none !important; }
+      a { color: inherit; text-decoration: none; }
+      h2 { break-after: avoid; }
+      tr { break-inside: avoid; }
+    }
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Recommended Settings — 2&nbsp;°C Coolroom<br>(All Sensors Online)</h1>
+      <div class="meta">
+        ESP32-P4 Coolroom Controller · Profile date 2026-08-03 ·
+        Applied live to <strong>192.168.37.237</strong> ·
+        Docs: <code>reference/QUICK_START_GUIDE.md</code>
+      </div>
+    </header>
+
+    <div class="no-print">
+      <button class="btn" type="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <h2>1. Assumptions</h2>
+    <ul>
+      <li><strong>Target:</strong> hold coolroom air at <strong>2.0&nbsp;°C</strong> (commercial food chiller, not a freezer).</li>
+      <li><strong>Plant:</strong> single compressor; <strong>passive / timed defrost</strong> (compressor held off; no heater coil on this controller).</li>
+      <li><strong>Fans:</strong> evaporator fans run <strong>continuously hardwired</strong> — Fan Relay (coil&nbsp;0) stays disabled / reserved.</li>
+      <li><strong>Sensors online (profile intent):</strong> coolroom RTD (Probe&nbsp;1), evaporator RTD (Probe&nbsp;2), internal SHT31 humidity/temp, external/ambient SHT20, Modbus relay board, door reed fitted (NC).</li>
+      <li><strong>Priority:</strong> safe, stable defaults over aggressive energy saving.</li>
+    </ul>
+
+    <div class="callout warn">
+      <strong>Bench note:</strong> On the development bench, RS485 (relay / RTD) and expansion I2C sensors may still be
+      physically disconnected. Enabling those sensors for this profile is correct; Modbus timeouts and
+      “board offline” diagnostics remain <em>expected</em> until the hardware is wired. Cooling end-to-end
+      cannot be proven until RS485 (+ sensors) are attached.
+    </div>
+
+    <h2>2. Apply status</h2>
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Live device</td><td class="val">192.168.37.237 — applied &amp; verified 2026-08-03</td></tr>
+        <tr><td>Method</td><td>ESPHome LAN REST (<code>POST /number|switch|select/…</code>); each change stages NVS via <code>persist_config_to_nvs</code></td></tr>
+        <tr><td>Firmware factory defaults</td><td>Not changed in YAML — live NVS + documentation only</td></tr>
+        <tr><td>Door Sensor Mode</td><td class="val">Left NC (ON) — match physical reed wiring before flipping</td></tr>
+        <tr><td>ntfy topic / Wi‑Fi / PIN</td><td>Not modified (site-specific; not printed here)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. Settings by group</h2>
+    <p>Columns: <em>Value set</em> = live profile. <em>vs factory</em> notes when this profile differs from firmware <code>initial_value</code> / documented default.</p>
+
+    <h2>3.1 Temperature control &amp; compressor (§4.1)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Setpoint</td>
+          <td class="val">2.0 °C</td>
+          <td class="chg same">same</td>
+          <td>Requested hold temperature for a general food coolroom.</td>
+        </tr>
+        <tr>
+          <td>Compressor Differential</td>
+          <td class="val">1.0 °C</td>
+          <td class="chg same">same</td>
+          <td>ON at 2.5 / OFF at 1.5 °C — tight enough for food, without short-cycling.</td>
+        </tr>
+        <tr>
+          <td>Compressor Off-Delay (Lockout)</td>
+          <td class="val">3 min</td>
+          <td class="chg same">same</td>
+          <td>Motor protection; do not lower without compressor OEM approval.</td>
+        </tr>
+        <tr>
+          <td>Compressor Min Run Time</td>
+          <td class="val">2 min</td>
+          <td class="chg same">same</td>
+          <td>Pairs with off-delay to prevent brief ON/OFF chatter.</td>
+        </tr>
+        <tr>
+          <td>Fan Relay Enabled</td>
+          <td class="val">Off</td>
+          <td class="chg same">same</td>
+          <td>Plant fans are hardwired continuous; coil 0 reserved for a future fan rewire (Carel decision C).</td>
+        </tr>
+        <tr>
+          <td>Sensor Fallback Duty-Cycle</td>
+          <td class="val">On · 3 / 27 min</td>
+          <td class="chg same">same</td>
+          <td>~10% duty if Probe 1 fails — keeps room cold-ish safely without temperature feedback.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.2 Defrost schedule (§4.2)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Defrost System Enabled</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Automatic passive defrost required for a humid ~2 °C room.</td>
+        </tr>
+        <tr>
+          <td>Defrost Interval</td>
+          <td class="val">360 min (6 h)</td>
+          <td class="chg">was 480 (8 h)</td>
+          <td>Shorter than factory for typical food-room door traffic / moisture load; still stable, not aggressive.</td>
+        </tr>
+        <tr>
+          <td>Defrost Max Duration</td>
+          <td class="val">30 min</td>
+          <td class="chg same">same</td>
+          <td>Safety cap if the coil is slow to clear.</td>
+        </tr>
+        <tr>
+          <td>Early Termination by Temperature</td>
+          <td class="val">On @ 5.0 °C</td>
+          <td class="chg same">same</td>
+          <td>Ends defrost once Probe 2 shows the coil is clear — less room warm-up.</td>
+        </tr>
+        <tr>
+          <td>Drip-Drain Phase</td>
+          <td class="val">On · 5 min</td>
+          <td class="chg same">same*</td>
+          <td>Lets meltwater drain before cooling resumes (*device had drip Off; restored to factory On).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.3 Defrost — smart &amp; drip (§4.3)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Smart Defrost (Delta-Triggered)</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>Probe 2 online — catch frost between fixed intervals under variable loads.</td>
+        </tr>
+        <tr>
+          <td>Smart Delta / Dwell</td>
+          <td class="val">8.0 °C / 30 min</td>
+          <td class="chg same">same</td>
+          <td>Factory thresholds; tighten later only if ice appears between smart starts.</td>
+        </tr>
+        <tr>
+          <td>Dew Point Early Defrost</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>SHT31 online — defrost when coil is below freezing <em>and</em> below air dew point.</td>
+        </tr>
+        <tr>
+          <td>Frost Rate Monitoring</td>
+          <td class="val">On · 5% / 300 s</td>
+          <td class="chg">was Off</td>
+          <td>Humidity online — complements dew-point when RH drops while temp is stable.</td>
+        </tr>
+        <tr>
+          <td>Skip-If-Cold</td>
+          <td class="val">Off (−10 °C / force-max 720)</td>
+          <td class="chg same">same</td>
+          <td>Prefer scheduled defrosts until the plant is proven; force-max remains a 12 h safety net.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.4 Alarm thresholds (§4.4)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>High Temp Alarm Delta</td>
+          <td class="val">2.5 °C → ~4.5 °C</td>
+          <td class="chg">was 3.0</td>
+          <td>Earlier warning than factory for food stock (factory would alarm at ~5.0 °C).</td>
+        </tr>
+        <tr>
+          <td>Low Temp Alarm Delta</td>
+          <td class="val">2.0 °C → ~0.0 °C</td>
+          <td class="chg">was 3.0</td>
+          <td>Freeze guard near 0 °C without nuisance trips inside the normal 1.5–2.5 band.</td>
+        </tr>
+        <tr>
+          <td>Alarm Persist Time</td>
+          <td class="val">5 min</td>
+          <td class="chg same">same</td>
+          <td>Ignores brief door / load spikes.</td>
+        </tr>
+        <tr>
+          <td>Alarm Siren Enabled</td>
+          <td class="val">On</td>
+          <td class="chg same">same*</td>
+          <td>Audible local alarm (*device had been Off; restored On for this profile).</td>
+        </tr>
+        <tr>
+          <td>Alarm Recovery Hysteresis</td>
+          <td class="val">0.5 °C</td>
+          <td class="chg same">same</td>
+          <td>Stops clear/re-alarm flap at the threshold.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.5 Alarms — advanced (§4.5)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Ice Detection</td>
+          <td class="val">On · Δ15 °C · 10 min</td>
+          <td class="chg same">same</td>
+          <td>Probe 2 online — Precision polarity large coolroom−evap gap while cooling.</td>
+        </tr>
+        <tr>
+          <td>No-Cool Alarm Timeout</td>
+          <td class="val">45 min</td>
+          <td class="chg">was 60</td>
+          <td>Faster refrigeration-failure notice for food stock; still above natural pulldown.</td>
+        </tr>
+        <tr>
+          <td>Startup / Post-Defrost Grace</td>
+          <td class="val">15 / 20 min</td>
+          <td class="chg same">same</td>
+          <td>Suppresses nuisance alarms during boot pulldown and post-defrost recovery.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.6 Door (§4.6)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Door Sensor Enabled</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>All-sensors profile assumes reed fitted — enables door alarm / light paths.</td>
+        </tr>
+        <tr>
+          <td>Door Sensor Mode</td>
+          <td class="val">NC (unchanged)</td>
+          <td class="chg same">left alone</td>
+          <td>Must match wiring; wrong polarity inverts open/closed.</td>
+        </tr>
+        <tr>
+          <td>Door-Triggered Light</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>Staff convenience on load/unload; requires Light Relay Enabled.</td>
+        </tr>
+        <tr>
+          <td>Hold Compressor While Door Open</td>
+          <td class="val">Off</td>
+          <td class="chg same">same</td>
+          <td>Opt-in only — a stuck reed would starve cooling (Carel decision D).</td>
+        </tr>
+        <tr>
+          <td>Door Alarm Delay</td>
+          <td class="val">300 s (5 min)</td>
+          <td class="chg same">same</td>
+          <td>Allows normal loading; shorten if doors should never stay open.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.7 Probes &amp; sensors (§4.7)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Temperature Display Unit</td>
+          <td class="val">Celsius</td>
+          <td class="chg same">same</td>
+          <td>Display only; control math stays °C.</td>
+        </tr>
+        <tr>
+          <td>Evaporator Probe (Probe 2)</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Required for smart defrost, ice alarm, early terminate.</td>
+        </tr>
+        <tr>
+          <td>Internal SHT31</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Humidity / dew-point / frost-rate; humidity is monitored, not controlled.</td>
+        </tr>
+        <tr>
+          <td>External SHT20 (ambient)</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Ambient context on home gauge / diagnostics.</td>
+        </tr>
+        <tr>
+          <td>Probe calibration offsets</td>
+          <td class="val">0.0 °C</td>
+          <td class="chg same">same</td>
+          <td>Leave until checked against a reference thermometer.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.8 Notifications, audio, hardware, SD (§4.8–4.9, §4.13)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ntfy Push Notifications</td>
+          <td class="val">On</td>
+          <td class="chg same">same*</td>
+          <td>Phone alerts for alarms (*device had been Off; restored On). Topic/server left as configured.</td>
+        </tr>
+        <tr>
+          <td>ntfy priorities</td>
+          <td class="val">defaults</td>
+          <td class="chg same">same</td>
+          <td>No-Cool &amp; Probe Fault / Hardware Offline = urgent; all-clear = low.</td>
+        </tr>
+        <tr>
+          <td>Audio Alerts / Volume</td>
+          <td class="val">On / 85%</td>
+          <td class="chg same">same*</td>
+          <td>Spoken alarms on (*device had audio Off / 75%; restored profile defaults).</td>
+        </tr>
+        <tr>
+          <td>Compressor / Light / Siren relays</td>
+          <td class="val">Enabled</td>
+          <td class="chg same">same*</td>
+          <td>Hardware enables for control + door light + siren (*siren enable was Off on device).</td>
+        </tr>
+        <tr>
+          <td>SD Temp Log Retention</td>
+          <td class="val">90 days</td>
+          <td class="chg">was 60</td>
+          <td>Longer daily CSV history for food-room audit trail; free-space gate still 32&nbsp;MB.</td>
+        </tr>
+        <tr>
+          <td>Temperature log interval</td>
+          <td class="val">5 min</td>
+          <td class="chg same">compile-time</td>
+          <td><code>log_interval_min</code> substitution — not a live setting; left at firmware 5 min.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Intentionally left at factory default</h2>
+    <ul>
+      <li><strong>Compressor protection timers</strong> (3 / 2 min) — OEM-safe; no reason to shorten.</li>
+      <li><strong>Fan Relay Off</strong> — current plant fans are continuous hardwired.</li>
+      <li><strong>Hold Compressor While Door Open Off</strong> — stuck-reed risk outweighs benefit until reed is proven reliable.</li>
+      <li><strong>Skip-If-Cold Off</strong> — energy optimisation after commissioning, not day-one.</li>
+      <li><strong>Ice / smart thresholds</strong> (15 °C, 8 °C, dwells) — start from manual defaults; tune from real frost behaviour.</li>
+      <li><strong>Calibration offsets 0.0</strong> — never invent a correction without a reference thermometer.</li>
+      <li><strong>Home Assistant API</strong> — left as found (opt-in; not part of this cooling profile).</li>
+      <li><strong>Firmware YAML <code>initial_value</code>s</strong> — not changed; shipping factory defaults stay general-purpose.</li>
+    </ul>
+
+    <h2>5. How to re-apply or revert</h2>
+    <ul>
+      <li><strong>Re-apply from UI:</strong> log in on the web dashboard → set the values in the tables above (or follow Quick Start §4 “2 °C food coolroom” worked example).</li>
+      <li><strong>Re-apply via REST (LAN):</strong> <code>POST http://&lt;ip&gt;/number/&lt;Name&gt;/set?value=…</code> and <code>…/switch/&lt;Name&gt;/turn_on|turn_off</code> (empty body + <code>Content-Length: 0</code>). Template numbers can take a few seconds to re-publish; globals update immediately and stage to NVS.</li>
+      <li><strong>After ≥30 days of SD logs:</strong> optional PC helper <code>tools/analyse_logs_tune_settings.py</code> (Win/mac wrappers) recommends tweaks from <code>events.csv</code> / daily CSVs against this profile — recommend-only by default; see Quick Start §7 and <code>tools/README_LOG_TUNING.md</code>.</li>
+      <li><strong>Verify persistence:</strong> reboot (do <em>not</em> use plain USB <code>esphome upload</code> — that erases NVS). Prefer <code>./tools/esphome_flash.sh</code> or OTA if flashing.</li>
+      <li><strong>Backup:</strong> once happy, use <strong>Backup All Settings to SD</strong> so you can Restore after a factory reset.</li>
+      <li><strong>Full factory defaults:</strong> Factory Reset button (erases settings + Wi‑Fi) or flash with <code>--erase-settings</code>.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Disclaimer:</strong> Starting values based on general commercial chill practice for ~2&nbsp;°C food storage
+      and this controller’s documented behaviour. Confirm against your product, local food-safety rules,
+      and how the loaded room actually performs. Humidity is reported only — provide separate humidification if required.
+    </div>
+
+    <div class="footer">
+      ESP32-P4 Coolroom · <code>reference/recommended_settings_2c.html</code> ·
+      Cross-refs: USER_MANUAL §4.1–4.9 · QUICK_START_GUIDE §4 · CAREL_CONTROL_DECISIONS.md ·
+      Printed from browser (Cmd/Ctrl+P). No passwords or Wi‑Fi secrets included.
+    </div>
+  </div>
+</body>
+</html>

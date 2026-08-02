@@ -1,0 +1,171 @@
+timestamp,event,detail
+01-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+01-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+01-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+01-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+01-06-2026 03:00:00,DEFROST_START,scheduled
+01-06-2026 03:25:00,DEFROST_END,terminate_temp
+01-06-2026 11:00:00,DOOR_ALARM,open>delay
+01-06-2026 11:02:00,DOOR_ALARM_CLEAR,door closed
+02-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+02-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+02-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+02-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+03-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+03-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+03-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+03-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+04-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+04-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+04-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+04-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+04-06-2026 03:00:00,DEFROST_START,scheduled
+04-06-2026 03:25:00,DEFROST_END,terminate_temp
+05-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+05-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+05-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+05-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+06-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+06-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+06-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+06-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+06-06-2026 16:00:00,ALARM_HI,coolroom=5.1
+06-06-2026 16:08:00,ALARM_HI_CLEAR,coolroom=3.2
+07-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+07-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+07-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+07-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+07-06-2026 03:00:00,DEFROST_START,scheduled
+07-06-2026 03:25:00,DEFROST_END,terminate_temp
+08-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+08-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+08-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+08-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+08-06-2026 11:00:00,DOOR_ALARM,open>delay
+08-06-2026 11:02:00,DOOR_ALARM_CLEAR,door closed
+09-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+09-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+09-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+09-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+10-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+10-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+10-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+10-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+10-06-2026 03:00:00,DEFROST_START,scheduled
+10-06-2026 03:25:00,DEFROST_END,terminate_temp
+11-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+11-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+11-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+11-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+12-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+12-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+12-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+12-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+13-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+13-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+13-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+13-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+13-06-2026 03:00:00,DEFROST_START,scheduled
+13-06-2026 03:25:00,DEFROST_END,terminate_temp
+13-06-2026 16:00:00,ALARM_HI,coolroom=5.1
+13-06-2026 16:08:00,ALARM_HI_CLEAR,coolroom=3.2
+14-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+14-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+14-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+14-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+15-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+15-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+15-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+15-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+15-06-2026 11:00:00,DOOR_ALARM,open>delay
+15-06-2026 11:02:00,DOOR_ALARM_CLEAR,door closed
+16-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+16-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+16-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+16-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+16-06-2026 03:00:00,DEFROST_START,scheduled
+16-06-2026 03:25:00,DEFROST_END,terminate_temp
+17-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+17-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+17-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+17-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+18-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+18-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+18-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+18-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+19-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+19-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+19-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+19-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+19-06-2026 03:00:00,DEFROST_START,scheduled
+19-06-2026 03:25:00,DEFROST_END,terminate_temp
+19-06-2026 10:00:00,ICE_ALARM,delta=16.2
+19-06-2026 10:20:00,ICE_ALARM_CLEAR,delta recovered
+20-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+20-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+20-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+20-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+21-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+21-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+21-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+21-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+21-06-2026 16:00:00,ALARM_HI,coolroom=5.1
+21-06-2026 16:08:00,ALARM_HI_CLEAR,coolroom=3.2
+22-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+22-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+22-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+22-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+22-06-2026 03:00:00,DEFROST_START,scheduled
+22-06-2026 03:25:00,DEFROST_END,terminate_temp
+22-06-2026 11:00:00,DOOR_ALARM,open>delay
+22-06-2026 11:02:00,DOOR_ALARM_CLEAR,door closed
+23-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+23-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+23-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+23-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+24-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+24-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+24-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+24-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+25-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+25-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+25-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+25-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+25-06-2026 03:00:00,DEFROST_START,scheduled
+25-06-2026 03:25:00,DEFROST_END,terminate_temp
+26-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+26-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+26-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+26-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+26-06-2026 07:00:00,PROBE_FAULT,probe1 stale_or_invalid
+26-06-2026 07:15:00,PROBE_FAULT_CLEAR,probe1 recovered
+27-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+27-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+27-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+27-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+28-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+28-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+28-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+28-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+28-06-2026 03:00:00,DEFROST_START,scheduled
+28-06-2026 03:25:00,DEFROST_END,terminate_temp
+29-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+29-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+29-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+29-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+29-06-2026 11:00:00,DOOR_ALARM,open>delay
+29-06-2026 11:02:00,DOOR_ALARM_CLEAR,door closed
+30-06-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+30-06-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+30-06-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+30-06-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+01-07-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+01-07-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+01-07-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+01-07-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0
+01-07-2026 03:00:00,DEFROST_START,scheduled
+01-07-2026 03:25:00,DEFROST_END,terminate_temp
+02-07-2026 09:00:00,COMPRESSOR_ON,coolroom=2.4 setpoint=2.0 diff=1.0
+02-07-2026 09:12:00,COMPRESSOR_OFF,coolroom=1.6 setpoint=2.0 diff=1.0
+02-07-2026 14:00:00,COMPRESSOR_ON,coolroom=2.5 setpoint=2.0 diff=1.0
+02-07-2026 14:08:00,COMPRESSOR_OFF,coolroom=1.7 setpoint=2.0 diff=1.0

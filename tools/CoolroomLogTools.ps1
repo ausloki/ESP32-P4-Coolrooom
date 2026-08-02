@@ -4,7 +4,8 @@
   Interactive menu for coolroom log pull / settings recommend (Windows).
 
 .DESCRIPTION
-  Ensures tools\.venv-log-tuning, then runs pull / analyze / recommend scripts.
+  Ensures tools\.venv-log-tuning, then runs pull / analyse / recommend scripts.
+  Tweaks require ≥30 days of events.csv (see tools/README_LOG_TUNING.md).
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -25,13 +26,13 @@ function Read-HostDefault([string]$Prompt, [string]$Default) {
 
 function Invoke-Recommend {
   $h = Read-HostDefault 'Controller host/IP' $DefaultHost
-  $days = Read-HostDefault 'Days of dated temp logs (0 = all)' '14'
-  & $Py (Join-Path $Tools 'recommend_settings.py') --host $h --days $days
+  $days = Read-HostDefault 'Days of dated temp logs to pull (0 = all)' '0'
+  & $Py (Join-Path $Tools 'analyse_logs_tune_settings.py') --host $h --days $days
 }
 
 function Invoke-Pull {
   $h = Read-HostDefault 'Controller host/IP' $DefaultHost
-  $days = Read-HostDefault 'Days of dated temp logs (0 = all)' '14'
+  $days = Read-HostDefault 'Days of dated temp logs (0 = all)' '0'
   & $Py (Join-Path $Tools 'pull_controller_logs.py') --host $h --days $days
 }
 
@@ -46,23 +47,25 @@ function Invoke-Analyze {
     Select-Object -First 1
   $defaultDir = if ($latest) { $latest.FullName } else { (Join-Path $Repo 'logs\controller') }
   $dir = Read-HostDefault 'Log directory to analyze' $defaultDir
-  $h = Read-HostDefault 'Controller host for live settings (blank to skip)' $DefaultHost
-  $args = @((Join-Path $Tools 'analyze_coolroom_logs.py'), $dir)
+  $h = Read-Host 'Controller host for live settings (blank to skip)'
   if (-not [string]::IsNullOrWhiteSpace($h)) {
-    $args += @('--host', $h)
+    & $Py (Join-Path $Tools 'analyse_logs_tune_settings.py') --log-dir $dir --settings-host $h.Trim()
+  } else {
+    & $Py (Join-Path $Tools 'analyse_logs_tune_settings.py') --log-dir $dir
   }
-  & $Py @args
 }
 
 Write-Host ''
 Write-Host '=== ESP32-P4 Coolroom — Log tools (Windows) ==='
 Write-Host "Python: $Py"
 Write-Host "Repo:   $Repo"
+Write-Host 'Note:   Tweaks require ≥30 days of events.csv (or dated temps if no events).'
+Write-Host 'Docs:   tools/README_LOG_TUNING.md'
 Write-Host ''
-Write-Host '  1) Recommend settings (pull logs + analyze)'
+Write-Host '  1) Analyse + recommend (pull from host, ≥30-day gate)'
 Write-Host '  2) Pull logs only'
 Write-Host '  3) List SD files on controller'
-Write-Host '  4) Analyze existing local log folder'
+Write-Host '  4) Analyse existing local log folder (≥30-day gate)'
 Write-Host '  Q) Quit'
 Write-Host ''
 

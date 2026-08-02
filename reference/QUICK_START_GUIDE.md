@@ -116,60 +116,62 @@ cooling resumes. That is deliberate compressor protection, not a fault. See §4.
 
 ---
 
-## 4. Worked Example — Cold Storage Profile: Dessert Plums (~15° Brix)
+## 4. Worked Example — 2 °C Food Coolroom (All Sensors Online)
 
-This is a realistic **starting point**, not a guarantee — always confirm against your own
-produce's condition, your local food-safety guidance, and how the room actually performs
-once loaded. Plums at ~15° Brix are ripe, sweet dessert-quality fruit, typically destined
-for short-to-medium-term cold storage rather than long-haul controlled-atmosphere storage.
+This is the project’s **recommended general starting profile** for a commercial food
+coolroom held at **2.0 °C**, with RTDs, relay board, I2C humidity/ambient, and door reed
+treated as fitted. Prefer safe/stable defaults over aggressive energy saving. Printable
+tables + apply notes: `reference/recommended_settings_2c.html`.
 
-**Why these particular settings:** plums tolerate cold well (close to 0 °C without chilling
-injury, unlike some other stone fruit), but need consistently high humidity to avoid
-shriveling, and a reasonably tight low-temperature alarm since sweeter fruit can still
-suffer freeze damage a little below 0 °C.
+**Plant assumptions:** single compressor, **passive** defrost, evaporator fans **hardwired
+continuous** (leave **Fan Relay Enabled** off). Humidity is monitored, not controlled.
 
 | Setting | Recommended | Why |
 |---|---|---|
-| **Setpoint** | `0.5 °C` | Close to optimal storage temperature for stone fruit while leaving a safety margin above freezing. |
-| **Compressor Differential** | `1.0 °C` (default) | Keeps the swing tight around 0.5 °C without excessive compressor cycling. |
-| **Compressor Off-Delay** | `3 min` (default) | No produce-specific reason to change this. |
-| **Compressor Min Run Time** | `2 min` (default) | Leave on; pairs with Off-Delay to stop short-cycling. |
-| **Fan Relay Enabled** | Leave `Off` | Fans currently run constantly (hardwired). Enable only after rewiring fans onto coil 0 for controller cycling. |
-| **Defrost System Enabled** | `On` | Needed — a near-0 °C, high-humidity room frosts the coil steadily. |
-| **Defrost Interval** | `480 min` (default, 8 h) | Reasonable baseline; shorten if you see visible frost buildup between cycles. |
-| **Defrost Early Termination by Temp** | `On` (default) | Avoids over-warming the room on every cycle — important for a chill-sensitive but not frost-tolerant product. |
-| **Defrost Drip Phase** | `On` (default), `5 min` | Standard — prevents meltwater re-icing the coil. |
-| **Smart Defrost (Delta-Triggered)** | **Turn On** (default is Off) | Produce rooms have variable loads (new stock coming in warm) — catches frost buildup the fixed timer alone would miss. |
-| **Smart Defrost Delta Threshold** | `8.0 °C` (default) | Reasonable starting point; tighten if visible ice appears between smart-triggered cycles. |
-| **Dew Point Early Defrost Trigger** | **Turn On** (default is Off) | The single most useful setting for a high-humidity produce room — defrosts exactly when frost is actually forming, not on a guess. |
-| **High Temp Alarm Delta** | `2.0 °C` (i.e. alarms above ~2.5 °C) | Catches a warming excursion early enough to act before ripening accelerates or decay risk rises. |
-| **Low Temp Alarm Delta** | `1.5 °C` (i.e. alarms below ~ -1.0 °C) | Tighter than default — protects against freeze injury, since higher-sugar fruit still isn't freeze-proof much below 0 °C. |
+| **Setpoint** | `2.0 °C` | Target hold for a general food chiller (matches firmware factory default). |
+| **Compressor Differential** | `1.0 °C` (default) | Band ≈ 1.5–2.5 °C — tight control without excessive cycling. |
+| **Compressor Off-Delay** | `3 min` (default) | Compressor protection; do not shorten without OEM approval. |
+| **Compressor Min Run Time** | `2 min` (default) | Pairs with Off-Delay against short-cycling. |
+| **Fan Relay Enabled** | Leave `Off` | Fans currently run constantly (hardwired). Enable only after rewiring fans onto coil 0. |
+| **Sensor Fallback Duty-Cycle** | `On`, `3` / `27` min (default) | ~10% duty if Probe 1 fails — safer than stopping cooling completely. |
+| **Defrost System Enabled** | `On` | Needed — a ~2 °C humid room frosts the coil. |
+| **Defrost Interval** | `360 min` (**6 h**; factory default is 480 / 8 h) | Shorter for typical food-room door traffic / moisture; still conservative. |
+| **Defrost Early Termination by Temp** | `On` @ `5.0 °C` (default) | Ends defrost when Probe 2 shows the coil is clear — less room warm-up. |
+| **Defrost Drip Phase** | `On` (default), `5 min` | Prevents meltwater re-icing the coil. |
+| **Smart Defrost (Delta-Triggered)** | **Turn On** (default is Off) | Probe 2 online — catches frost between fixed intervals under variable loads. |
+| **Smart Defrost Delta / Dwell** | `8.0 °C` / `30 min` (defaults) | Starting point; tighten only if ice appears between smart starts. |
+| **Dew Point Early Defrost Trigger** | **Turn On** (default is Off) | SHT31 online — defrost when frost is actually forming. |
+| **Frost Rate Monitoring** | **Turn On** (default is Off), `5%` / `300 s` | Complements dew-point when humidity drops while temperature is stable. |
+| **Defrost Skip-If-Cold** | Leave `Off` | Prefer scheduled defrosts until the plant is proven; Force-Max stays 720 min. |
+| **High Temp Alarm Delta** | `2.5 °C` (alarms above ~4.5 °C; factory 3.0) | Earlier food-stock warning than factory (~5.0 °C). |
+| **Low Temp Alarm Delta** | `2.0 °C` (alarms below ~0 °C; factory 3.0) | Freeze guard near 0 °C without nuisance trips inside the normal band. |
 | **Alarm Persist Time** | `5 min` (default) | Fine as-is. |
-| **Ice Alarm Delta** | `15 °C` (default) | Large coolroom−evap gap while cooling = iced coil (Precision polarity). Raise toward 18–20 if you get false alarms during heavy pull-down; enable Ice Detection + leave Dwell at 10 min. |
-| **Ice Alarm Dwell** | `10 min` (default) | Condition must hold this long before the alarm fires. |
-| **No-Cool Alarm Timeout** | `45 min` (tighter than default 60) | Stone fruit is high-value enough to justify catching a refrigeration failure a bit faster. |
-| **Door Sensor Enabled** | `On` | Recommended for any room with regular staff traffic moving stock. Required if you want Door-Triggered Light or door-hold. |
-| **Door-Triggered Light Enabled** | `On` | Convenient for staff picking/sorting fruit — light comes on automatically while the door's open. Turns Door Sensor Enabled on if it was off. |
-| **Hold Compressor While Door Open** | Leave `Off` unless the reed is reliable and you want cooling paused on open doors | Opt-in. Busy loading doors / less humid air across a cold coil can benefit; a stuck-open reed would starve cooling. |
-| **Door Alarm Delay** | `300 s` (default) | Fine for routine loading/unloading; shorten if the room should never be open long. |
-| **Internal/External Humidity Sensors** | `On` (default) | Monitor toward a target ~90–95% RH — remember this controller only *reports* humidity, it doesn't control it (User Manual §4.7). Pair with your own humidification setup if the room runs dry. |
+| **Ice Detection / Delta / Dwell** | `On` / `15 °C` / `10 min` (defaults) | Large coolroom−evap gap while cooling = iced coil (Precision polarity). |
+| **No-Cool Alarm Timeout** | `45 min` (tighter than default 60) | Faster refrigeration-failure notice for food stock. |
+| **Door Sensor Enabled** | `On` | Assumed reed fitted; required for door alarm / door light. Match NC/NO to wiring. |
+| **Door-Triggered Light Enabled** | `On` | Staff convenience on load/unload. |
+| **Hold Compressor While Door Open** | Leave `Off` | Opt-in only — a stuck reed would starve cooling. |
+| **Door Alarm Delay** | `300 s` (default) | Routine loading; shorten if doors should never stay open long. |
+| **Evaporator Probe / Internal SHT31 / External SHT20** | `On` (defaults) | All-sensors profile — enable what is fitted; bench Modbus/I2C offline is expected until wired. |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |
+| **SD Temp Log Retention** | `90 days` (factory 60) | Longer daily CSV history for food-room audit trail. |
+| **ntfy / Audio / Siren** | `On` (defaults) | Keep local + push alerting for this profile; subscribe the phone to your topic. |
 
-> **Disclaimer:** these are illustrative starting values based on general commercial
-> cold-storage practice for stone fruit, not a substitute for your own quality/food-safety
-> procedures. Always verify against your product's actual condition and any regulatory
-> requirements that apply to your operation.
+> **Disclaimer:** illustrative starting values for a general ~2 °C commercial food coolroom
+> on this controller — not a substitute for your own quality/food-safety procedures. Always
+> verify against the product, local rules, and how the loaded room actually performs.
 
 ### Other common produce — quick starting points
 
-Rough industry-standard starting points only — same disclaimer as above applies, more so
-the less this list matches your actual product and packaging.
+Rough industry-standard setpoint/RH hints only — apply the same disclaimer. For stone fruit
+near 0 °C, tighten the **Low Temp Alarm Delta** further (e.g. 1.5 °C) and consider a lower
+setpoint; keep Smart / Dew-Point / Frost-Rate on when humidity sensors are online.
 
 | Product | Typical setpoint | Typical RH target | Notes |
 |---|---|---|---|
 | Apples (long-term) | 0 – 4 °C | 90–95% | Very cold-tolerant; consider a tighter Low Alarm Delta only if storing right at 0 °C. |
-| Leafy greens / general veg | 0 – 4 °C | 95–98% | High RH need, similar defrost considerations to the plum profile above. |
-| Dairy / general chiller | 1 – 4 °C | Not usually critical | Wider alarm deltas are usually fine; Smart/Dew-Point triggers less critical unless the room runs humid. |
+| Leafy greens / general veg | 0 – 4 °C | 95–98% | High RH need; same smart/dew-point defrost idea as the 2 °C profile. |
+| Dairy / general chiller | 1 – 4 °C | Not usually critical | The 2 °C profile above is the default starting point for this case. |
 
 ---
 
@@ -238,7 +240,27 @@ Also: Min Run Time holds the compressor ON until its minimum ON window elapses (
 
 ---
 
-## 7. When To Open the Full Manual
+## 7. After ~30 days — log-based setting tune (optional)
+
+Once the SD card has about a month of `events.csv` (and daily temperature CSVs), you can
+run a **recommend-only** helper on a PC to spot nuisance alarms, short-cycling, busy doors,
+or aggressive defrost cadence, and compare suggestions to the 2 °C profile above.
+
+| OS | How |
+|---|---|
+| **macOS** | `./tools/analyse_logs_tune_settings.sh --host <controller-ip>` |
+| **Windows** | `tools\analyse_logs_tune_settings.cmd --host <controller-ip>` |
+| **Offline** | Download logs from the web **SD Card** tab (or the same script), then `--log-dir <folder>` |
+
+The tool refuses to invent tweaks with **&lt; 30 days** of usable history (exit code 2). It
+does **not** change the controller unless you pass `--apply --yes`, and then only an
+allowlisted set of number settings (never setpoint, never probe enables). Full protocol /
+venv notes: `tools/README_LOG_TUNING.md`. Printable starting tables remain in
+`reference/recommended_settings_2c.html`.
+
+---
+
+## 8. When To Open the Full Manual
 
 - You need to understand **why** a setting behaves the way it does, not just what value to
   type in.

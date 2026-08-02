@@ -12,7 +12,9 @@
 // Mount point: /sdcard
 //
 // Log layout on SD card:
-//   /sdcard/YYYY-MM-DD.csv        — daily temperature + state log (appended)
+//   /sdcard/YYYY-MM-DD.csv        — daily temperature + state + CPU % log
+//                                   (cols: timestamp, temps, relays/alarms,
+//                                   cpu_pct, cpu_c0_pct, cpu_c1_pct)
 //   /sdcard/nodate.csv            — samples taken before wall clock is valid
 //   /sdcard/events.csv            — alarm / fault / defrost events (appended)
 //   /sdcard/backup.json           — last saved control parameters
@@ -439,7 +441,8 @@ inline int p4_sd_prune_temp_logs(int keep_days) {
 
 /// Append one CSV row to the daily log file (/sdcard/YYYY-MM-DD.csv).
 /// Creates the file with a header row if it does not exist.
-/// coolroom_c / evap_c / ambient_c: NaN is written as empty field.
+/// coolroom_c / evap_c / ambient_c / cpu_*: NaN is written as empty field.
+/// CPU % is sampled here via p4_cpu_usage_* (same helpers as Info/web sensors).
 inline bool p4_sd_log_temps(
     float coolroom_c,
     float evap_c,
@@ -481,27 +484,33 @@ inline bool p4_sd_log_temps(
     p4_sd_note_open();
     if (is_new) {
         fputs("timestamp,coolroom_c,evap_c,ambient_c,setpoint_c,"
-              "compressor,defrost,alarm_hi,alarm_lo,probe_fault\n", f);
+              "compressor,defrost,alarm_hi,alarm_lo,probe_fault,"
+              "cpu_pct,cpu_c0_pct,cpu_c1_pct\n", f);
     }
 
     char ts[24];
     p4_fmt_time(ts, sizeof(ts));
 
-    // Format each temperature (empty string for NaN)
+    // Format each float (empty string for NaN)
     auto fmtf = [](char* buf, size_t n, float v) {
         if (std::isfinite(v)) snprintf(buf, n, "%.1f", v);
         else if (n > 0) buf[0] = '\0';
     };
     char sc[12], ec[12], ac[12], sp[12];
+    char cpu[12], c0[12], c1[12];
     fmtf(sc, sizeof(sc), coolroom_c);
     fmtf(ec, sizeof(ec), evap_c);
     fmtf(ac, sizeof(ac), ambient_c);
     fmtf(sp, sizeof(sp), setpoint_c);
+    fmtf(cpu, sizeof(cpu), p4_cpu_usage_pct());
+    fmtf(c0, sizeof(c0), p4_cpu_usage_core_pct(0));
+    fmtf(c1, sizeof(c1), p4_cpu_usage_core_pct(1));
 
-    int written = fprintf(f, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%d\n",
+    int written = fprintf(f, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%d,%s,%s,%s\n",
             ts, sc, ec, ac, sp,
             (int)compressor_on, (int)defrost_on,
-            (int)alarm_hi, (int)alarm_lo, (int)probe_fault);
+            (int)alarm_hi, (int)alarm_lo, (int)probe_fault,
+            cpu, c0, c1);
     if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     return true;

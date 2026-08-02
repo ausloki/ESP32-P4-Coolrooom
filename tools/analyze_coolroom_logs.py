@@ -34,15 +34,18 @@ _TOOLS = Path(__file__).resolve().parent
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
-from coolroom_http import DEFAULT_HOST, fetch_current_settings  # noqa: E402
+from coolroom_http import DEFAULT_HOST, PROFILE_2C, fetch_current_settings  # noqa: E402
 
-_DATE_CSV = re.compile(r"^\d{4}-\d{2}-\d{2}\.csv$", re.IGNORECASE)
+_DATE_CSV = re.compile(r"^(\d{4}-\d{2}-\d{2})\.csv$", re.IGNORECASE)
 _COMP_DETAIL = re.compile(
     r"coolroom=(?P<coolroom>[-+]?\d+(?:\.\d+)?).*?"
     r"setpoint=(?P<setpoint>[-+]?\d+(?:\.\d+)?).*?"
     r"diff=(?P<diff>[-+]?\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
+
+# Primary gate used by analyse_logs_tune_settings.py (keep in sync).
+MIN_HISTORY_DAYS = 30
 
 
 def _parse_args() -> argparse.Namespace:
@@ -59,6 +62,12 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=24,
         help="Minimum non-defrost coolroom samples before recommending (default 24 ≈ 2 h)",
+    )
+    p.add_argument(
+        "--min-days",
+        type=float,
+        default=0.0,
+        help="If >0, require this many days of history (events preferred) or exit 2",
     )
     return p.parse_args()
 
@@ -129,6 +138,25 @@ class Recommendation:
     confidence: str  # high / medium / low / n/a
     rationale: str
     current: float | None = None
+    profile_2c: float | None = None
+    apply_safe: bool = False
+
+
+@dataclass
+class HistorySpan:
+    """How much usable log history is present (for the ≥30-day gate)."""
+
+    source: str  # "events" | "temp_files" | "none"
+    span_days: float
+    first_ts: datetime | None
+    last_ts: datetime | None
+    event_rows: int
+    dated_temp_files: int
+    detail: str
+
+    @property
+    def ok(self) -> bool:
+        return self.source != "none" and self.span_days >= MIN_HISTORY_DAYS
 
 
 @dataclass
@@ -139,6 +167,7 @@ class Report:
     sample_count: int = 0
     non_defrost_count: int = 0
     span_hours: float | None = None
+    history: HistorySpan | None = None
     stats: dict[str, Any] = field(default_factory=dict)
     event_stats: dict[str, Any] = field(default_factory=dict)
     recommendations: list[Recommendation] = field(default_factory=list)
@@ -175,6 +204,7 @@ def load_temp_rows(paths: Iterable[Path]) -> list[TempRow]:
 def load_event_stats(path: Path) -> dict[str, Any]:
     counts: dict[str, int] = {}
     on_offs: list[tuple[datetime, str, dict[str, float]]] = []
+    timestamps: list[datetime] = []
     with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
         reader = csv.DictReader(f)
         for raw in reader:
@@ -183,8 +213,10 @@ def load_event_stats(path: Path) -> dict[str, Any]:
             if not ev:
                 continue
             counts[ev] = counts.get(ev, 0) + 1
+            ts = _parse_ts(norm.get("timestamp", ""))
+            if ts is not None:
+                timestamps.append(ts)
             if ev in ("COMPRESSOR_ON", "COMPRESSOR_OFF"):
-                ts = _parse_ts(norm.get("timestamp", ""))
                 detail = norm.get("detail") or ""
                 meta: dict[str, float] = {}
                 m = _COMP_DETAIL.search(detail)
@@ -220,9 +252,21 @@ def load_event_stats(path: Path) -> dict[str, Any]:
         idx = min(len(s) - 1, max(0, int(round((p / 100.0) * (len(s) - 1)))))
         return s[idx]
 
+    first_ts = min(timestamps) if timestamps else None
+    last_ts = max(timestamps) if timestamps else None
+    span_days = (
+        (last_ts - first_ts).total_seconds() / 86400.0
+        if first_ts is not None and last_ts is not None
+        else 0.0
+    )
+
     return {
         "counts": counts,
         "compressor_transitions": len(on_offs),
+        "event_rows": sum(counts.values()),
+        "first_ts": first_ts.isoformat(sep=" ") if first_ts else None,
+        "last_ts": last_ts.isoformat(sep=" ") if last_ts else None,
+        "span_days": span_days,
         "on_duration_min": {
             "n": len(on_durations_min),
             "median": statistics.median(on_durations_min) if on_durations_min else None,
@@ -242,6 +286,116 @@ def load_event_stats(path: Path) -> dict[str, Any]:
     }
 
 
+def list_log_paths(log_dir: Path) -> tuple[list[Path], Path | None]:
+    """Return (dated+nodate temp CSV paths, events.csv path or None)."""
+    temp_paths = sorted(
+        [
+            p
+            for p in log_dir.iterdir()
+            if p.is_file() and (_DATE_CSV.match(p.name) or p.name.lower() == "nodate.csv")
+        ],
+        key=lambda p: p.name,
+    )
+    event_path = next(
+        (p for p in log_dir.iterdir() if p.is_file() and p.name.lower() == "events.csv"),
+        None,
+    )
+    return temp_paths, event_path
+
+
+def measure_history(log_dir: Path) -> HistorySpan:
+    """Measure usable history for the ≥30-day gate.
+
+    Clear rule (documented in tools/README_LOG_TUNING.md):
+      1. Prefer events.csv: span = last − first parseable timestamp.
+         If events.csv exists with ≥2 parseable timestamps but span < min days,
+         that is a hard fail — do not fall back to temp files to invent tweaks.
+      2. If events.csv is missing or has <2 parseable timestamps, fall back to
+         dated YYYY-MM-DD.csv filenames: span = (latest − earliest) calendar days.
+    """
+    temp_paths, event_path = list_log_paths(log_dir)
+    dated = []
+    for p in temp_paths:
+        m = _DATE_CSV.match(p.name)
+        if m:
+            try:
+                dated.append(datetime.strptime(m.group(1), "%Y-%m-%d").date())
+            except ValueError:
+                pass
+
+    if event_path is not None:
+        stats = load_event_stats(event_path)
+        span = float(stats.get("span_days") or 0.0)
+        first = stats.get("first_ts")
+        last = stats.get("last_ts")
+        first_dt = _parse_ts(first) if isinstance(first, str) else None
+        last_dt = _parse_ts(last) if isinstance(last, str) else None
+        rows = int(stats.get("event_rows") or 0)
+        if first_dt is not None and last_dt is not None and rows >= 2:
+            return HistorySpan(
+                source="events",
+                span_days=span,
+                first_ts=first_dt,
+                last_ts=last_dt,
+                event_rows=rows,
+                dated_temp_files=len(dated),
+                detail=(
+                    f"events.csv: {rows} rows from {first_dt.date()} → {last_dt.date()} "
+                    f"({span:.1f} days)"
+                ),
+            )
+        # events present but unusable clock → try temps, note the issue
+        if dated:
+            span_d = float((max(dated) - min(dated)).days)
+            return HistorySpan(
+                source="temp_files",
+                span_days=span_d,
+                first_ts=datetime.combine(min(dated), datetime.min.time()),
+                last_ts=datetime.combine(max(dated), datetime.min.time()),
+                event_rows=rows,
+                dated_temp_files=len(dated),
+                detail=(
+                    f"events.csv present but <2 parseable timestamps "
+                    f"(rows={rows}); using dated temp files {min(dated)} → {max(dated)} "
+                    f"({span_d:.0f} calendar days)"
+                ),
+            )
+        return HistorySpan(
+            source="none",
+            span_days=0.0,
+            first_ts=None,
+            last_ts=None,
+            event_rows=rows,
+            dated_temp_files=0,
+            detail="events.csv has no usable timestamps and no dated temp CSVs found",
+        )
+
+    if dated:
+        span_d = float((max(dated) - min(dated)).days)
+        return HistorySpan(
+            source="temp_files",
+            span_days=span_d,
+            first_ts=datetime.combine(min(dated), datetime.min.time()),
+            last_ts=datetime.combine(max(dated), datetime.min.time()),
+            event_rows=0,
+            dated_temp_files=len(dated),
+            detail=(
+                f"No events.csv; dated temp files {min(dated)} → {max(dated)} "
+                f"({span_d:.0f} calendar days). Event-based heuristics will be limited."
+            ),
+        )
+
+    return HistorySpan(
+        source="none",
+        span_days=0.0,
+        first_ts=None,
+        last_ts=None,
+        event_rows=0,
+        dated_temp_files=0,
+        detail="No events.csv and no dated YYYY-MM-DD.csv temperature logs found",
+    )
+
+
 def _percentile(vals: list[float], p: float) -> float | None:
     if not vals:
         return None
@@ -258,6 +412,31 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 def _round_setting(v: float, step: float) -> float:
     return round(v / step) * step
+
+
+def _rec(
+    key: str,
+    label: str,
+    suggested: float | None,
+    unit: str,
+    confidence: str,
+    rationale: str,
+    *,
+    apply_safe: bool | None = None,
+) -> Recommendation:
+    from coolroom_http import APPLY_ALLOWLIST
+
+    safe = (key in APPLY_ALLOWLIST) if apply_safe is None else apply_safe
+    return Recommendation(
+        key=key,
+        label=label,
+        suggested=suggested,
+        unit=unit,
+        confidence=confidence,
+        rationale=rationale,
+        profile_2c=PROFILE_2C.get(key),
+        apply_safe=safe and suggested is not None,
+    )
 
 
 def _add_cycle_recommendations(report: Report, event_stats: dict[str, Any]) -> None:
@@ -281,24 +460,17 @@ def _add_cycle_recommendations(report: Report, event_stats: dict[str, Any]) -> N
             )
             conf = "medium"
         report.recommendations.append(
-            Recommendation(
-                key="off_delay_min",
-                label="Compressor Off-Delay (min)",
-                suggested=suggested_lock,
-                unit="min",
-                confidence=conf,
-                rationale=why,
-            )
+            _rec("off_delay_min", "Compressor Off-Delay (min)", suggested_lock, "min", conf, why)
         )
     else:
         report.recommendations.append(
-            Recommendation(
-                key="off_delay_min",
-                label="Compressor Off-Delay (min)",
-                suggested=3.0,
-                unit="min",
-                confidence="low",
-                rationale="Not enough COMPRESSOR_ON/OFF edges to measure restart gaps — leave at default 3 min.",
+            _rec(
+                "off_delay_min",
+                "Compressor Off-Delay (min)",
+                3.0,
+                "min",
+                "low",
+                "Not enough COMPRESSOR_ON/OFF edges to measure restart gaps — leave at default 3 min.",
             )
         )
 
@@ -317,25 +489,167 @@ def _add_cycle_recommendations(report: Report, event_stats: dict[str, Any]) -> N
                 "so cut-out is not delayed unnecessarily."
             )
         report.recommendations.append(
-            Recommendation(
-                key="min_run_min",
-                label="Compressor Min Run Time (min)",
-                suggested=suggested_min_run,
-                unit="min",
-                confidence="medium",
-                rationale=why,
+            _rec(
+                "min_run_min",
+                "Compressor Min Run Time (min)",
+                suggested_min_run,
+                "min",
+                "medium",
+                why,
             )
         )
     else:
         report.recommendations.append(
-            Recommendation(
-                key="min_run_min",
-                label="Compressor Min Run Time (min)",
-                suggested=2.0,
-                unit="min",
-                confidence="low",
-                rationale="Insufficient ON-duration samples — leave at default 2 min.",
+            _rec(
+                "min_run_min",
+                "Compressor Min Run Time (min)",
+                2.0,
+                "min",
+                "low",
+                "Insufficient ON-duration samples — leave at default 2 min.",
             )
+        )
+
+
+def _add_event_pattern_recommendations(report: Report, event_stats: dict[str, Any]) -> None:
+    """Door / defrost / alarm / probe patterns from events.csv counts."""
+    counts: dict[str, int] = dict(event_stats.get("counts") or {})
+    span_days = float(event_stats.get("span_days") or 0.0) or None
+    per_day = (lambda n: (n / span_days) if span_days and span_days > 0 else None)
+
+    alarm_hi = counts.get("ALARM_HI", 0)
+    alarm_lo = counts.get("ALARM_LO", 0)
+    door = counts.get("DOOR_ALARM", 0)
+    defrost_starts = counts.get("DEFROST_START", 0)
+    ice = counts.get("ICE_ALARM", 0)
+    probe = counts.get("PROBE_FAULT", 0)
+    temp_offline = counts.get("TEMP_BOARD_OFFLINE", 0)
+    no_cool = counts.get("NO_COOL_ALARM", 0)
+
+    hi_pd = per_day(alarm_hi)
+    lo_pd = per_day(alarm_lo)
+    door_pd = per_day(door)
+    defrost_pd = per_day(defrost_starts)
+    ice_pd = per_day(ice)
+
+    # Frequent HI/LO alarms → widen delta slightly and/or lengthen persist
+    if hi_pd is not None and hi_pd >= 0.5:
+        # Toward profile 2.5 or a bit wider
+        sug = 3.0 if hi_pd >= 1.0 else 2.5
+        report.recommendations.append(
+            _rec(
+                "alarm_high_delta_c",
+                "High Temp Alarm Delta (°C)",
+                sug,
+                "°C",
+                "medium",
+                f"ALARM_HI ≈ {hi_pd:.2f}/day over {span_days:.0f} d ({alarm_hi} total). "
+                "Widen delta modestly and/or raise Persist before chasing plant faults.",
+            )
+        )
+        report.recommendations.append(
+            _rec(
+                "alarm_persist_min",
+                "Alarm Persist Time (min)",
+                8.0 if hi_pd >= 1.0 else 5.0,
+                "min",
+                "medium",
+                "Frequent high alarms — lengthen persist so door/load blips need more dwell.",
+            )
+        )
+    if lo_pd is not None and lo_pd >= 0.3:
+        sug = 2.5 if lo_pd >= 0.8 else 2.0
+        report.recommendations.append(
+            _rec(
+                "alarm_low_delta_c",
+                "Low Temp Alarm Delta (°C)",
+                sug,
+                "°C",
+                "medium",
+                f"ALARM_LO ≈ {lo_pd:.2f}/day ({alarm_lo} total). "
+                "Slightly wider low delta reduces nuisance freeze-guard trips near setpoint.",
+            )
+        )
+
+    # Door-open storms
+    if door_pd is not None and door_pd >= 0.5:
+        # Raise delay toward 600 s if storms; leave at 300 if mild
+        sug = 600.0 if door_pd >= 1.5 else 420.0
+        report.recommendations.append(
+            _rec(
+                "door_alarm_delay_s",
+                "Door Alarm Delay (s)",
+                sug,
+                "s",
+                "medium",
+                f"DOOR_ALARM ≈ {door_pd:.2f}/day ({door} total). "
+                "Lengthen delay for busy loading; do not disable the door sensor. "
+                "Hold-compressor stays operator opt-in (not auto-applied).",
+            )
+        )
+    elif door == 0 and span_days and span_days >= MIN_HISTORY_DAYS:
+        report.recommendations.append(
+            _rec(
+                "door_alarm_delay_s",
+                "Door Alarm Delay (s)",
+                300.0,
+                "s",
+                "low",
+                "No DOOR_ALARM events in the window — leave delay at 300 s (2 °C profile).",
+            )
+        )
+
+    # Defrost cadence vs ice
+    if defrost_pd is not None:
+        if ice_pd is not None and ice_pd >= 0.2:
+            # Ice despite defrosts → shorter interval
+            sug = 300.0 if defrost_pd < 5 else 360.0
+            report.recommendations.append(
+                _rec(
+                    "defrost_interval_min",
+                    "Defrost Interval (min)",
+                    sug,
+                    "min",
+                    "medium",
+                    f"ICE_ALARM ≈ {ice_pd:.2f}/day with DEFROST_START ≈ {defrost_pd:.2f}/day. "
+                    "Shorten fixed interval and confirm Smart/Dew-Point triggers are on "
+                    "(see recommended_settings_2c.html) — those switches are not auto-applied.",
+                )
+            )
+        elif defrost_pd > 6.0:
+            report.recommendations.append(
+                _rec(
+                    "defrost_interval_min",
+                    "Defrost Interval (min)",
+                    480.0,
+                    "min",
+                    "low",
+                    f"Very frequent DEFROST_START ≈ {defrost_pd:.1f}/day — interval or smart "
+                    "triggers may be aggressive; lengthen toward 8 h if coil stays clear.",
+                )
+            )
+        elif defrost_pd < 2.0 and span_days and span_days >= 14:
+            report.recommendations.append(
+                _rec(
+                    "defrost_interval_min",
+                    "Defrost Interval (min)",
+                    360.0,
+                    "min",
+                    "low",
+                    f"Only ≈ {defrost_pd:.1f} DEFROST_START/day — 2 °C food profile uses 360 min; "
+                    "shorten further only if frost/ice appears between cycles.",
+                )
+            )
+
+    if probe or temp_offline:
+        report.notes.append(
+            f"Probe/board faults logged: PROBE_FAULT={probe}, TEMP_BOARD_OFFLINE={temp_offline}. "
+            "Check RS485 / RTD wiring — do **not** auto-disable probes; leave enables as fitted."
+        )
+    if no_cool:
+        report.notes.append(
+            f"Saw {no_cool} NO_COOL_ALARM event(s) — usually plant/airflow/refrigerant, "
+            "not a setpoint tweak. Inspect before shortening No-Cool Timeout."
         )
 
 
@@ -346,8 +660,8 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
         "prefer events.csv for on/off timing when present."
     )
     report.notes.append(
-        "Recommendations are heuristics for holding the logged setpoint, not product-science "
-        "optima. Confirm against USER_MANUAL.md / QUICK_START_GUIDE.md before changing plant settings."
+        "Recommendations are heuristics for holding the logged setpoint, cross-checked against the "
+        "2 °C food profile (Quick Start §4 / recommended_settings_2c.html). Confirm before applying."
     )
 
     usable = [r for r in rows if r.coolroom is not None]
@@ -373,13 +687,12 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
 
     if event_stats:
         report.event_stats = event_stats
-        # Still emit lockout/min-run heuristics from events even without temps.
         off = event_stats.get("off_duration_min") or {}
         on = event_stats.get("on_duration_min") or {}
         if off.get("n", 0) >= 5 or on.get("n", 0) >= 5:
             report.notes.append(
                 "Compressor on/off timing below is from events.csv even though coolroom samples "
-                "are missing or sparse."
+                "may be missing or sparse."
             )
 
     if len(non_defrost) < min_samples:
@@ -387,9 +700,10 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
             f"Only {len(non_defrost)} non-defrost samples with a coolroom reading "
             f"(need ≥ {min_samples}). Pull more days once RS485 RTD data is present."
         )
-        # Still recommend off-delay/min-run from events if we can.
         if event_stats:
             _add_cycle_recommendations(report, event_stats)
+            _add_event_pattern_recommendations(report, event_stats)
+        _dedupe_recommendations(report)
         return report
 
     cools = [r.coolroom for r in non_defrost if r.coolroom is not None]
@@ -414,7 +728,6 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
     alarm_lo_frac = sum(1 for r in non_defrost if r.alarm_lo) / len(non_defrost)
     defrost_frac = sum(1 for r in usable if r.defrost) / max(1, len(usable))
 
-    # Peak excursions relative to setpoint (for alarm deltas)
     hi_excursions = [e for e in errs if e > 0]
     lo_excursions = [-e for e in errs if e < 0]
     p95_hi = _percentile(hi_excursions, 95) if hi_excursions else 0.0
@@ -444,30 +757,33 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
     # ── Recommendations ──────────────────────────────────────────────────
     if setpoint is not None:
         report.recommendations.append(
-            Recommendation(
-                key="setpoint_c",
-                label="Setpoint (°C)",
-                suggested=_round_setting(setpoint, 0.1),
-                unit="°C",
-                confidence="high",
-                rationale="Median logged setpoint — analyzer holds this target; change only if product needs differ.",
+            _rec(
+                "setpoint_c",
+                "Setpoint (°C)",
+                _round_setting(setpoint, 0.1),
+                "°C",
+                "high",
+                "Median logged setpoint — analyzer holds this target; change only if product needs differ.",
+                apply_safe=False,
             )
         )
 
     if swing is not None:
-        # Symmetric hysteresis band ≈ observed swing; clamp to firmware range 0.5–10
-        suggested_diff = _clamp(_round_setting(max(0.5, swing), 0.1), 0.5, 10.0)
+        suggested_diff = _clamp(_round_setting(max(0.5, min(swing, 2.0)), 0.1), 0.5, 10.0)
+        # Prefer staying near 2 °C profile (1.0) when swing is modest
+        if swing <= 1.5:
+            suggested_diff = 1.0
         conf = "medium" if report.span_hours and report.span_hours >= 12 else "low"
         report.recommendations.append(
-            Recommendation(
-                key="differential_c",
-                label="Compressor Differential (°C)",
-                suggested=suggested_diff,
-                unit="°C",
-                confidence=conf,
-                rationale=(
+            _rec(
+                "differential_c",
+                "Compressor Differential (°C)",
+                suggested_diff,
+                "°C",
+                conf,
+                (
                     f"Non-defrost coolroom p5–p95 swing is {swing:.2f} °C. "
-                    "A differential near that band reduces hunting; widen further if starts are still frequent."
+                    "A differential near that band reduces hunting; 2 °C profile uses 1.0 °C."
                 ),
             )
         )
@@ -476,27 +792,27 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
         _add_cycle_recommendations(report, event_stats)
     else:
         report.recommendations.append(
-            Recommendation(
-                key="off_delay_min",
-                label="Compressor Off-Delay (min)",
-                suggested=3.0,
-                unit="min",
-                confidence="low",
-                rationale="No events.csv — leave Off-Delay at default 3 min.",
+            _rec(
+                "off_delay_min",
+                "Compressor Off-Delay (min)",
+                3.0,
+                "min",
+                "low",
+                "No events.csv — leave Off-Delay at default 3 min.",
             )
         )
         report.recommendations.append(
-            Recommendation(
-                key="min_run_min",
-                label="Compressor Min Run Time (min)",
-                suggested=2.0,
-                unit="min",
-                confidence="low",
-                rationale="No events.csv — leave Min Run at default 2 min.",
+            _rec(
+                "min_run_min",
+                "Compressor Min Run Time (min)",
+                2.0,
+                "min",
+                "low",
+                "No events.csv — leave Min Run at default 2 min.",
             )
         )
 
-    # Alarm deltas: above observed p95 excursion + small margin, within firmware ranges
+    # Alarm deltas from temp excursions (may be overridden by event-rate heuristics below)
     hi_delta = _clamp(_round_setting(max(1.0, (p95_hi or 0.0) + 0.5), 0.1), 0.5, 20.0)
     lo_delta = _clamp(_round_setting(max(1.0, (p95_lo or 0.0) + 0.5), 0.1), 0.5, 20.0)
     hi_conf = "medium" if alarm_hi_frac < 0.05 else "low"
@@ -507,83 +823,77 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
     if alarm_lo_frac >= 0.05:
         lo_delta = _clamp(_round_setting(max(lo_delta, (p95_lo or 0.0) + 1.0), 0.1), 0.5, 20.0)
         lo_conf = "medium"
+    # Nudge toward 2 °C profile when excursions are mild
+    if (p95_hi or 0) <= 2.0 and alarm_hi_frac < 0.02:
+        hi_delta = 2.5
+    if (p95_lo or 0) <= 1.5 and alarm_lo_frac < 0.02:
+        lo_delta = 2.0
 
     report.recommendations.append(
-        Recommendation(
-            key="alarm_high_delta_c",
-            label="High Temp Alarm Delta (°C)",
-            suggested=hi_delta,
-            unit="°C",
-            confidence=hi_conf,
-            rationale=(
+        _rec(
+            "alarm_high_delta_c",
+            "High Temp Alarm Delta (°C)",
+            hi_delta,
+            "°C",
+            hi_conf,
+            (
                 f"p95 high excursion above setpoint ≈ {p95_hi:.2f} °C "
                 f"(alarm_hi fraction {alarm_hi_frac:.1%} of samples). "
-                "Delta should sit above normal swing so door/load blips need Persist Time, not a wider band alone."
+                "2 °C profile uses 2.5 °C."
             ),
         )
     )
     report.recommendations.append(
-        Recommendation(
-            key="alarm_low_delta_c",
-            label="Low Temp Alarm Delta (°C)",
-            suggested=lo_delta,
-            unit="°C",
-            confidence=lo_conf,
-            rationale=(
+        _rec(
+            "alarm_low_delta_c",
+            "Low Temp Alarm Delta (°C)",
+            lo_delta,
+            "°C",
+            lo_conf,
+            (
                 f"p95 low excursion below setpoint ≈ {p95_lo:.2f} °C "
-                f"(alarm_lo fraction {alarm_lo_frac:.1%})."
+                f"(alarm_lo fraction {alarm_lo_frac:.1%}). 2 °C profile uses 2.0 °C."
             ),
         )
     )
 
-    persist = 5.0
     if alarm_hi_frac >= 0.02 or alarm_lo_frac >= 0.02:
-        persist = 8.0
         report.recommendations.append(
-            Recommendation(
-                key="alarm_persist_min",
-                label="Alarm Persist Time (min)",
-                suggested=persist,
-                unit="min",
-                confidence="low",
-                rationale="Alarms appear often in the temp log — lengthen persist before widening deltas further.",
+            _rec(
+                "alarm_persist_min",
+                "Alarm Persist Time (min)",
+                8.0,
+                "min",
+                "low",
+                "Alarms appear often in the temp log — lengthen persist before widening deltas further.",
             )
         )
     else:
         report.recommendations.append(
-            Recommendation(
-                key="alarm_persist_min",
-                label="Alarm Persist Time (min)",
-                suggested=5.0,
-                unit="min",
-                confidence="low",
-                rationale="Alarm fraction is low — default 5 min persist is fine.",
+            _rec(
+                "alarm_persist_min",
+                "Alarm Persist Time (min)",
+                5.0,
+                "min",
+                "low",
+                "Alarm fraction is low — default 5 min persist is fine (2 °C profile).",
             )
         )
 
-    # Defrost interval hint from defrost fraction (very rough)
     if report.span_hours and report.span_hours >= 24 and defrost_frac > 0:
-        # Rough: if defrost is active ~duration/interval of wall time
         report.recommendations.append(
-            Recommendation(
-                key="defrost_interval_min",
-                label="Defrost Interval (min)",
-                suggested=None,
-                unit="min",
-                confidence="n/a",
-                rationale=(
+            _rec(
+                "defrost_interval_min",
+                "Defrost Interval (min)",
+                360.0,
+                "min",
+                "low",
+                (
                     f"Defrost active in {defrost_frac:.1%} of samples over "
-                    f"{report.span_hours:.1f} h. Tune interval from frost/ice events and coil behaviour, "
-                    "not from this fraction alone — enable dew-point/smart triggers if humidity is high."
+                    f"{report.span_hours:.1f} h. Start from 360 min (2 °C profile); "
+                    "tune from frost/ice events and Smart/Dew-Point switches."
                 ),
             )
-        )
-
-    no_cool_count = ((event_stats or {}).get("counts") or {}).get("NO_COOL_ALARM", 0)
-    if no_cool_count:
-        report.notes.append(
-            f"Saw {no_cool_count} NO_COOL_ALARM event(s) — that usually means plant/airflow/refrigerant, "
-            "not a setpoint tweak. Inspect before shortening No-Cool Timeout."
         )
 
     if mean_err is not None and abs(mean_err) > 0.8:
@@ -603,8 +913,22 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
             "or logs are mostly from a bench without a live coolroom."
         )
 
+    if event_stats:
+        _add_event_pattern_recommendations(report, event_stats)
+
+    _dedupe_recommendations(report)
     return report
 
+
+def _dedupe_recommendations(report: Report) -> None:
+    """Keep the last recommendation per key (event heuristics run after temp and win)."""
+    by_key: dict[str, Recommendation] = {}
+    order: list[str] = []
+    for rec in report.recommendations:
+        if rec.key not in by_key:
+            order.append(rec.key)
+        by_key[rec.key] = rec
+    report.recommendations = [by_key[k] for k in order]
 
 def attach_current(report: Report, current: dict[str, float | None]) -> None:
     report.current_settings = current
@@ -617,6 +941,8 @@ def print_report(report: Report) -> None:
     print(f"Log dir: {report.log_dir}")
     print(f"Temp files: {', '.join(report.temp_files) or '(none)'}")
     print(f"Events: {report.event_file or '(none)'}")
+    if report.history is not None:
+        print(f"History: {report.history.detail} [source={report.history.source}]")
     print(
         f"Samples: {report.sample_count} total, {report.non_defrost_count} non-defrost"
         + (f", span {report.span_hours:.1f} h" if report.span_hours is not None else "")
@@ -648,6 +974,8 @@ def print_report(report: Report) -> None:
         es = report.event_stats
         print("\nEvent timing:")
         print(f"  transitions: {es.get('compressor_transitions')}")
+        if es.get("span_days") is not None:
+            print(f"  event span : {es.get('span_days'):.1f} days")
         od, fd = es.get("on_duration_min") or {}, es.get("off_duration_min") or {}
         if od.get("n"):
             print(
@@ -662,18 +990,35 @@ def print_report(report: Report) -> None:
         interesting = {
             k: v
             for k, v in (es.get("counts") or {}).items()
-            if k.endswith("_ALARM") or k in ("PROBE_FAULT", "DEFROST_START", "NO_COOL_ALARM", "ICE_ALARM")
+            if k.endswith("_ALARM")
+            or k
+            in (
+                "PROBE_FAULT",
+                "DEFROST_START",
+                "NO_COOL_ALARM",
+                "ICE_ALARM",
+                "DOOR_ALARM",
+                "TEMP_BOARD_OFFLINE",
+            )
         }
         if interesting:
             print(f"  notable counts: {interesting}")
 
     if report.recommendations:
         print("\nSuggested settings (review before applying):")
-        print(f"  {'Setting':32s}  {'Suggest':>8s}  {'Current':>8s}  Conf    Why")
+        print(
+            f"  {'Setting':32s}  {'Suggest':>8s}  {'Current':>8s}  {'2°C':>6s}  "
+            f"{'Conf':6s}  Apply  Why"
+        )
         for rec in report.recommendations:
             sug = "—" if rec.suggested is None else f"{rec.suggested:g}"
             cur = "—" if rec.current is None else f"{rec.current:g}"
-            print(f"  {rec.label:32s}  {sug:>8s}  {cur:>8s}  {rec.confidence:6s}  {rec.rationale}")
+            p2 = "—" if rec.profile_2c is None else f"{rec.profile_2c:g}"
+            ap = "yes" if rec.apply_safe else "no"
+            print(
+                f"  {rec.label:32s}  {sug:>8s}  {cur:>8s}  {p2:>6s}  "
+                f"{rec.confidence:6s}  {ap:5s}  {rec.rationale}"
+            )
 
     if report.notes:
         print("\nNotes:")
@@ -681,25 +1026,74 @@ def print_report(report: Report) -> None:
             print(f"  • {n}")
 
 
-def main() -> int:
-    args = _parse_args()
-    log_dir = args.log_dir
+def report_to_dict(report: Report) -> dict[str, Any]:
+    hist = None
+    if report.history is not None:
+        hist = {
+            "source": report.history.source,
+            "span_days": report.history.span_days,
+            "first_ts": report.history.first_ts.isoformat(sep=" ") if report.history.first_ts else None,
+            "last_ts": report.history.last_ts.isoformat(sep=" ") if report.history.last_ts else None,
+            "event_rows": report.history.event_rows,
+            "dated_temp_files": report.history.dated_temp_files,
+            "detail": report.history.detail,
+        }
+    return {
+        "log_dir": report.log_dir,
+        "temp_files": report.temp_files,
+        "event_file": report.event_file,
+        "sample_count": report.sample_count,
+        "non_defrost_count": report.non_defrost_count,
+        "span_hours": report.span_hours,
+        "history": hist,
+        "stats": report.stats,
+        "event_stats": report.event_stats,
+        "notes": report.notes,
+        "current_settings": report.current_settings,
+        "recommendations": [asdict(r) for r in report.recommendations],
+    }
+
+
+def build_report(log_dir: Path, min_samples: int = 24) -> Report:
+    """Load a pulled log directory and run analysis (no host fetch)."""
     if not log_dir.is_dir():
-        print(f"ERROR: not a directory: {log_dir}", file=sys.stderr)
-        return 1
-
-    temp_paths = sorted(
-        [p for p in log_dir.iterdir() if p.is_file() and (_DATE_CSV.match(p.name) or p.name.lower() == "nodate.csv")],
-        key=lambda p: p.name,
-    )
-    event_path = next((p for p in log_dir.iterdir() if p.is_file() and p.name.lower() == "events.csv"), None)
-
+        raise FileNotFoundError(f"not a directory: {log_dir}")
+    temp_paths, event_path = list_log_paths(log_dir)
+    history = measure_history(log_dir)
     rows = load_temp_rows(temp_paths)
     event_stats = load_event_stats(event_path) if event_path else None
-    report = analyze(rows, event_stats, min_samples=args.min_samples)
+    report = analyze(rows, event_stats, min_samples=min_samples)
     report.log_dir = str(log_dir)
     report.temp_files = [p.name for p in temp_paths]
     report.event_file = event_path.name if event_path else None
+    report.history = history
+    return report
+
+
+def main() -> int:
+    args = _parse_args()
+    log_dir = args.log_dir
+    try:
+        report = build_report(log_dir, min_samples=args.min_samples)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if args.min_days and args.min_days > 0:
+        hist = report.history
+        if hist is None or hist.span_days < args.min_days:
+            detail = hist.detail if hist else "no history measured"
+            print(
+                f"ERROR: need ≥ {args.min_days:g} days of usable log history; "
+                f"found {hist.span_days if hist else 0:.1f} days ({detail}).",
+                file=sys.stderr,
+            )
+            print(
+                "Pull more SD logs (events.csv preferred) or wait until the card has "
+                f"≥ {args.min_days:g} days before recommending tweaks.",
+                file=sys.stderr,
+            )
+            return 2
 
     host = args.host
     if host == "auto":
@@ -715,21 +1109,8 @@ def main() -> int:
     print_report(report)
 
     if args.json_out:
-        payload = {
-            "log_dir": report.log_dir,
-            "temp_files": report.temp_files,
-            "event_file": report.event_file,
-            "sample_count": report.sample_count,
-            "non_defrost_count": report.non_defrost_count,
-            "span_hours": report.span_hours,
-            "stats": report.stats,
-            "event_stats": report.event_stats,
-            "notes": report.notes,
-            "current_settings": report.current_settings,
-            "recommendations": [asdict(r) for r in report.recommendations],
-        }
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
-        args.json_out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        args.json_out.write_text(json.dumps(report_to_dict(report), indent=2) + "\n", encoding="utf-8")
         print(f"\nJSON report → {args.json_out}")
 
     return 0

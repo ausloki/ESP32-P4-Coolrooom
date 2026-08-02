@@ -28,11 +28,13 @@ echo ""
 echo "=== ESP32-P4 Coolroom — Log tools (macOS) ==="
 echo "Python: ${PY}"
 echo "Repo:   ${COOLROOM_REPO_ROOT}"
+echo "Note:   Tweaks require ≥30 days of events.csv (or dated temps if no events)."
+echo "Docs:   tools/README_LOG_TUNING.md"
 echo ""
-echo "  1) Recommend settings (pull logs + analyze)"
+echo "  1) Analyse + recommend (pull from host, ≥30-day gate)"
 echo "  2) Pull logs only"
 echo "  3) List SD files on controller"
-echo "  4) Analyze existing local log folder"
+echo "  4) Analyse existing local log folder (≥30-day gate)"
 echo "  Q) Quit"
 echo ""
 read -r -p "Choose: " choice || true
@@ -40,12 +42,12 @@ read -r -p "Choose: " choice || true
 case "$(echo "${choice}" | tr '[:lower:]' '[:upper:]')" in
   1)
     host="$(read_default "Controller host/IP" "${DEFAULT_HOST}")"
-    days="$(read_default "Days of dated temp logs (0 = all)" "14")"
-    "${PY}" "${TOOLS_DIR}/recommend_settings.py" --host "${host}" --days "${days}"
+    days="$(read_default "Days of dated temp logs to pull (0 = all)" "0")"
+    "${PY}" "${TOOLS_DIR}/analyse_logs_tune_settings.py" --host "${host}" --days "${days}"
     ;;
   2)
     host="$(read_default "Controller host/IP" "${DEFAULT_HOST}")"
-    days="$(read_default "Days of dated temp logs (0 = all)" "14")"
+    days="$(read_default "Days of dated temp logs (0 = all)" "0")"
     "${PY}" "${TOOLS_DIR}/pull_controller_logs.py" --host "${host}" --days "${days}"
     ;;
   3)
@@ -57,11 +59,11 @@ case "$(echo "${choice}" | tr '[:lower:]' '[:upper:]')" in
     latest="${latest%/}"
     default_dir="${latest:-${COOLROOM_REPO_ROOT}/logs/controller}"
     dir="$(read_default "Log directory to analyze" "${default_dir}")"
-    host="$(read_default "Controller host for live settings (blank to skip)" "${DEFAULT_HOST}")"
+    host="$(read_default "Controller host for live settings (blank to skip)" "")"
     if [[ -n "${host}" ]]; then
-      "${PY}" "${TOOLS_DIR}/analyze_coolroom_logs.py" "${dir}" --host "${host}"
+      "${PY}" "${TOOLS_DIR}/analyse_logs_tune_settings.py" --log-dir "${dir}" --settings-host "${host}"
     else
-      "${PY}" "${TOOLS_DIR}/analyze_coolroom_logs.py" "${dir}"
+      "${PY}" "${TOOLS_DIR}/analyse_logs_tune_settings.py" --log-dir "${dir}"
     fi
     ;;
   Q|"")

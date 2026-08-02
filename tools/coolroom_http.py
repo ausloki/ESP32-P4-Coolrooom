@@ -3,14 +3,20 @@
 
 Stdlib only — works on Windows and macOS with the same Python 3.10+ command.
 
-The device web_server has no HTTP Basic Auth; the LAN is the trust boundary.
+The device web_server has no HTTP Basic Auth on the REST API; the LAN is the
+trust boundary. Dashboard "Login" is a client-side PIN/token gate for the
+settings UI only — entity GET/POST and SD log routes are open on the LAN.
+
 Log downloads use the custom handlers in p4_log_manager.h:
 
   GET  /logs
   GET  /logs/download?file=NAME
   GET  /api/events?since=N   (RAM ring this boot; optional)
 
-Entity reads use ESPHome REST paths, e.g. GET /number/Setpoint%20(%C2%B0C)
+Entity reads/writes use ESPHome REST paths, e.g.:
+  GET  /number/Setpoint%20(%C2%B0C)
+  POST /number/Setpoint%20(%C2%B0C)/set?value=2.0
+  POST /switch/Some%20Name/turn_on   (empty body + Content-Length: 0)
 """
 
 from __future__ import annotations
@@ -24,7 +30,7 @@ from typing import Any
 
 DEFAULT_HOST = "192.168.37.237"
 
-# Published number entities used when comparing recommendations to live settings.
+# Published number entities used when comparing / applying recommendations.
 SETTING_NUMBERS: dict[str, str] = {
     "setpoint_c": "Setpoint (°C)",
     "differential_c": "Compressor Differential (°C)",
@@ -35,6 +41,36 @@ SETTING_NUMBERS: dict[str, str] = {
     "alarm_persist_min": "Alarm Persist Time (min)",
     "no_cool_timeout_min": "No-Cool Alarm Timeout (min)",
     "defrost_interval_min": "Defrost Interval (min)",
+    "door_alarm_delay_s": "Door Alarm Delay (s)",
+}
+
+# Safe subset for --apply (never setpoint, never probe/sensor enables).
+APPLY_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "differential_c",
+        "off_delay_min",
+        "min_run_min",
+        "alarm_high_delta_c",
+        "alarm_low_delta_c",
+        "alarm_persist_min",
+        "no_cool_timeout_min",
+        "defrost_interval_min",
+        "door_alarm_delay_s",
+    }
+)
+
+# Quick Start §4 / recommended_settings_2c.html baseline (for comparison notes).
+PROFILE_2C: dict[str, float] = {
+    "setpoint_c": 2.0,
+    "differential_c": 1.0,
+    "off_delay_min": 3.0,
+    "min_run_min": 2.0,
+    "alarm_high_delta_c": 2.5,
+    "alarm_low_delta_c": 2.0,
+    "alarm_persist_min": 5.0,
+    "no_cool_timeout_min": 45.0,
+    "defrost_interval_min": 360.0,
+    "door_alarm_delay_s": 300.0,
 }
 
 
@@ -56,6 +92,8 @@ def request(
     if not path.startswith("/"):
         path = "/" + path
     url = base_url(host) + path
+    # ESPHome web_server rejects body-less POST with HTTP 411 unless
+    # Content-Length: 0 is set explicitly (same fix as the dashboard).
     data = b"" if method == "POST" else None
     req = urllib.request.Request(url, data=data, method=method)
     if method == "POST":
@@ -109,8 +147,18 @@ def download_log_file(host: str, filename: str, timeout: float = 120.0) -> bytes
     return download_bytes(host, f"/logs/download?{q}", timeout=timeout)
 
 
-def object_path(domain: str, name: str) -> str:
-    return f"/{domain}/{urllib.parse.quote(name)}"
+def object_path(
+    domain: str,
+    name: str,
+    action: str | None = None,
+    query: str | None = None,
+) -> str:
+    path = f"/{domain}/{urllib.parse.quote(name)}"
+    if action:
+        path += f"/{action}"
+    if query:
+        path += ("?" if "?" not in path else "&") + query
+    return path
 
 
 def get_number(host: str, name: str, timeout: float = 8.0) -> float:
@@ -125,6 +173,18 @@ def get_number(host: str, name: str, timeout: float = 8.0) -> float:
     return float(token)
 
 
+def set_number(host: str, name: str, value: float, timeout: float = 8.0) -> None:
+    q = f"value={urllib.parse.quote(str(value))}"
+    code, body = request(
+        host,
+        object_path("number", name, "set", q),
+        method="POST",
+        timeout=timeout,
+    )
+    if code not in (200, 204):
+        raise RuntimeError(f"POST number/{name}/set failed ({code}): {body!r}")
+
+
 def fetch_current_settings(host: str) -> dict[str, float | None]:
     """Best-effort read of live control numbers. Missing entities → None."""
     out: dict[str, float | None] = {}
@@ -134,6 +194,31 @@ def fetch_current_settings(host: str) -> dict[str, float | None]:
         except Exception:
             out[key] = None
     return out
+
+
+def apply_number_settings(
+    host: str,
+    changes: dict[str, float],
+    *,
+    allowlist: frozenset[str] | None = None,
+) -> list[tuple[str, float, str | None]]:
+    """POST allowlisted number changes. Returns [(key, value, error_or_None)]."""
+    allowed = APPLY_ALLOWLIST if allowlist is None else allowlist
+    results: list[tuple[str, float, str | None]] = []
+    for key, value in changes.items():
+        if key not in allowed:
+            results.append((key, value, f"not in apply allowlist ({key})"))
+            continue
+        entity = SETTING_NUMBERS.get(key)
+        if not entity:
+            results.append((key, value, f"unknown entity key ({key})"))
+            continue
+        try:
+            set_number(host, entity, value)
+            results.append((key, value, None))
+        except Exception as e:
+            results.append((key, value, str(e)))
+    return results
 
 
 _NUM_RE = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)")
