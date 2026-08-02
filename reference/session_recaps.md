@@ -4,6 +4,23 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-02 — Anti-click soft-start (canonical) + Kokoro af_sarah
+
+- Glass: click gone, full phrase OK with PA-off → I2S into lead-in silence → PA on →
+  unmute (`p4_audio.yaml` + ~400 ms WAV lead-in). Documented as canonical in
+  `reference/AUDIO_ALERTS.md` — do not re-enable `keep_alive` on 2026.7.0 (truncates).
+- Alert voice pack: Kokoro **af_sarah** (Sherpa-onnx); regen via
+  `scripts/generate_audio_clips_kokoro.py`.
+
+## 2026-08-02 — Switch alert voice to Kokoro af_sarah (on-glass test)
+
+- Regenerated all 17 `assets/audio/*.wav` with Sherpa-onnx Kokoro **af_sarah**
+  (`scripts/generate_audio_clips_kokoro.py`; `ENGINE=kokoro` is now the default for
+  `scripts/generate_audio_clips.sh`). Apple Samantha still available via `ENGINE=apple`.
+- Manuals (`AUDIO_ALERTS.md`, USER_MANUAL §4.9) + `assets/audio/VOICE.txt` note the voice.
+- Compiled + NVS-safe flash for speaker-quality check on the controller (Test Speaker /
+  per-phrase 🔊 preview).
+
 ## 2026-08-01 (Evening) — Closeout: per-phrase audio preview (speaker icon)
 
 - **New `preview_*` scripts** in `p4_audio.yaml` (one per alert/info clip) + `btn_preview_*`

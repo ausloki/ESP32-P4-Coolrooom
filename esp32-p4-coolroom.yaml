@@ -199,6 +199,9 @@ substitutions:
 ##############################################################################
 
 # Voice alerts (ES8311 / speaker). Mic deferred — see p4_audio.yaml header.
+# Anti-click: soft-start in p4_audio.yaml (canonical). Do not enable
+# speaker.keep_alive (PR #15565) on 2026.7.0 — truncates clips. Details:
+# reference/AUDIO_ALERTS.md § "Canonical anti-click approach".
 packages:
   voice_audio: !include p4_audio.yaml
 
@@ -5771,6 +5774,20 @@ globals:
   # While set, on_volume must not write ctl_audio_volume_pct — lagged callbacks
   # from an earlier media_player.volume_set would otherwise clobber a newer value.
   - id: ctl_audio_volume_suppress_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  # Soft-start state machine — canonical anti-click (AUDIO_ALERTS.md).
+  #   phase 0 = idle
+  #   phase 1 = I2S starting with PA off + DAC muted
+  #   phase 2 = PA on, still muted, waiting to unmute into WAV lead-in
+  # deadline = millis() when the current phase should advance (0 = idle).
+  - id: ctl_audio_softstart_phase
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+  - id: ctl_audio_softstart_at_ms
     type: uint32_t
     restore_value: no
     initial_value: "0"

@@ -2,6 +2,11 @@
 # in esp32-p4-coolroom.yaml). Clips are pre-recorded female English WAVs under
 # assets/audio/ (regenerate with scripts/generate_audio_clips.sh).
 #
+# ★ Anti-click (canonical — see reference/AUDIO_ALERTS.md):
+#   Do NOT use speaker.keep_alive on ESPHome 2026.7.0 (truncates clips).
+#   Soft-start instead: PA off + mute → play into ~400 ms WAV lead-in →
+#   PA on → unmute (audio_prepare_* + 25 ms interval below). Glass-OK 2026-08-02.
+#
 # Mic / speech-to-command is intentionally not wired yet — PA + speaker path
 # first; ADC/mic follows once playback is proven on hardware.
 
@@ -102,6 +107,39 @@ media_player:
       - id: clip_info_audio_test
         file: assets/audio/info_audio_test.wav
 
+interval:
+  # Canonical anti-click (reference/AUDIO_ALERTS.md): I2S re-init with PA *off*
+  # + DAC muted, then amp into leading silence, then unmute. Matches ~400 ms
+  # lead-in on assets/audio/*.wav. Do not replace with keep_alive on 2026.7.0.
+  - interval: 25ms
+    then:
+      - lambda: |-
+          uint8_t phase = id(ctl_audio_softstart_phase);
+          if (phase == 0) return;
+          uint32_t now = millis();
+          uint32_t at = id(ctl_audio_softstart_at_ms);
+          if ((int32_t) (now - at) < 0) return;
+
+          if (phase == 1) {
+            // I2S should be streaming silence with the amp still off — safe to
+            // bias the NS4150B now without amplifying the bus bring-up pop.
+            id(audio_pa_enable).turn_on();
+            id(ctl_audio_softstart_phase) = 2;
+            id(ctl_audio_softstart_at_ms) = now + 150;
+            return;
+          }
+
+          if (phase == 2) {
+            id(ctl_audio_softstart_phase) = 0;
+            id(ctl_audio_softstart_at_ms) = 0;
+            id(i2s_speaker).set_mute_state(false);
+            id(es8311_dac).set_mute_off();
+            float vol = id(ctl_audio_volume_pct) / 100.0f;
+            id(es8311_dac).set_volume(vol);
+            id(ctl_audio_volume_suppress_until_ms) = now + 2000;
+            id(coolroom_media).make_call().set_volume(vol).perform();
+          }
+
 script:
   # Shared gate: master on, codec present, not soft-muted from the home bell.
   # Per-clip scripts add their own category toggle.
@@ -114,14 +152,16 @@ script:
               return id(input_audio_alerts_enabled) && id(hw_audio_ok) &&
                      !id(ctl_alarm_silenced);
           then:
-            - switch.turn_on: audio_pa_enable
-            - delay: 60ms
-            # Re-apply the operator setting every play so a mid-session change
-            # (or a media-player restore that raced boot) is always honoured.
+            # Amp OFF + DAC muted before play starts so I2S channel recreate
+            # cannot drive the speaker. Soft-start interval turns PA on, then
+            # unmutes, inside the WAV lead-in silence.
             - lambda: 'id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;'
-            - media_player.volume_set:
-                id: coolroom_media
-                volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+            - switch.turn_off: audio_pa_enable
+            - lambda: |-
+                id(es8311_dac).set_mute_on();
+                id(i2s_speaker).set_mute_state(true);
+                id(ctl_audio_softstart_phase) = 1;
+                id(ctl_audio_softstart_at_ms) = millis() + 120;
 
   - id: speak_alarm_high
     mode: queued
@@ -415,12 +455,13 @@ script:
   - id: audio_preview_prepare
     mode: single
     then:
-      - switch.turn_on: audio_pa_enable
-      - delay: 60ms
       - lambda: 'id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;'
-      - media_player.volume_set:
-          id: coolroom_media
-          volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+      - switch.turn_off: audio_pa_enable
+      - lambda: |-
+          id(es8311_dac).set_mute_on();
+          id(i2s_speaker).set_mute_state(true);
+          id(ctl_audio_softstart_phase) = 1;
+          id(ctl_audio_softstart_at_ms) = millis() + 120;
 
   - id: preview_alarm_high
     mode: single

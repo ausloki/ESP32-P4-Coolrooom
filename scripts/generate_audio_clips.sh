@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
-# Regenerate on-device speech clips (female English voice via macOS `say`).
+# Regenerate on-device speech clips.
+# Default production voice is Kokoro af_sarah (Sherpa-onnx) — see
+# scripts/generate_audio_clips_kokoro.py. This script keeps the macOS `say`
+# (Apple Samantha) path as ENGINE=apple for A/B or offline Mac-only regen.
+#
+#   ENGINE=kokoro ./scripts/generate_audio_clips.sh   # default
+#   ENGINE=apple  ./scripts/generate_audio_clips.sh
+#
 # Output: assets/audio/*.wav — 16 kHz mono PCM16 for ESPHome media_player.
 # Phrases match the home-gauge centre status labels in p4_ui.h.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENGINE="${ENGINE:-kokoro}"
+
+if [[ "$ENGINE" == "kokoro" ]]; then
+  exec "$ROOT/.venv/bin/python" "$ROOT/scripts/generate_audio_clips_kokoro.py" \
+    --speaker "${SPEAKER:-af_sarah}"
+fi
+
 OUT="$ROOT/assets/audio"
 TMP="${TMPDIR:-/tmp}/p4_audio_gen"
 VOICE="${VOICE:-Samantha}"

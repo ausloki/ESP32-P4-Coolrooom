@@ -1,0 +1,6 @@
+engine=sherpa-onnx-kokoro
+speaker=af_sarah
+sid=9
+model=kokoro-int8-multi-lang-v1_0
+lead_silence_ms=400.0
+note=Regenerate with scripts/generate_audio_clips_kokoro.py

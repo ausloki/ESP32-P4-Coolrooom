@@ -36,3 +36,7 @@ backups/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# TTS A/B samples + local Piper / Sherpa models (regenerable, large)
+assets/audio/tts_compare/
+tools/tts_compare/

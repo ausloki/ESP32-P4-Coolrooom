@@ -424,9 +424,12 @@ condition is evaluated at all — for their respective windows.)*
 Microphone / voice commands are **on hold** — no mic fitted; may not be used on this project.
 Speaker announcements only.*
 
-Spoken phrases use a pre-recorded female English voice on the on-board ES8311 speaker
-(NS4150B amp). They work offline (no cloud TTS). Regenerate clips with
-`scripts/generate_audio_clips.sh` if you want different wording or voice.
+Spoken phrases use a pre-recorded female English voice (**Kokoro af_sarah**, generated
+offline with Sherpa-onnx) on the on-board ES8311 speaker (NS4150B amp). They work
+offline (no cloud TTS). Regenerate clips with `scripts/generate_audio_clips.sh`
+(default Kokoro) or `ENGINE=apple` for macOS Samantha if you want different wording
+or voice. Each clip has a short silent lead-in so the amp can power up without a
+click (firmware soft-start — see `reference/AUDIO_ALERTS.md` if changing audio).
 
 | Setting | What it does | Default |
 |---|---|---|
