@@ -131,8 +131,9 @@ python3 -m venv .venv
 # Flash via USB-C (item 15 on board — Type-C USB1.1 FS)
 .venv/bin/esphome upload esp32-p4-coolroom.yaml
 
-# OTA flash (once WiFi is working)
+# OTA flash (confirmed 2026-08-03 — NVS preserved)
 .venv/bin/esphome upload --device esp32-p4-coolroom.local esp32-p4-coolroom.yaml
+# or: .venv/bin/esphome upload esp32-p4-coolroom.yaml --device 192.168.37.237
 ```
 
 ### Compile Helpers (recommended)

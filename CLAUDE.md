@@ -57,6 +57,9 @@ A plain reboot is safe: `persist_config_to_nvs` stages every restoring global an
 .venv/bin/esphome upload esp32-p4-coolroom.yaml --device <device-ip>   # OTA, app only
 ```
 
+ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`;
+device returned; NVS preserved (ntfy stayed OFF). Prefer OTA when the device is on LAN.
+
 `tools/esphome_flash.sh` reads offsets from the build's own `flasher_args.json` and refuses
 to write anything overlapping NVS. Pass `--erase-settings` to deliberately fall back to the
 factory image (needed after a partition-table change).

@@ -1,10 +1,9 @@
 # Active Context — Current Session State
 
-**Date:** 2026-08-02  
+**Date:** 2026-08-03  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** Docs/layout closeout — LVGL Defrost denser layout + SD retention/free-space
-gate + per-core CPU documented. Next: RS485/RTD bench bring-up (revisit Nest alt gauge
-with live temps).
+**Status:** ESPHome OTA confirmed working. Next: RS485/RTD bench bring-up (revisit Nest
+alt gauge with live temps).
 
 ## Working well
 
@@ -17,6 +16,7 @@ with live temps).
 - Audio: Kokoro af_sarah; soft-start anti-click (canonical — `AUDIO_ALERTS.md`);
   web Audio toggles optimistic + retry GET refresh
 - Settings persistence across **reboot** confirmed live
+- ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF)
 - Coverage checker + persist-script staging check green
 - Rotating centre status + matching audio + ntfy hardware-offline
 - Virtual preview aligned with live gauge / Audio / Alarms & Notify
@@ -32,7 +32,7 @@ with live temps).
 
 - Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 - Manual screenshots still placeholders
-- Dashboard OTA UI
+- Dashboard OTA UI (web upload UI — ESPHome CLI OTA is done)
 - End-to-end Modbus once relay/RTD boards are fitted
 - Alt home gauge / Nest knobs with real coolroom + ambient readings
 - Richer log-based tuning once Probe 1 has real coolroom samples
@@ -55,6 +55,7 @@ with live temps).
 python3 scripts/embed_dashboard.py
 ./tools/esphome_compile.sh esp32-p4-coolroom.yaml
 ./tools/esphome_flash.sh --device /dev/cu.usbmodem213401
+.venv/bin/esphome upload esp32-p4-coolroom.yaml --device 192.168.37.237  # OTA confirmed
 .venv/bin/python tools/check_dashboard_coverage.py
 .venv/bin/python tools/test_settings_persistence.py --host 192.168.37.237
 ./tools/code_review_graph_cli.sh update --repo .

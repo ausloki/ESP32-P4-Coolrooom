@@ -1950,7 +1950,7 @@ sensor:
     lambda: 'return p4_cpu_usage_pct();'
     unit_of_measurement: "%"
     accuracy_decimals: 0
-    update_interval: 5s
+    update_interval: 30s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_diagnostics
@@ -1962,7 +1962,7 @@ sensor:
     lambda: 'return p4_cpu_usage_core_pct(0);'
     unit_of_measurement: "%"
     accuracy_decimals: 0
-    update_interval: 5s
+    update_interval: 30s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_diagnostics
@@ -1974,7 +1974,7 @@ sensor:
     lambda: 'return p4_cpu_usage_core_pct(1);'
     unit_of_measurement: "%"
     accuracy_decimals: 0
-    update_interval: 5s
+    update_interval: 30s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_diagnostics
@@ -2050,6 +2050,8 @@ sensor:
           value: !lambda |-
             return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});
       - lambda: |-
+          // Skip alt-view arc/knob math while classic home (or another tab) is showing.
+          if (!id(page_home_active) || !id(home2_view_active)) return;
           p4_ui_update_home2_cooling(
               id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
               id(home2_knob_set), id(home2_knob_cur),
@@ -2076,7 +2078,12 @@ sensor:
       - lvgl.label.update:
           id: lbl_evap_temp_large
           text: !lambda |-
-            return p4_fmt_temp(
+            return p4_fmt_evap_label(
+                x, id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_evap_temp_alt
+          text: !lambda |-
+            return p4_fmt_evap_label(
                 x, id(sel_temperature_display_unit).current_option() == "Fahrenheit");
 
   # Pre-offset RTD readings for web Probes tab (corrected = probe1/2_temp above).
@@ -2169,8 +2176,12 @@ sensor:
           id: lbl_int_humidity_large
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Int " + p4_fmt_temp(x, f) + "\n" +
-                   p4_fmt_humidity(id(probe_internal_humidity).state);
+            return p4_fmt_int_humidity_label(x, id(probe_internal_humidity).state, f);
+      - lvgl.label.update:
+          id: lbl_int_humidity_alt
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return p4_fmt_int_humidity_label(x, id(probe_internal_humidity).state, f);
 
   - platform: template
     id: probe_internal_humidity
@@ -2191,8 +2202,12 @@ sensor:
           id: lbl_int_humidity_large
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Int " + p4_fmt_temp(id(probe_internal_temp).state, f) + "\n" +
-                   p4_fmt_humidity(x);
+            return p4_fmt_int_humidity_label(id(probe_internal_temp).state, x, f);
+      - lvgl.label.update:
+          id: lbl_int_humidity_alt
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return p4_fmt_int_humidity_label(id(probe_internal_temp).state, x, f);
 
   - platform: template
     id: probe_external_temp
@@ -2213,14 +2228,19 @@ sensor:
           id: lbl_ext_humidity_large
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Ext " + p4_fmt_temp(x, f) + "\n" +
-                   p4_fmt_humidity(id(probe_external_humidity).state);
+            return p4_fmt_ext_humidity_label(x, id(probe_external_humidity).state, f);
+      - lvgl.label.update:
+          id: lbl_ext_humidity_alt
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return p4_fmt_ext_humidity_label(x, id(probe_external_humidity).state, f);
       - lvgl.arc.update:
           id: home_ambient_arc
           value: !lambda 'return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
-      - lvgl.arc.update:
-          id: home2_ambient_arc
-          value: !lambda 'return p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
+      - lambda: |-
+          if (!id(page_home_active) || !id(home2_view_active)) return;
+          lv_arc_set_value(id(home2_ambient_arc),
+              p4_ui_temp_to_arc_pct(x, ${dial_min_c}, ${dial_max_c}));
 
   - platform: template
     id: probe_external_humidity
@@ -2241,15 +2261,19 @@ sensor:
           id: lbl_ext_humidity_large
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Ext " + p4_fmt_temp(id(probe_external_temp).state, f) + "\n" +
-                   p4_fmt_humidity(x);
+            return p4_fmt_ext_humidity_label(id(probe_external_temp).state, x, f);
+      - lvgl.label.update:
+          id: lbl_ext_humidity_alt
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return p4_fmt_ext_humidity_label(id(probe_external_temp).state, x, f);
 
   # ── Probe staleness diagnostics ────────────────────────────────────────────
   - platform: template
     name: "RTD1 CH1 Sample Age (s)"
     id: rtd1_ch1_age_s
     unit_of_measurement: "s"
-    update_interval: 5s
+    update_interval: 30s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_diagnostics
@@ -2260,7 +2284,7 @@ sensor:
     name: "RTD1 CH2 Sample Age (s)"
     id: rtd1_ch2_age_s
     unit_of_measurement: "s"
-    update_interval: 5s
+    update_interval: 30s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_diagnostics
@@ -2284,28 +2308,27 @@ sensor:
   # down) — computed directly from the same globals the control tick already
   # maintains, no new state needed. Previously only the *configured durations*
   # were visible (comp_lockout_min etc.); these are the first live progress
-  # readouts for any of them.
+  # readouts for any of them. Published at 3 s (web/HA); home LVGL lockout
+  # uses p4_ui_comp_lockout_remaining_s each 1 s tick so the amber countdown
+  # stays snappy on the Home page.
   - platform: template
     name: "Compressor Lockout Remaining (s)"
     id: comp_lockout_remaining_sec
     unit_of_measurement: "s"
-    update_interval: 1s
+    update_interval: 3s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_compressor
       sorting_weight: 50
     lambda: |-
-      if (id(ctl_comp_last_off_ms) == 0) return 0.0f;
-      uint32_t lockout_ms = (uint32_t)(id(ctl_comp_lockout_min) * 60000.0f);
-      uint32_t elapsed = millis() - id(ctl_comp_last_off_ms);
-      if (elapsed >= lockout_ms) return 0.0f;
-      return (lockout_ms - elapsed) / 1000.0f;
+      return p4_ui_comp_lockout_remaining_s(
+          id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
 
   - platform: template
     name: "Next Defrost In (s)"
     id: defrost_countdown_sec
     unit_of_measurement: "s"
-    update_interval: 1s
+    update_interval: 3s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_defrost
@@ -2322,7 +2345,7 @@ sensor:
     name: "Defrost Duration Remaining (s)"
     id: defrost_duration_remaining_sec
     unit_of_measurement: "s"
-    update_interval: 1s
+    update_interval: 3s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_defrost
@@ -2338,7 +2361,7 @@ sensor:
     name: "Defrost Drip Remaining (s)"
     id: defrost_drip_remaining_sec
     unit_of_measurement: "s"
-    update_interval: 1s
+    update_interval: 3s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_defrost
@@ -2454,7 +2477,7 @@ text_sensor:
   - platform: template
     name: "Probe Health Summary"
     id: rs485_probe_stats
-    update_interval: 20s
+    update_interval: 30s
     entity_category: diagnostic
     web_server:
       sorting_group_id: group_diagnostics
@@ -2781,6 +2804,7 @@ number:
           id: home_setpoint_arc
           value: !lambda 'return p4_ui_setpoint_to_arc_pct(x, ${dial_min_c}, ${dial_max_c});'
       - lambda: |-
+          if (!id(page_home_active) || !id(home2_view_active)) return;
           p4_ui_update_home2_cooling(
               id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
               id(home2_knob_set), id(home2_knob_cur),
@@ -4720,8 +4744,9 @@ interval:
           # comp_lockout_remaining_sec on the web dashboard.
           id: lbl_lockout_timer_display
           text: !lambda |-
-            float remaining_s = id(comp_lockout_remaining_sec).state;
-            if (isnan(remaining_s) || remaining_s <= 0.0f) return std::string("Ready");
+            float remaining_s = p4_ui_comp_lockout_remaining_s(
+                id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
+            if (remaining_s <= 0.0f) return std::string("Ready");
             int total_s = (int) remaining_s;
             char buf[16];
             snprintf(buf, sizeof(buf), "%dm %02ds", total_s / 60, total_s % 60);
@@ -4729,8 +4754,9 @@ interval:
       - lvgl.label.update:
           id: lbl_home_lockout
           text: !lambda |-
-            float remaining_s = id(comp_lockout_remaining_sec).state;
-            if (isnan(remaining_s) || remaining_s <= 0.0f) return std::string("");
+            float remaining_s = p4_ui_comp_lockout_remaining_s(
+                id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
+            if (remaining_s <= 0.0f) return std::string("");
             int total_s = (int) remaining_s;
             char buf[16];
             snprintf(buf, sizeof(buf), "%d:%02d", total_s / 60, total_s % 60);
@@ -4745,15 +4771,17 @@ interval:
             if (id(relay_compressor).state) return id(col_blue);
             if (!id(hw_rs485_relay_ok) || !id(ctl_relay_compressor_enabled))
                 return id(col_red);
-            float remaining_s = id(comp_lockout_remaining_sec).state;
-            if (!isnan(remaining_s) && remaining_s > 0.0f) return id(col_orange);
+            float remaining_s = p4_ui_comp_lockout_remaining_s(
+                id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
+            if (remaining_s > 0.0f) return id(col_orange);
             return id(col_grey);
       - lambda: |-
           // Centre status: rotate through every active fault/offline bit so
           // RTU / RTD / SHT / probe / temp / door alarms are all visible when
           // several are latched at once. Mirrored to text_sensor.status for
           // the web gauge twin.
-          float remaining_s = id(comp_lockout_remaining_sec).state;
+          float remaining_s = p4_ui_comp_lockout_remaining_s(
+              id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
           const bool rtd_expected = true;
           P4UiHomeStatusIn st_in{};
           st_in.relay_ok        = id(hw_rs485_relay_ok);
@@ -4771,7 +4799,7 @@ interval:
           st_in.alarm_ice       = id(ctl_ice_alarm_active);
           st_in.defrost         = id(ctl_defrost_active) || id(ctl_defrost_dripping);
           st_in.compressor_on   = id(relay_compressor).state;
-          st_in.lockout         = !isnan(remaining_s) && remaining_s > 0.0f;
+          st_in.lockout         = remaining_s > 0.0f;
           st_in.rotate_period_ms = 2500;
           std::string st = p4_ui_home_status_text(
               st_in, id(ui_status_rotate_idx), id(ui_status_rotate_ms));
@@ -4805,6 +4833,7 @@ interval:
           value: !lambda |-
             return p4_ui_setpoint_to_arc_pct(id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
       - lambda: |-
+          if (!id(page_home_active) || !id(home2_view_active)) return;
           p4_ui_update_home2_cooling(
               id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
               id(home2_knob_set), id(home2_knob_cur),
@@ -5251,7 +5280,7 @@ globals:
   - id: input_ntfy_enabled
     type: bool
     restore_value: yes
-    initial_value: "true"
+    initial_value: "false"
 
   # When false (default), native API clients (Home Assistant) are dropped so
   # the device is not usable from HA until an operator opts in.
@@ -5985,6 +6014,13 @@ globals:
     restore_value: no
     initial_value: "false"
 
+  # Alt home gauge (view 2) scrolled into the centre snap container.
+  # Set from home_gauge_scroll on_scroll_end; gates p4_ui_update_home2_cooling.
+  - id: home2_view_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
 ##############################################################################
 # Phase 4: LDO — MIPI-DSI D-PHY power rail
 # Channel 3 at 2.5V is the standard ESP32-P4 MIPI-DSI configuration.
@@ -6465,7 +6501,10 @@ lvgl:
         #   View 1 (y=0): classic coolroom / setpoint / ambient (unchanged).
         #   View 2 (y=480): HA thermostat-style outer ring (set fill + current↔set
         #   gap + display-only thumbs) with thinner pink ambient inside.
+        # home2_view_active tracks which view is snapped so expensive home2 arc
+        # math is skipped while classic home is showing.
         - obj:
+            id: home_gauge_scroll
             x: 80
             y: 64
             width: 864
@@ -6480,6 +6519,25 @@ lvgl:
             # Must be clickable so vertical drags scroll the two gauge pages.
             # Left icon rail ends at x≈81 — only a 1 px overlap with this box.
             clickable: true
+            on_scroll_end:
+              - lambda: |-
+                  // Each view is 480 px tall; snap START → y≈0 classic, y≈480 alt.
+                  const int32_t sy = lv_obj_get_scroll_y(id(home_gauge_scroll));
+                  const bool now_home2 = sy >= 240;
+                  const bool was_home2 = id(home2_view_active);
+                  id(home2_view_active) = now_home2;
+                  if (!now_home2 || was_home2) return;
+                  // Entering view 2: one-shot refresh so arcs/knobs are not stale.
+                  p4_ui_update_home2_cooling(
+                      id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
+                      id(home2_knob_set), id(home2_knob_cur),
+                      id(probe1_temp).state, id(ctl_setpoint),
+                      ${dial_min_c}, ${dial_max_c},
+                      id(home2_ambient_arc));
+                  lv_arc_set_value(
+                      id(home2_ambient_arc),
+                      p4_ui_temp_to_arc_pct(id(probe_external_temp).state,
+                                            ${dial_min_c}, ${dial_max_c}));
             widgets:
               # ── View 1: classic three-arc gauge ───────────────────────────
               - obj:
@@ -6851,6 +6909,36 @@ lvgl:
                         y: 86
                         text_font: font_medium
                         text_color: col_orange
+
+                    # RIGHT PANEL: same secondary readings as classic home
+                    # (Evap / Int / Ext). Outer stroke is thicker (22 vs 14) but
+                    # ring diameter matches, so classic x:328 clearance still fits.
+                    - label:
+                        id: lbl_evap_temp_alt
+                        text: "Evap\n--°C"
+                        align: CENTER
+                        x: 328
+                        y: 80
+                        text_font: font_small
+                        text_color: col_text
+
+                    - label:
+                        id: lbl_int_humidity_alt
+                        text: "Int --°C\n--%RH"
+                        align: CENTER
+                        x: 328
+                        y: 196
+                        text_font: font_small
+                        text_color: col_text
+
+                    - label:
+                        id: lbl_ext_humidity_alt
+                        text: "Ext --°C\n--%RH"
+                        align: CENTER
+                        x: 328
+                        y: 312
+                        text_font: font_small
+                        text_color: col_pink
 
         # Hidden LED indicators for status updates
         - obj:
@@ -11678,21 +11766,39 @@ script:
       - lvgl.label.update:
           id: lbl_evap_temp_large
           text: !lambda |-
-            return p4_fmt_temp(
+            return p4_fmt_evap_label(
+                id(probe2_temp).state,
+                id(sel_temperature_display_unit).current_option() == "Fahrenheit");
+      - lvgl.label.update:
+          id: lbl_evap_temp_alt
+          text: !lambda |-
+            return p4_fmt_evap_label(
                 id(probe2_temp).state,
                 id(sel_temperature_display_unit).current_option() == "Fahrenheit");
       - lvgl.label.update:
           id: lbl_int_humidity_large
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Int " + p4_fmt_temp(id(probe_internal_temp).state, f) + "\n" +
-                   p4_fmt_humidity(id(probe_internal_humidity).state);
+            return p4_fmt_int_humidity_label(
+                id(probe_internal_temp).state, id(probe_internal_humidity).state, f);
+      - lvgl.label.update:
+          id: lbl_int_humidity_alt
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return p4_fmt_int_humidity_label(
+                id(probe_internal_temp).state, id(probe_internal_humidity).state, f);
       - lvgl.label.update:
           id: lbl_ext_humidity_large
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Ext " + p4_fmt_temp(id(probe_external_temp).state, f) + "\n" +
-                   p4_fmt_humidity(id(probe_external_humidity).state);
+            return p4_fmt_ext_humidity_label(
+                id(probe_external_temp).state, id(probe_external_humidity).state, f);
+      - lvgl.label.update:
+          id: lbl_ext_humidity_alt
+          text: !lambda |-
+            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
+            return p4_fmt_ext_humidity_label(
+                id(probe_external_temp).state, id(probe_external_humidity).state, f);
 
   - id: ntfy_high_alarm_request
     then:

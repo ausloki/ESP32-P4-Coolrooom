@@ -1,12 +1,20 @@
 # Handover Notes — ESP32-P4 Coolroom Controller
 
 **Date**: 2026-07-18  
-**Resume State Updated**: 2026-08-01 (evening closeout)  
+**Resume State Updated**: 2026-08-03 (ESPHome OTA confirmed)  
 **Status**: On real hardware. Branch `cursor/wifi-sdmmc-slot-fix`. Canonical resume:
-`memory-bank/activeContext.md`. Flash with `./tools/esphome_flash.sh` only (NVS-safe).
+`memory-bank/activeContext.md` + `HANDOVER_NOTES_2026-07-31.md`. Flash with
+`./tools/esphome_flash.sh` or ESPHome OTA to IP (confirmed 2026-08-03; NVS preserved).
 
 > Resume note: historical sections below preserve earlier phase wording; treat the latest
 > addendum + `memory-bank/activeContext.md` as the current resume point.
+
+---
+
+## 2026-08-03 Addendum — ESPHome OTA confirmed
+
+- ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF).
+- Dashboard OTA UI remains open (web upload UI — not the CLI path above).
 
 ---
 

@@ -1,5 +1,10 @@
 # Progress Tracking
 
+## 2026-08-03 — ESPHome OTA confirmed working
+
+- ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF).
+- Dashboard OTA UI (web upload) remains deferred — separate from CLI OTA.
+
 ## 2026-08-02 — LVGL Defrost layout denser + docs closeout
 
 - Densified LVGL Settings 2/8 (Start/Stop side-by-side, Force-Max right) and 3/8
@@ -666,6 +671,7 @@
 - [x] Carel follow-ups closed 2026-08-01 (A not required, B already done, C fan relay, D door hold)
 - [x] Web SD log download — confirmed working 2026-08-01 (dashboard SD Card tab)
 - [x] Multi-user server auth — **not required**; guest + single operator login is permanent
+- [x] ESPHome OTA (`esphome upload --device <ip>`) — confirmed 2026-08-03; NVS preserved
 
 **Still deferred:**
 

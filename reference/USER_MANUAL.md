@@ -41,10 +41,13 @@ Swipe **up** on the centre gauge for an alternate **Home Assistant–style**
 thermostat view on one outer ring: soft cyan fill to **setpoint**, a blue band
 between **current** and setpoint, a cyan-rim thumb at setpoint and a blue pip at
 current (display-only — you cannot drag the ring to change the setpoint), with a
-thinner pink ambient ring inside. Swipe **down** to return. On both home views
+thinner pink ambient ring inside. Swipe **down** to return. (The alternate view's
+arc math only runs while that page is scrolled into view.) On both home views
 the large centre temperature stays **blue** (same as the coolroom arc) and
-follows **Temperature Display Unit** (°C or °F). The web Coolroom Status gauge
-stays on the classic three-arc layout.
+follows **Temperature Display Unit** (°C or °F). The right-rail secondary
+readouts — **Evap** (Probe 2), **Int** (SHT31 temp + RH), and **Ext** (SHT20
+temp + RH) — appear on both the classic and alternate home views. The web
+Coolroom Status gauge stays on the classic three-arc layout.
 
 A reading colder than −10 °C or warmer than +30 °C sits pinned at the end of its arc — the
 numeric readouts remain exact. A sensor that is offline leaves its ring empty. The dial
@@ -607,7 +610,7 @@ no-account-needed push service. Every message includes a timestamp.
 
 | Setting | Range / values | Default | When to change it |
 |---|---|---|---|
-| **ntfy Push Notifications Enabled** | on / off | on | Mute phone pushes without silencing local alarms or the siren |
+| **ntfy Push Notifications Enabled** | on / off | off | Mute phone pushes without silencing local alarms or the siren |
 | **ntfy Server URL** | `http://` or `https://` URL | `https://ntfy.sh` | Point at a self-hosted ntfy instance |
 | **ntfy Topic** | 1–64 characters | (firmware build default) | Match the topic you subscribe to in the ntfy app |
 | **Priority: High Temp Alarm** | min / low / default / high / urgent | high | Raise to urgent if the phone must break through Do Not Disturb |
@@ -794,7 +797,7 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 | Item | What it shows |
 |---|---|
 | System Uptime / Current Time / NTP Sync Status | How long since last reboot, and whether the clock is synced. Wall clock uses the ESP32-P4 internal LP RTC; NTP over Wi‑Fi keeps it accurate. With a cell in the board’s RTC battery holder, time can survive power cuts; without it, expect pending time until first NTP after every hard power loss. The Info page **System Time** line shows how long ago the last NTP sync landed — the controller polls every **60 s** until the first sync, then settles to **weekly** once the clock is valid. |
-| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU shows the average busy percentage across both P4 cores over the last sample window (typically a few seconds), plus per-core busy% (`C0` / `C1`) on the Info page and web Hardware / System Health lines. The web dashboard EMA-smooths the average so a hard page refresh does not briefly flash a reconnect spike; per-core values are the raw windowed samples. |
+| Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU shows the average busy percentage across both P4 cores over the last sample window (~30 s publish interval), plus per-core busy% (`C0` / `C1`) on the Info page and web Hardware / System Health lines. The web dashboard EMA-smooths the average so a hard page refresh does not briefly flash a reconnect spike; per-core values are the raw windowed samples. |
 | SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9). The touchscreen Info page shows card total plus used/free in MB **and percent**, and whether a `backup.json` is present. |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is |
 | System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 = humidity sensors detected on the I2C header. |

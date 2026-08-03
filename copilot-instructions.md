@@ -188,7 +188,8 @@ This workflow is mandatory after every code or documentation change, no exceptio
   - Embed dashboard if HTML changed: `python3 scripts/embed_dashboard.py`
   - Coverage check: `.venv/bin/python tools/check_dashboard_coverage.py`
   - Compile: `./tools/esphome_compile.sh esp32-p4-coolroom.yaml`
-  - Flash with `./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX` (or OTA to IP).
+  - Flash with `./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX` (or OTA to IP —
+    confirmed 2026-08-03; NVS preserved).
     **Do not** use plain `esphome upload` over USB — it erases NVS settings.
   - Optional live reboot-survival smoke: `.venv/bin/python tools/test_settings_persistence.py --host <ip>`
 1. Update code-review graph:

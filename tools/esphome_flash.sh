@@ -26,6 +26,7 @@
 #
 # Prefer OTA where possible (`esphome upload <yaml> --device <ip>`): the OTA
 # image only touches the app partition and never puts settings at risk.
+# Confirmed 2026-08-03: ESPHome OTA to 192.168.37.237 (~8.3s); NVS preserved.
 
 set -euo pipefail
 

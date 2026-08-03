@@ -4,6 +4,20 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-03 — Perf: gate home2 + slow diagnostics
+
+- Gate `p4_ui_update_home2_cooling` / home2 ambient arc on `home2_view_active`
+  (set from `home_gauge_scroll` `on_scroll_end`); one-shot refresh on enter view 2.
+- Diagnostics: CPU%/RTD age → 30 s; countdown sensors → 3 s (home lockout still
+  1 s via `p4_ui_comp_lockout_remaining_s`). RTD Modbus stays 2 s.
+
+## 2026-08-03 — ESPHome OTA confirmed working
+
+- ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237` (~8.3 s); device returned; NVS preserved (ntfy stayed OFF).
+- Checklist/handover/memory-bank updated; Dashboard OTA UI still deferred.
+
+---
+
 ## 2026-08-02 — Docs: continuous evaporator fans (coil 0 future)
 
 - Plant fans run constantly hardwired today; coil 0 / Fan Relay Enabled kept off
@@ -616,8 +630,9 @@ Compile + NVS-safe flash is now step 0 of the mandatory closeout in:
 - `.github/copilot-instructions.md`
 - `copilot-instructions.md` (checklist includes flash + coverage checker)
 
-Commands: `./tools/esphome_compile.sh` then `./tools/esphome_flash.sh` (or OTA). Plain
-USB `esphome upload` remains forbidden for routine flashes.
+Commands: `./tools/esphome_compile.sh` then `./tools/esphome_flash.sh` (or OTA — confirmed
+2026-08-03 to LAN IP, NVS preserved). Plain USB `esphome upload` remains forbidden for
+routine flashes.
 
 ### Artifacts
 

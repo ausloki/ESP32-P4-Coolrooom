@@ -108,7 +108,8 @@ temperature sensors according to HA's own unit-system setting.
 **Home gauge:** the classic three-arc view (coolroom / setpoint / ambient) is the default.
 Swipe **up** on the centre for an HA-style thermostat view (set vs current on one ring with
 display-only thumb/pip — not drag-to-set); swipe **down** to return. Centre temperature
-stays blue like the coolroom arc.
+stays blue like the coolroom arc. Right-rail **Evap** / **Int** / **Ext** sensor readouts
+appear on both home views.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before
@@ -155,7 +156,7 @@ continuous** (leave **Fan Relay Enabled** off). Humidity is monitored, not contr
 | **Evaporator Probe / Internal SHT31 / External SHT20** | `On` (defaults) | All-sensors profile — enable what is fitted; bench Modbus/I2C offline is expected until wired. |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |
 | **SD Temp Log Retention** | `90 days` (factory 60) | Longer daily CSV history for food-room audit trail. |
-| **ntfy / Audio / Siren** | `On` (defaults) | Keep local + push alerting for this profile; subscribe the phone to your topic. |
+| **ntfy / Audio / Siren** | ntfy `Off` (default); Audio / Siren `On` | Turn ntfy on and subscribe the phone to your topic when you want push alerts; keep local audio/siren on. |
 
 > **Disclaimer:** illustrative starting values for a general ~2 °C commercial food coolroom
 > on this controller — not a substitute for your own quality/food-safety procedures. Always

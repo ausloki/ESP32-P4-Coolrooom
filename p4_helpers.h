@@ -208,6 +208,26 @@ inline std::string p4_fmt_humidity(float rh, const char* na_text = "--%RH") {
     return std::string{buf};
 }
 
+/// Home right-rail: evaporator probe (classic + alt). Keeps the "Evap" prefix
+/// even when the reading is offline so the slot stays identifiable.
+inline std::string p4_fmt_evap_label(float t_c, bool use_fahrenheit) {
+    return std::string("Evap\n") + p4_fmt_temp(t_c, use_fahrenheit);
+}
+
+/// Home right-rail: internal SHT31 combined temp + RH (classic + alt).
+inline std::string p4_fmt_int_humidity_label(float t_c, float rh,
+                                              bool use_fahrenheit) {
+    return "Int " + p4_fmt_temp(t_c, use_fahrenheit) + "\n" +
+           p4_fmt_humidity(rh);
+}
+
+/// Home right-rail: external SHT20 combined temp + RH (classic + alt).
+inline std::string p4_fmt_ext_humidity_label(float t_c, float rh,
+                                              bool use_fahrenheit) {
+    return "Ext " + p4_fmt_temp(t_c, use_fahrenheit) + "\n" +
+           p4_fmt_humidity(rh);
+}
+
 // ─── Memory diagnostics (call from template sensor lambdas) ───────────────
 
 inline float p4_free_heap_kb() {

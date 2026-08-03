@@ -83,11 +83,23 @@ inline void p4_ui_hide_arc_knob_(lv_obj_t *arc) {
     lv_obj_set_style_height(arc, 0, LV_PART_KNOB);
 }
 
+/// Seconds left in compressor off-delay (0 = ready / not counting).
+/// Used by the 1 s home LVGL path so the amber countdown stays snappy even when
+/// the published countdown sensors run slower (diagnostic / web).
+inline float p4_ui_comp_lockout_remaining_s(uint32_t last_off_ms, float lockout_min) {
+    if (last_off_ms == 0) return 0.0f;
+    const uint32_t lockout_ms = (uint32_t)(lockout_min * 60000.0f);
+    const uint32_t elapsed = millis() - last_off_ms;
+    if (elapsed >= lockout_ms) return 0.0f;
+    return (lockout_ms - elapsed) / 1000.0f;
+}
+
 /// Alt home gauge (HA thermostat-style, display-only — no drag-to-set):
 ///   - set_arc: dim track + soft cyan fill to setpoint (target path)
 ///   - cur_arc: invisible fill; used only as the coolroom radius reference for the current pip
 ///   - delta_arc: blue band between current and setpoint (active gap)
 ///   - knob_set / knob_cur: aligned to set_arc / cur_arc via lv_arc_align_obj_to_angle
+/// Call only when home2 is scrolled into view (see home2_view_active).
 inline void p4_ui_update_home2_cooling(lv_obj_t *set_arc, lv_obj_t *cur_arc,
                                       lv_obj_t *delta_arc, lv_obj_t *knob_set,
                                       lv_obj_t *knob_cur, float temp_c, float sp_c,
