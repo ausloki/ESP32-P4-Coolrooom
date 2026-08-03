@@ -11,7 +11,8 @@
   hardware-offline phrases that match the home centre status
   (`RELAY BOARD OFFLINE`, `TEMP BOARD OFFLINE`, `HUMIDITY SENSOR OFFLINE`,
   `AMBIENT SENSOR OFFLINE`) and updated wording for probe / not-cooling / ice
-- Web **Speaker Volume (%)** (50–90, default 85) — NVS-backed, synced with HA media player
+- Web **Speaker Volume (%)** (20–100, default 85) — NVS-backed; mapped to ES8311 gain
+  (`p4_audio_ui_to_codec`: UI 100% → codec 0.82 mild boost above unity) and synced with HA media player
 - Edge-triggered play on alarm/info events; home bell soft-mute silences speech
 - Web dashboard **Audio** tab + Test Speaker button
 - Per-phrase **🔊** speaker-icon preview on the web Audio tab and on LVGL Settings 8/8
@@ -35,7 +36,7 @@ Soft-start each phrase in `p4_audio.yaml` (`audio_prepare_play` /
 2. Start playback into **~400 ms leading silence** on the WAV  
    (`--lead-silence-ms 400` in `scripts/generate_audio_clips_kokoro.py`)  
 3. After ~120 ms: **PA on** (still muted — amp biases into silence)  
-4. After ~150 ms more: unmute + restore operator volume  
+4. After ~150 ms more: set mapped volume, then unmute  
 
 Glass-confirmed: **no click, full phrase completes**.
 
@@ -78,11 +79,29 @@ are transmitted onto the codec's own output pin and never arrive. The only sympt
 amplifier popping as it enables and disables.
 
 **Volume is not a linear percentage of loudness.** ESPHome passes the media player volume
-straight to the ES8311 volume register, where 0.75 is 0 dB and 1.0 is +32 dB. The stock
-ESPHome default of 0.5 lands near −32 dB (inaudible for speech), and 1.0 clips hard. This
-project uses `volume_initial: 0.85`, `volume_min: 0.50`, `volume_max: 0.90`, exposed on the
-web as **Speaker Volume (%)** (50–90, default 85). The same value is what HA sees on
-*Coolroom Speaker*.
+straight to the ES8311 volume register, where 0.75 is 0 dB (unity) and 1.0 is +32 dB. The
+stock ESPHome default of 0.5 lands near −32 dB (inaudible for speech). Raw `ui%/100` at
+85–100% (→ 0.85–1.0) was loud but heavily distorted on this NS4150B + speaker. Operator
+UI is therefore **20–100%** mapped linearly by `p4_audio_ui_to_codec` /
+`p4_audio_codec_to_ui` in `p4_helpers.h` into a window ending modestly above unity:
+
+```
+codec = 0.35 + (clamp(ui_pct, 20, 100) − 20) / 80 × 0.47
+```
+
+| UI % | Codec float | Notes |
+|------|-------------|--------|
+| 20   | 0.35        | Floor — alarms stay audible |
+| 50   | 0.526       | Mid-quiet |
+| 70   | 0.644       | Clearly below 100% |
+| 85   | 0.732       | Default — near unity |
+| 100  | 0.82        | Loudest clean (mild boost; not raw 0.90+) |
+
+`volume_initial` / `volume_min` / `volume_max` on `coolroom_media` are the **codec** floats
+(0.732 / 0.35 / 0.82). Soft-start restores this mapped gain **before** unmute — do not pass
+raw `ui_pct/100` into `set_volume`. Speaker Amplifier is **PA_Ctrl only** (GPIO53 → NS4150B
+enable); it does not raise the codec float. If 100% crackles, lower the ceiling toward
+0.78; if still quiet with amp On, check WAV content level before raising (stay ≤ ~0.82).
 
 ## On hold — microphone / voice input
 

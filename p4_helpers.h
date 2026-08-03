@@ -397,6 +397,53 @@ inline void p4_ha_api_drop_clients() {
 inline void p4_ha_api_drop_clients() {}
 #endif
 
+// ─── Speaker volume (UI % ↔ ES8311 codec float) ─────────────────────────────
+// ESPHome's ES8311 driver remaps 0.0–1.0 onto DAC register 0x00–0xFF, where
+// 0.75 ≈ 0xBF = 0 dB (unity). Raw ui%/100 at 85–100 → 0.85–1.0 is loud but
+// crackles on this NS4150B + speaker. Cap modestly above unity (not 0.90–1.0).
+//
+//   codec = 0.35 + (clamp(ui_pct, 20, 100) − 20) / 80 × 0.47
+//   UI 20% → 0.35   UI 70% → 0.644   UI 85% → 0.732   UI 100% → 0.82
+//
+// Floor 20% so alarm speech cannot be silenced by accident. Soft-start /
+// click suppression is unchanged — only the gain applied at unmute differs.
+
+constexpr float P4_AUDIO_CODEC_GAIN_FLOOR = 0.35f;
+constexpr float P4_AUDIO_CODEC_GAIN_CEILING = 0.82f;  // mild boost above unity
+constexpr float P4_AUDIO_UI_MIN_PCT = 20.0f;
+constexpr float P4_AUDIO_UI_MAX_PCT = 100.0f;
+
+inline float p4_audio_clamp_ui_pct(float pct) {
+    if (pct < P4_AUDIO_UI_MIN_PCT) return P4_AUDIO_UI_MIN_PCT;
+    if (pct > P4_AUDIO_UI_MAX_PCT) return P4_AUDIO_UI_MAX_PCT;
+    return pct;
+}
+
+/// Operator-facing percent → ES8311 / media_player volume float (≤ ceiling).
+inline float p4_audio_ui_to_codec(float ui_pct) {
+    const float ui = p4_audio_clamp_ui_pct(ui_pct);
+    const float span = P4_AUDIO_UI_MAX_PCT - P4_AUDIO_UI_MIN_PCT;
+    const float gain_span =
+        P4_AUDIO_CODEC_GAIN_CEILING - P4_AUDIO_CODEC_GAIN_FLOOR;
+    float codec = P4_AUDIO_CODEC_GAIN_FLOOR +
+                  (ui - P4_AUDIO_UI_MIN_PCT) / span * gain_span;
+    if (codec > P4_AUDIO_CODEC_GAIN_CEILING) return P4_AUDIO_CODEC_GAIN_CEILING;
+    if (codec < P4_AUDIO_CODEC_GAIN_FLOOR) return P4_AUDIO_CODEC_GAIN_FLOOR;
+    return codec;
+}
+
+/// Media-player / codec float → operator-facing percent (for HA on_volume sync).
+inline float p4_audio_codec_to_ui(float codec) {
+    if (codec <= P4_AUDIO_CODEC_GAIN_FLOOR) return P4_AUDIO_UI_MIN_PCT;
+    if (codec >= P4_AUDIO_CODEC_GAIN_CEILING) return P4_AUDIO_UI_MAX_PCT;
+    const float span = P4_AUDIO_UI_MAX_PCT - P4_AUDIO_UI_MIN_PCT;
+    const float gain_span =
+        P4_AUDIO_CODEC_GAIN_CEILING - P4_AUDIO_CODEC_GAIN_FLOOR;
+    return p4_audio_clamp_ui_pct(
+        P4_AUDIO_UI_MIN_PCT +
+        (codec - P4_AUDIO_CODEC_GAIN_FLOOR) / gain_span * span);
+}
+
 // ─── Wall clock (SoC LP RTC + SNTP) ─────────────────────────────────────────
 // Waveshare FAQ for ESP32-P4-WIFI6-Touch-LCD-7B: use the chip's internal 48-bit
 // low-power RTC via settimeofday() / POSIX time, plus NTP over C6 Wi-Fi.

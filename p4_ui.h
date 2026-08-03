@@ -94,6 +94,34 @@ inline float p4_ui_comp_lockout_remaining_s(uint32_t last_off_ms, float lockout_
     return (lockout_ms - elapsed) / 1000.0f;
 }
 
+/// Seconds until the next scheduled defrost (0 = due / active / not counting).
+/// Same math as the published `defrost_countdown_sec` sensor; home LVGL calls
+/// this every 1 s so the rail countdown is not tied to the 3 s sensor publish.
+inline float p4_ui_next_defrost_remaining_s(bool defrost_active, bool defrost_dripping,
+                                           uint32_t last_end_ms, float interval_min) {
+    if (defrost_active || defrost_dripping) return 0.0f;
+    if (last_end_ms == 0) return 0.0f;
+    const uint32_t interval_ms = (uint32_t)(interval_min * 60000.0f);
+    const uint32_t elapsed = millis() - last_end_ms;
+    if (elapsed >= interval_ms) return 0.0f;
+    return (interval_ms - elapsed) / 1000.0f;
+}
+
+/// Compact countdown for home rail labels. Uses H:MM:SS once past an hour
+/// (defrost intervals are often multi-hour); otherwise M:SS like lockout.
+inline std::string p4_ui_fmt_countdown_s(float rem_s) {
+    if (rem_s <= 0.0f) return std::string("");
+    int total_s = (int) rem_s;
+    char buf[16];
+    if (total_s >= 3600) {
+        snprintf(buf, sizeof(buf), "%d:%02d:%02d",
+                 total_s / 3600, (total_s % 3600) / 60, total_s % 60);
+    } else {
+        snprintf(buf, sizeof(buf), "%d:%02d", total_s / 60, total_s % 60);
+    }
+    return std::string(buf);
+}
+
 /// Alt home gauge (HA thermostat-style, display-only — no drag-to-set):
 ///   - set_arc: dim track + soft cyan fill to setpoint (target path)
 ///   - cur_arc: invisible fill; used only as the coolroom radius reference for the current pip
@@ -266,7 +294,9 @@ inline std::string p4_ui_home_status_text(const P4UiHomeStatusIn &in,
     return std::string(slots[rotate_idx]);
 }
 
-// ─── Left-rail icon animation (50 ms tick) ─────────────────────────────────
+// ─── Left-rail icon animation (100 ms tick on Home; skipped off-Home) ──────
+// YAML interval is 100 ms. Motion coefficients are 2× the original 50 ms
+// values so visual spin/flicker speed stays the same at half the wakeups.
 
 /// Background FX: falling snow while compressor runs (suppressed on alarm/defrost).
 inline bool p4_ui_fx_snow_visible(bool compressor_on, bool defrost_active, bool any_alarm) {
@@ -295,8 +325,7 @@ inline void p4_ui_spin_pivot_(lv_obj_t *obj) {
     lv_obj_set_style_transform_pivot_y(obj, lv_pct(50), 0);
 }
 
-/// Drive snowflake / flame / light / bell motion for one 50 ms frame.
-/// Behavior matches the former inline YAML lambda exactly.
+/// Drive snowflake / flame / light / bell motion for one 100 ms frame.
 inline void p4_ui_home_icon_anim_tick(uint32_t tick, lv_obj_t *compressor, lv_obj_t *defrost,
                                       lv_obj_t *light, lv_obj_t *alarm,
                                       const P4UiHomeIconAnimIn &in) {
@@ -304,8 +333,8 @@ inline void p4_ui_home_icon_anim_tick(uint32_t tick, lv_obj_t *compressor, lv_ob
     if (compressor != nullptr) {
         if (in.compressor_on) {
             p4_ui_spin_pivot_(compressor);
-            lv_obj_set_style_transform_rotation(compressor, (int32_t)((tick * 22) % 3600), 0);
-            float flicker = sinf(tick * 0.3f) * 0.5f + 0.5f;
+            lv_obj_set_style_transform_rotation(compressor, (int32_t)((tick * 44) % 3600), 0);
+            float flicker = sinf(tick * 0.6f) * 0.5f + 0.5f;
             lv_obj_set_style_opa(compressor, (lv_opa_t)(160 + flicker * 95), 0);
         } else {
             lv_obj_set_style_transform_rotation(compressor, 0, 0);
@@ -316,7 +345,7 @@ inline void p4_ui_home_icon_anim_tick(uint32_t tick, lv_obj_t *compressor, lv_ob
     // Flame (defrost): irregular dual-sine flicker while control tick says active.
     if (defrost != nullptr) {
         if (in.defrost_active) {
-            float flicker = sinf(tick * 0.5f) * 0.3f + sinf(tick * 1.3f + 1.0f) * 0.2f + 0.5f;
+            float flicker = sinf(tick * 1.0f) * 0.3f + sinf(tick * 2.6f + 1.0f) * 0.2f + 0.5f;
             int32_t opa = (int32_t)(140 + flicker * 115);
             if (opa < 100) opa = 100;
             if (opa > 255) opa = 255;
@@ -331,7 +360,7 @@ inline void p4_ui_home_icon_anim_tick(uint32_t tick, lv_obj_t *compressor, lv_ob
     // Light globe: slow breathing glow while relay is on.
     if (light != nullptr) {
         if (in.light_on) {
-            float glow = sinf(tick * 0.15f) * 0.5f + 0.5f;
+            float glow = sinf(tick * 0.3f) * 0.5f + 0.5f;
             lv_obj_set_style_opa(light, (lv_opa_t)(90 + glow * 165), 0);
             lv_obj_set_style_text_color(light, in.col_orange, 0);
         } else {
@@ -346,7 +375,7 @@ inline void p4_ui_home_icon_anim_tick(uint32_t tick, lv_obj_t *compressor, lv_ob
             lv_obj_set_style_text_color(alarm, in.col_red, 0);
             if (!in.alarm_silenced) {
                 p4_ui_spin_pivot_(alarm);
-                float jiggle = sinf(tick * 1.3f) * 150.0f;  // ±15 degrees
+                float jiggle = sinf(tick * 2.6f) * 150.0f;  // ±15 degrees
                 lv_obj_set_style_transform_rotation(alarm, (int32_t)jiggle, 0);
             } else {
                 lv_obj_set_style_transform_rotation(alarm, 0, 0);

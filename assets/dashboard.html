@@ -2578,8 +2578,8 @@
                 fields: [
                     { type: 'switch', entity: 'audio_alerts_enabled', name: 'Audio Alerts Enabled', label: 'Audio Alerts Enabled',
                       help: 'Master switch for spoken announcements over the on-board speaker. Off silences every phrase below. The home-screen bell also mutes speech for the current alarm event (same soft mute as the siren).' },
-                    { type: 'number', entity: 'speaker_volume____', name: 'Speaker Volume (%)', label: 'Speaker Volume (%)', min: 50, max: 90, step: 5,
-                      help: 'Loudness of spoken alerts on the on-board speaker. 85% is the measured clear level; the range is capped at 50\u201390% so alarms cannot be silenced or driven into distortion. Use Test Speaker after changing it.' },
+                    { type: 'number', entity: 'speaker_volume____', name: 'Speaker Volume (%)', label: 'Speaker Volume (%)', min: 20, max: 100, step: 5,
+                      help: 'Loudness of spoken alerts. Maps UI 20\u2013100% to ES8311 codec 0.35\u20130.82 (100% = mild boost above unity). Default 85%. Floor 20% so alarms cannot be silenced. Use Test Speaker after changing it.' },
                     { type: 'button', entity: 'test_audio_alert', name: 'Test Audio Alert', label: 'Test Speaker',
                       help: 'Play a short test phrase. Ignores the master toggle so you can verify the speaker even when alerts are off. Requires the ES8311 codec on I2C.' },
                     { type: 'switch', entity: 'speaker_amplifier', name: 'Speaker Amplifier', label: 'Speaker Amplifier (diagnostic)',

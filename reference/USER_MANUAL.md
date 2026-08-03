@@ -66,8 +66,8 @@ temperature sensors using its configured unit system.
 
 | Icon | Touch? | What it does |
 |---|---|---|
-| Snowflake (compressor) | No | Status only — spins/colours when the compressor relay is on. Control logic owns the relay; tapping does nothing. |
-| Flame (defrost) | No | Status only — animates while defrost is active. |
+| Snowflake (compressor) | No | Status only — spins/colours when the compressor relay is on. Control logic owns the relay; tapping does nothing. While the compressor off-delay is counting, an **amber** `M:SS` countdown appears under the icon (§4.1). |
+| Flame (defrost) | No | Status only — animates while defrost is active. Between cycles, a **cyan** countdown under the icon shows time until the next scheduled defrost (`M:SS`, or `H:MM:SS` past an hour). Blank while a cycle is running, dripping, or due. |
 | Light | Yes | Manual on/off for the cabinet light **when Light Relay Enabled** is on (§4.11). Ignored if that hardware enable is off. Door-Triggered Light (§4.6) can still drive the same relay from the door switch. |
 | Bell | Yes | Soft-mutes the siren and speech for the *current* set of alarms. Bell stops jiggling but stays red until those conditions clear. Banners and phone notifications keep going. Mute lifts when every alarm is gone, or immediately if a *new* alarm type appears (bell re-animates). |
 
@@ -262,13 +262,14 @@ the moment the controller powers up, exactly as if the compressor had just switc
 A power cut looks the same to the compressor as being switched off, and restarting one
 against pressure that hasn't equalised is what the off-delay exists to prevent — so the
 room stays uncooled for up to the full Compressor Off-Delay after every restart. The
-countdown is shown under the snowflake on the touchscreen home screen and as *Compressor
-Lockout Remaining* on the web dashboard, and the snowflake is **amber** while it runs
-(grey = idle, blue = running, red = the relay has been disabled in §4.13 **or** the
-RS485 relay board is offline). This applies to the fallback duty cycle in §4.7 as
-well — its ON window is **held**, not spent, while the off-delay is counting **or**
-the relay board is unreachable, so a fallback cycle that comes due during either
-condition still gets its full ON Time once both clear rather than being skipped.
+countdown is shown under the snowflake on the touchscreen home screen (updates every
+second) and as *Compressor Lockout Remaining* on the web dashboard, and the snowflake
+is **amber** while it runs (grey = idle, blue = running, red = the relay has been
+disabled in §4.13 **or** the RS485 relay board is offline). This applies to the
+fallback duty cycle in §4.7 as well — its ON window is **held**, not spent, while the
+off-delay is counting **or** the relay board is unreachable, so a fallback cycle that
+comes due during either condition still gets its full ON Time once both clear rather
+than being skipped.
 
 **No relay board = no compressor run (and no cooling animation).** Compressor
 control is the one loop that requires the Modbus RTU relay module to be online.
@@ -296,7 +297,7 @@ periodic defrosting. This group controls the basic on/off timer for that.
 | **Defrost System Enabled** | Master switch for **automatic** defrost (scheduled, smart-delta, dew-point). | On/Off | On | Turning this off stops those automatic starts. **Start Defrost Now** still works for service. Defrost on this controller is always **passive** (compressor held off); coil 0 is the **Fan Relay** (§4.13), not a heater. |
 | **Start Defrost Now** *(button)* | Begin a defrost cycle immediately. | — | — | Use for service or when the coil looks iced between schedules. Resets the interval clock from this cycle. Works even during a probe fault (ends by Max Duration if the evaporator reading isn't available) and even when Defrost System Enabled is off. |
 | **Stop Defrost Now** *(button)* | Abort the current defrost or drip phase immediately. | — | — | Cooling resumes subject to the compressor off-delay (§4.1). |
-| **Defrost Interval** | How often a defrost cycle starts, on a fixed timer. | 60 – 1440 min | 480 min (8 h) | Shorter interval for rooms with heavy door traffic or high humidity (more frost buildup); longer for dry, low-traffic rooms. |
+| **Defrost Interval** | How often a defrost cycle starts, on a fixed timer. Remaining time until the next scheduled start is shown under the flame icon on the home screen (1 s updates) and as *Next Defrost In* on the web dashboard. | 60 – 1440 min | 480 min (8 h) | Shorter interval for rooms with heavy door traffic or high humidity (more frost buildup); longer for dry, low-traffic rooms. |
 | **Defrost Max Duration** | Safety cap — defrost stops after this long even if it hasn't finished. | 5 – 60 min | 30 min | Raise slightly if defrost is being cut off before the coil is properly clear (check evaporator temp after a cycle). |
 | **Defrost Early Termination by Temperature** | Ends defrost as soon as the evaporator reaches the target temp below, instead of always running the full Max Duration. | On/Off | On | Recommended on — avoids unnecessarily warming the room once the coil is already clear. |
 | **Defrost Termination Temp** | The evaporator temperature that counts as "coil is clear" when the above is on. | 0.0 – 15.0 °C | 5.0 °C | Only relevant if Early Termination is on. |
@@ -449,10 +450,10 @@ click (firmware soft-start — see `reference/AUDIO_ALERTS.md` if changing audio
 | Setting | What it does | Default |
 |---|---|---|
 | **Audio Alerts Enabled** | Master on/off for every spoken phrase. | On |
-| **Speaker Volume (%)** | Loudness of spoken alerts (50–90%). Default **85%**. Floored so alarm speech cannot be silenced by accident; capped to avoid amp distortion. Use **Test Speaker** after changing it. | 85% |
+| **Speaker Volume (%)** | Loudness of spoken alerts (20–100%). Default **85%**. UI percent maps linearly into codec **0.35–0.82** (ES8311 unity is 0.75; 100% is a mild boost above unity — not raw 0.90+). Floored at 20% so alarm speech cannot be silenced by accident. Use **Test Speaker** after changing it. | 85% |
 | **Test Audio Alert** *(button)* | Plays a short test line (ignores master off so you can verify hardware). | — |
 | **Preview 🔊** *(per Speak row)* | Plays that row’s phrase once so you can hear it while configuring. Ignores the per-phrase toggle, master off, and soft-mute (same idea as Test Speaker). Both surfaces use a small speaker icon: on touchscreen Settings 8/8 it sits to the right of that row’s (now narrower) Toggle button; on the web Audio tab it sits beside the on/off button. | — |
-| **Speaker Amplifier (diagnostic)** | Raw power control for the amplifier itself. Playback switches it on and off automatically, so leave it alone in normal use — it is there to test the amplifier in isolation or force it quiet. Returns to off after every reboot. | Off |
+| **Speaker Amplifier (diagnostic)** | Raw **PA_Ctrl (GPIO53)** power for the NS4150B amp — hardware enable, not extra digital gain. Soft-start already flips it around each clip; leave Off in normal use. Use Toggle to force amp On for isolation tests (or Off to quiet). Returns Off after every reboot. | Off |
 | **Speak High / Low Temp Alarm** | Alarm voice when that temperature alarm becomes active. | On |
 | **Speak Door Open Alarm** | Alarm voice when the *delayed* door alarm fires (§4.6). | On |
 | **Speak No-Cool / Ice / Probe Fault** | Alarm voice for those conditions (phrases match the centre status: *Not cooling*, *Ice on coil*, *Coolroom probe bad*). | On |
@@ -468,11 +469,7 @@ The home-screen **bell** soft-mute also suppresses spoken phrases for the curren
 so speech and the jiggle can run again. Flip **Audio Alerts Enabled** off if you want the
 room quiet permanently.
 
-**Volume.** Use **Speaker Volume (%)** on touchscreen Settings 8/8 or the web Audio tab (default 85%). The scale is
-not a linear percentage of loudness: on this codec ~75% is unity gain and anything above
-roughly 90% clips, so the control is deliberately limited to 50–90%. The same value is
-what Home Assistant sees on the *Coolroom Speaker* media player — changing it in either
-place updates the other.
+**Volume.** Use **Speaker Volume (%)** on touchscreen Settings 8/8 or the web Audio tab (default 85%). The control is **not** a raw ES8311 register percent: ESPHome’s driver treats ~75% of full scale as 0 dB (unity). Firmware maps UI 20–100% linearly into codec **0.35–0.82** (`codec = 0.35 + (UI% − 20) / 80 × 0.47`) — 100% is loudest clean (mild boost above unity). Raw `UI%/100` above ~0.85 heavily distorted on this board. The Home Assistant *Coolroom Speaker* media player uses the mapped codec float; changing volume in either place updates the other.
 
 ---
 

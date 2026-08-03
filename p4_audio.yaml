@@ -40,26 +40,25 @@ media_player:
   - platform: speaker
     id: coolroom_media
     name: "Coolroom Speaker"
-    # Volume maps straight onto the ES8311 volume register, where 0.75 is 0 dB
-    # and 1.0 is +32 dB. 0.85 was measured as a good level on the on-board
-    # speaker; cap below unity so the amp can't be driven into clipping.
-    # Floor at 0.50 so the web/HA control cannot silence alarm speech entirely.
-    volume_initial: 0.85
-    volume_min: 0.50
-    volume_max: 0.90
+    # Volume is the *codec* float (not UI %). ES8311 0.75 = 0 dB (unity);
+    # ceiling 0.82 = mild boost (raw 0.85–1.0 crackles on this speaker).
+    # Operator UI 20–100% maps linearly to codec 0.35–0.82 via
+    # p4_audio_ui_to_codec — see reference/AUDIO_ALERTS.md.
+    volume_initial: 0.732   # UI default 85% → linear map
+    volume_min: 0.35        # UI floor 20%
+    volume_max: 0.82        # UI 100% → loudest clean
     # Keep the NVS-backed % number in sync when HA (or anything else) changes
-    # the media-player volume directly.
+    # the media-player volume directly (x is codec float — reverse-map to UI %).
     on_volume:
       - lambda: |-
           // Ignore callbacks caused by our own volume_set (boot / web / play).
           // Those can arrive out of order and would overwrite a newer setting.
           if (millis() < id(ctl_audio_volume_suppress_until_ms)) return;
-          float pct = x * 100.0f;
-          if (pct < 50.0f) pct = 50.0f;
-          if (pct > 90.0f) pct = 90.0f;
+          float pct = p4_audio_codec_to_ui(x);
           if (id(ctl_audio_volume_pct) < pct - 0.5f || id(ctl_audio_volume_pct) > pct + 0.5f) {
             id(ctl_audio_volume_pct) = pct;
-            ESP_LOGI("audio", "Speaker volume synced from media player: %.0f%%", pct);
+            ESP_LOGI("audio", "Speaker volume synced from media player: %.0f%% (codec %.3f)",
+                     pct, x);
           }
       - if:
           condition:
@@ -132,12 +131,13 @@ interval:
           if (phase == 2) {
             id(ctl_audio_softstart_phase) = 0;
             id(ctl_audio_softstart_at_ms) = 0;
-            id(i2s_speaker).set_mute_state(false);
-            id(es8311_dac).set_mute_off();
-            float vol = id(ctl_audio_volume_pct) / 100.0f;
+            // Mapped gain *before* unmute — never pass raw ui%/100 here.
+            float vol = p4_audio_ui_to_codec(id(ctl_audio_volume_pct));
             id(es8311_dac).set_volume(vol);
             id(ctl_audio_volume_suppress_until_ms) = now + 2000;
             id(coolroom_media).make_call().set_volume(vol).perform();
+            id(i2s_speaker).set_mute_state(false);
+            id(es8311_dac).set_mute_off();
           }
 
 script:

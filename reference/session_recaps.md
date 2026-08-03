@@ -4,6 +4,56 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-03 — Fix: Settings lag + quiet speaker @ 100%
+
+- **Settings lag root cause:** Info LVGL labels refreshed every 1 s even off-Info;
+  with `full_refresh: true` that dirtied a whole 1024×600 frame and contended with
+  touch. Periodic NVS `sync()` on the same tick + immediate `persist_config_to_nvs`
+  on every +/- compounded the hitch. Home 1 s lockouts / icon 100 ms unchanged.
+- **Fix:** gate Info LVGL on `page_info_active` (one-shot on `switch_to_page_info`
+  kept); skip 1 s NVS sync while Settings active; debounce persist
+  (`mode: restart` + 300 ms).
+- **Quiet @ 100% root cause:** apply path OK (UI→`p4_audio_ui_to_codec`); hard
+  cap at ES8311 unity 0.75 left speech barely audible vs old raw ~0.85. Soft-start
+  now sets mapped gain **before** unmute; set_action also writes DAC directly.
+- **Volume:** ceiling **0.75 → 0.82** (map 0.35–0.82); default 85% → codec ~0.732.
+  Docs/dashboard help updated. Soft-start click path preserved.
+- Closeout: embed + compile + OTA → `192.168.37.237` (~8.3 s). Leave ntfy alone. Not committed.
+
+## 2026-08-03 — Fix: Info page blank after B/A elevation
+
+- **Root cause:** elevating the 1 s YAML into `p4_ui_second_tick()` preserved the
+  home2 gate as a function-level `return` when `!page_home || !home2`, so all
+  later Info `lbl_info_*` updates never ran on classic Home (home2 off).
+- **Fix:** Info diagnostics always refresh every 1 s (pre-elevation behaviour);
+  Home/home2 remain page-gated; `switch_to_page_info` one-shot tick for instant
+  paint. B/A architecture kept.
+- Closeout: compile OK; OTA → `192.168.37.237` (~8.4 s). Leave ntfy alone.
+  Not committed (per request).
+
+## 2026-08-03 — Option C: icon rate + page-gated 1 s UI
+
+- Icon anim **50→100 ms** on Home; skip when `!page_home_active`; motion coeffs ×2.
+- `p4_ui_second_tick`: Home / home2 page gates; Info diagnostics always-on (pre-elevation);
+  Status + NVS/Wi‑Fi always. Fixes early-return that skipped Info / classic-home FX.
+  `switch_to_page_info` one-shot tick for instant paint.
+- Docs: `CPU_MEM_LOAD_BREAKOUT.md` Option C marked done. No manual/dashboard/entity
+  change (internal only).
+- Closeout: compile OK; OTA → `192.168.37.237`. Settled Home CPU still ~39% / C1 ~77%
+  (LVGL dominates); page-gate win expected off-Home. ntfy stayed OFF. Not committed.
+
+## 2026-08-03 — Option B then A: ctl/UI elevate + C0 worker
+
+- **B:** Moved 10 s control orchestrator → `p4_ctl_tick()` (`p4_ctl_tick.h`);
+  1 s LVGL block → `p4_ui_second_tick()` (`p4_ui_second_tick.h`). YAML intervals
+  are one-liners (~800 + ~380 lines removed from `esp32-p4-coolroom.yaml`).
+- **A:** FreeRTOS `p4_ctl` task pinned to CPU 0; 10 s YAML interval only
+  `p4_ctl_tick_signal()`; UI/LVGL/50 ms icons stay on loopTask (CPU 1).
+- Docs: `reference/CPU_MEM_LOAD_BREAKOUT.md` updated (implemented B then A).
+  No USER_MANUAL change (behaviour unchanged). No dashboard/entity changes.
+- Closeout: compile OK; OTA → `192.168.37.237` (~8.4 s). Leave ntfy alone.
+  Not committed (per request).
+
 ## 2026-08-03 — Perf: gate home2 + slow diagnostics
 
 - Gate `p4_ui_update_home2_cooling` / home2 ambient arc on `home2_view_active`

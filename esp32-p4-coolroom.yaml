@@ -179,8 +179,8 @@ substitutions:
   default_smart_dwell_min:     "30"   # delta must hold N min before smart defrost
   default_cal_samples_min:     "10"
   default_cal_samples_max:     "20"
-  # Speaker volume as percent of the ES8311 register scale (50–90). 85 matches
-  # the measured on-board level; the media player clamps to the same window.
+  # Speaker volume UI % (20–100). Mapped to ES8311 via p4_audio_ui_to_codec
+  # (linear 0.35–0.82; 100% → mild boost above unity — never raw 0.90+).
   default_audio_volume_pct:    "85"
   # Keep the last N daily /sdcard/YYYY-MM-DD.csv temperature logs (7–365).
   # Pruned on mount / auto-remount and at most once per calendar day.
@@ -227,6 +227,8 @@ esphome:
     - p4_logging.h
     - p4_log_manager.h
     - p4_wifi.h
+    - p4_ctl_tick.h
+    - p4_ui_second_tick.h
     - p4_dashboard_html.h
     - p4_dashboard.h
   on_boot:
@@ -328,6 +330,10 @@ esphome:
                 p4_wifi::set_factory_network("${factory_wifi_ssid}", "${factory_wifi_password}");
                 p4_wifi::p4_wifi_register();
                 p4_dash::p4_dashboard_register();
+                // Do NOT start p4_ctl C0 worker here. Creating / pinning a
+                // FreeRTOS task during setup() raced hosted Wi-Fi bring-up and
+                // left loopTask blocked until task_wdt (~9.8 s). Worker starts
+                // lazily from the first post-setup interval (see Phase 3/4).
             }
     - priority: -100
       then:
@@ -341,10 +347,12 @@ esphome:
             id: coolroom_media
             volume: !lambda |-
               id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;
-              return id(ctl_audio_volume_pct) / 100.0f;
+              id(ctl_audio_volume_pct) = p4_audio_clamp_ui_pct(id(ctl_audio_volume_pct));
+              return p4_audio_ui_to_codec(id(ctl_audio_volume_pct));
         - lambda: |-
-            ESP_LOGI("audio", "Speaker volume applied from NVS: %.0f%%",
-                     id(ctl_audio_volume_pct));
+            ESP_LOGI("audio", "Speaker volume applied from NVS: %.0f%% (codec %.3f)",
+                     id(ctl_audio_volume_pct),
+                     p4_audio_ui_to_codec(id(ctl_audio_volume_pct)));
             // Coerce stale NVS: door light ON with sensor OFF is invalid.
             if (id(input_door_light_enabled) && !id(input_door_sensor_enabled)) {
               id(input_door_light_enabled) = false;
@@ -2399,9 +2407,9 @@ sensor:
   # down) — computed directly from the same globals the control tick already
   # maintains, no new state needed. Previously only the *configured durations*
   # were visible (comp_lockout_min etc.); these are the first live progress
-  # readouts for any of them. Published at 3 s (web/HA); home LVGL lockout
-  # uses p4_ui_comp_lockout_remaining_s each 1 s tick so the amber countdown
-  # stays snappy on the Home page.
+  # readouts for any of them. Published at 3 s (web/HA); home LVGL countdowns
+  # use p4_ui_comp_lockout_remaining_s / p4_ui_next_defrost_remaining_s each
+  # 1 s tick so the amber lockout and cyan next-defrost labels stay snappy.
   - platform: template
     name: "Compressor Lockout Remaining (s)"
     id: comp_lockout_remaining_sec
@@ -2425,12 +2433,9 @@ sensor:
       sorting_group_id: group_defrost
       sorting_weight: 50
     lambda: |-
-      if (id(ctl_defrost_active) || id(ctl_defrost_dripping)) return 0.0f;
-      if (id(ctl_defrost_last_end_ms) == 0) return 0.0f;
-      uint32_t interval_ms = (uint32_t)(id(ctl_defrost_interval_min) * 60000.0f);
-      uint32_t elapsed = millis() - id(ctl_defrost_last_end_ms);
-      if (elapsed >= interval_ms) return 0.0f;
-      return (interval_ms - elapsed) / 1000.0f;
+      return p4_ui_next_defrost_remaining_s(
+          id(ctl_defrost_active), id(ctl_defrost_dripping),
+          id(ctl_defrost_last_end_ms), id(ctl_defrost_interval_min));
 
   - platform: template
     name: "Defrost Duration Remaining (s)"
@@ -3268,8 +3273,8 @@ number:
     name: "Speaker Volume (%)"
     icon: "mdi:volume-high"
     unit_of_measurement: "%"
-    min_value: 50
-    max_value: 90
+    min_value: 20
+    max_value: 100
     step: 5
     entity_category: config
     update_interval: 2s
@@ -3279,17 +3284,20 @@ number:
     lambda: 'return id(ctl_audio_volume_pct);'
     set_action:
       - lambda: |-
-          float v = x;
-          if (v < 50.0f) v = 50.0f;
-          if (v > 90.0f) v = 90.0f;
+          float v = p4_audio_clamp_ui_pct(x);
           id(ctl_audio_volume_pct) = v;
           // Suppress on_volume echo for 2s so a lagged callback from a
           // previous volume_set cannot overwrite this value.
           id(ctl_audio_volume_suppress_until_ms) = millis() + 2000;
-          ESP_LOGI("audio", "Speaker volume set to %.0f%%", v);
+          float codec = p4_audio_ui_to_codec(v);
+          // Apply to DAC immediately (media_player path can lag / soft-start
+          // only restores at unmute).
+          id(es8311_dac).set_volume(codec);
+          ESP_LOGI("audio", "Speaker volume set to %.0f%% (codec %.3f)",
+                   v, codec);
       - media_player.volume_set:
           id: coolroom_media
-          volume: !lambda 'return id(ctl_audio_volume_pct) / 100.0f;'
+          volume: !lambda 'return p4_audio_ui_to_codec(id(ctl_audio_volume_pct));'
       - script.execute: persist_config_to_nvs
   - platform: template
     id: probe2_offset_c
@@ -4004,1214 +4012,39 @@ http_request:
   timeout: 10s
 
 ##############################################################################
-# Phase 3: 10-second control loop
-# All decision logic lives in p4_control.h. This lambda is the orchestrator.
+# Phase 3: 10-second control loop (orchestrator in p4_ctl_tick.h)
+# Body runs on CPU 0 via p4_ctl_tick_worker; this interval only signals.
 ##############################################################################
 
 interval:
   - interval: 10s
     then:
       - lambda: |-
-          const uint32_t now_ms = millis();
-          // Fixed roles: Probe1 RTD = coolroom air, Probe2 RTD = evaporator.
-          float rtd1 = id(probe1_temp).state;
-          float rtd2 = id(probe2_temp).state;
-          float t = p4_ctl_resolve_coolroom_c(rtd1);
-          float evap = p4_ctl_resolve_evap_c(id(input_probe2_enabled), rtd2);
-          bool evap_ok = p4_rtd_valid(evap) &&
-                         p4_sample_fresh(id(rtd1_ch2_last_ms), ${probe_stale_ms} * 3);
-          // Captured up front so a single check at the end of this tick can
-          // log exactly one COMPRESSOR_ON/OFF event per actual transition,
-          // regardless of which branch below changed the relay.
-          bool comp_was_on = id(relay_compressor).state;
-          bool sd_was_ready = p4_sd_is_ready();
+          // Lazily starts the C0 worker on first call (never from on_boot/setup).
+          p4_ctl_tick_signal(${probe_stale_ms}, ${startup_grace_max_min}, ${log_interval_min});
 
-          // ── 1. Probe fault detection ────────────────────────────────────
-          bool fault = p4_ctl_probe_fault(t, id(rtd1_ch1_last_ms), ${probe_stale_ms});
-          id(ctl_probe_fault) = fault;
-
-          // ── 2. Grace periods ────────────────────────────────────────────
-          const uint32_t startup_grace_ms     = (uint32_t)(id(ctl_startup_grace_min)  * 60000.0f);
-          const uint32_t startup_grace_max_ms = (uint32_t)(${startup_grace_max_min}   * 60000.0f);
-          const uint32_t defrost_grace_ms     = (uint32_t)(id(ctl_defrost_grace_min)  * 60000.0f);
-          const uint32_t alarm_persist_ms     = (uint32_t)(id(ctl_alarm_persist_min)  * 60000.0f);
-
-          // Pulldown-aware: extends the plain startup grace timer (still the
-          // floor for a normal quick pulldown) until the room actually first
-          // reaches the alarm-safe band, capped at startup_grace_max_min so a
-          // genuinely stuck pulldown still alarms eventually.
-          if (!id(ctl_startup_pulldown_done) &&
-              p4_ctl_pulldown_reached(t, id(ctl_setpoint),
-                                       id(ctl_alarm_high_delta), id(ctl_alarm_low_delta))) {
-              id(ctl_startup_pulldown_done) = true;
-              ESP_LOGI("ctl", "Startup pulldown reached — normal alarm grace resumes");
-          }
-          bool in_grace = p4_ctl_startup_grace_active(id(ctl_boot_ms), startup_grace_ms,
-                                                       startup_grace_max_ms,
-                                                       id(ctl_startup_pulldown_done)) ||
-                          p4_ctl_defrost_grace(id(ctl_defrost_last_end_ms), defrost_grace_ms);
-
-          // ── 3. Compressor lockout (off-delay protection) ─────────────────
-          // Evaluated before anything that could start the compressor, not
-          // just before the hysteresis block: the fallback duty cycle below
-          // used to start it without consulting the off-delay at all, so a
-          // probe fault could short-cycle the compressor that the normal
-          // control path is careful never to.
-          const uint32_t lockout_ms = (uint32_t)(id(ctl_comp_lockout_min) * 60000.0f);
-          bool locked_out = p4_ctl_comp_locked_out(id(ctl_comp_last_off_ms), lockout_ms);
-          // Compressor is the one output whose control logic must not pretend
-          // to run without the Modbus relay board: coil writes go nowhere,
-          // and the snowflake / snow FX would still animate from local state.
-          // Treat a missing board like the off-delay for start purposes so
-          // the fallback ON window is held, not spent, while the bus is down.
-          const bool relay_board_ok = id(hw_rs485_relay_ok);
-          // Door-hold (optional): while the reed reads open, refuse compressor
-          // starts and force the coil off. Default off — same as Carel door
-          // pause, but opt-in so a stuck reed cannot starve cooling by accident.
-          const bool door_open_now = id(input_door_sensor_enabled) &&
-              (id(ctl_door_open_since_ms) > 0);
-          const bool door_hold_comp = id(input_door_hold_compressor) && door_open_now;
-          const bool comp_start_blocked = locked_out || !relay_board_ok || door_hold_comp;
-
-          // ── 4. Sensor fallback duty cycle (when probe is faulted) ───────
-          bool fallback_run = p4_ctl_fallback_should_run(
-              fault, id(input_fallback_enabled),
-              id(ctl_fallback_phase_on), id(ctl_fallback_last_toggle_ms),
-              (uint32_t)(id(ctl_fallback_on_min)  * 60000.0f),
-              (uint32_t)(id(ctl_fallback_off_min) * 60000.0f),
-              comp_start_blocked);
-          if (fault) {
-              id(ctl_sensor_fallback_active) = id(input_fallback_enabled);
-              if (!id(ctl_defrost_active)) {
-                  if (fallback_run && !comp_start_blocked && !id(relay_compressor).state) {
-                      id(relay_compressor).turn_on();
-                      id(ctl_comp_on_since_ms) = now_ms;
-                  } else if ((!fallback_run || door_hold_comp) && id(relay_compressor).state) {
-                      id(relay_compressor).turn_off();
-                      id(ctl_comp_last_off_ms) = now_ms;
-                      id(ctl_comp_on_since_ms) = 0;
-                  }
-              }
-              // Drive siren for probe fault (respect home-bell silence)
-              if (id(input_siren_enabled) && !id(ctl_alarm_silenced) &&
-                  !id(relay_siren).state)
-                  id(relay_siren).turn_on();
-              else if (id(ctl_alarm_silenced) && id(relay_siren).state)
-                  id(relay_siren).turn_off();
-          } else {
-              if (id(ctl_sensor_fallback_active)) {
-                  id(ctl_sensor_fallback_active) = false;
-                  id(ctl_fallback_last_toggle_ms) = 0;
-              }
-          }
-
-          // ── 5. Defrost sequencing ────────────────────────────────────────
-          // Automatic starts stay behind !fault (no reliable coolroom/evap for
-          // schedule / smart / dew / temp termination). Manual Start and an
-          // already-running cycle still run during probe fault so service can
-          // force a defrost with a dead probe; end is by Max Duration then.
-          if (!fault || id(ctl_defrost_active) || id(ctl_defrost_dripping) ||
-              id(ctl_manual_defrost_req)) {
-              const uint32_t def_interval_ms  = (uint32_t)(id(ctl_defrost_interval_min) * 60000.0f);
-              const uint32_t def_duration_ms  = (uint32_t)(id(ctl_defrost_duration_min) * 60000.0f);
-              const uint32_t drip_ms          = (uint32_t)(id(ctl_defrost_drip_min)     * 60000.0f);
-
-              if (id(ctl_defrost_dripping)) {
-                  // Drip phase: keep compressor off until drip time elapsed
-                  if (id(relay_compressor).state) {
-                      id(relay_compressor).turn_off();
-                      id(ctl_comp_last_off_ms) = now_ms;
-                      id(ctl_comp_on_since_ms) = 0;
-                  }
-                  if ((now_ms - id(ctl_drip_start_ms)) >= drip_ms) {
-                      id(ctl_defrost_dripping) = false;
-                      ESP_LOGI("ctl", "Drip phase complete");
-                  }
-              } else if (id(ctl_defrost_active)) {
-                  // Defrost running: keep compressor off, watch for end
-                  // conditions. Gated on the control flag rather than the coil
-                  // so a passive defrost (relay disabled, or heat supplied by
-                  // something outside this controller) still terminates on
-                  // evap temperature / max duration instead of restarting
-                  // every tick because the coil never reads back as on.
-                  if (id(relay_compressor).state) {
-                      id(relay_compressor).turn_off();
-                      id(ctl_comp_last_off_ms) = now_ms;
-                      id(ctl_comp_on_since_ms) = 0;
-                  }
-                  bool end_by_temp = evap_ok && id(input_defrost_term_temp_enabled) &&
-                                     p4_ctl_defrost_term_by_temp(evap, id(ctl_defrost_end_c), true);
-                  bool end_by_time = p4_ctl_defrost_timeout(id(ctl_defrost_on_since_ms), def_duration_ms);
-                  if (end_by_temp || end_by_time) {
-                      id(ctl_defrost_active) = false;
-                      id(ctl_defrost_on_since_ms) = 0;
-                      id(ctl_defrost_last_end_ms) = now_ms;
-                      id(ctl_dew_point_defrost_triggered) = false;
-                      id(ctl_frost_rate_defrost_triggered) = false;
-                      {
-                          char detail[96];
-                          snprintf(detail, sizeof(detail), "%s coolroom=%.1f evap=%.1f term_c=%.1f",
-                                   end_by_temp ? "evap_temp" : "timeout", t, evap, id(ctl_defrost_end_c));
-                          p4_sd_log_event("DEFROST_END", detail);
-                          id(speak_info_defrost_off).execute();
-                      }
-                      if (id(input_defrost_drip_enabled) && drip_ms > 0) {
-                          id(ctl_defrost_dripping) = true;
-                          id(ctl_drip_start_ms) = now_ms;
-                      }
-                  }
-              } else {
-                  // Not defrosting: check if a cycle should start
-                  bool manual_start = id(ctl_manual_defrost_req);
-                  // Smart delta tracking (only while the system is enabled —
-                  // no point accumulating dwell toward a start we will refuse)
-                  if (id(input_defrost_enabled) && id(input_smart_defrost_enabled) && evap_ok) {
-                      float delta = t - evap;
-                      if (delta >= id(ctl_smart_delta_c) && id(relay_compressor).state) {
-                          if (id(ctl_defrost_delta_since_ms) == 0)
-                              id(ctl_defrost_delta_since_ms) = now_ms;
-                      } else {
-                          id(ctl_defrost_delta_since_ms) = 0;
-                      }
-                  }
-                  bool smart_start = !fault && id(input_defrost_enabled) &&
-                      id(input_smart_defrost_enabled) &&
-                      p4_ctl_smart_defrost_ready(t, evap,
-                          id(ctl_smart_delta_c),
-                          id(ctl_defrost_delta_since_ms),
-                          (uint32_t)(id(ctl_smart_dwell_min) * 60000.0f),
-                          id(ctl_comp_on_since_ms),
-                          (uint32_t)(15UL * 60000UL),  // 15 min min comp run
-                          false);
-                  bool interval_elapsed = !fault && id(input_defrost_enabled) &&
-                      p4_ctl_defrost_due(id(ctl_defrost_last_end_ms), def_interval_ms);
-
-                  // Force-max safety net (bypasses skip-if-cold)
-                  bool force_max_start = !fault && id(input_defrost_enabled) && !manual_start &&
-                      p4_ctl_defrost_force_max_due(
-                          id(ctl_defrost_last_end_ms),
-                          id(ctl_defrost_last_start_ms),
-                          (uint32_t)(id(ctl_defrost_force_max_min) * 60000.0f));
-
-                  // Skip scheduled interval if evap already cold enough
-                  bool skip_scheduled = interval_elapsed && !manual_start && !force_max_start &&
-                      p4_ctl_defrost_skip_if_cold(
-                          id(input_defrost_skip_cold_enabled), evap_ok, evap,
-                          id(ctl_defrost_skip_below_c));
-                  if (skip_scheduled) {
-                      id(ctl_defrost_last_end_ms) = now_ms;  // roll interval clock
-                      ESP_LOGI("ctl", "Scheduled defrost skipped: evap %.1f°C <= %.1f°C",
-                               evap, id(ctl_defrost_skip_below_c));
-                  }
-                  bool time_start = interval_elapsed && !skip_scheduled;
-
-                  // ── Dew-point-triggered early defrost ─────────────────────
-                  bool dew_point_start = false;
-                  if (!fault && id(input_defrost_enabled) &&
-                      id(input_dew_point_trigger_enabled) &&
-                      id(input_humidity_internal_enabled)) {
-                      float internal_t = id(probe_internal_temp).state;
-                      float internal_rh = id(probe_internal_humidity).state;
-                      id(ctl_last_dew_point_c) = p4_calc_dew_point_c(internal_t, internal_rh);
-                      dew_point_start = p4_ctl_dew_point_defrost_ready(
-                          evap, id(ctl_last_dew_point_c), id(ctl_dew_point_defrost_triggered));
-                      if (dew_point_start) id(ctl_dew_point_defrost_triggered) = true;
-                  }
-
-                  // ── Frost-rate (humidity-drop) early defrost ──────────────
-                  bool frost_rate_start = false;
-                  if (!fault && id(input_defrost_enabled) &&
-                      id(input_frost_rate_monitoring_enabled) &&
-                      id(input_humidity_internal_enabled)) {
-                      float rh = id(probe_internal_humidity).state;
-                      if (id(ctl_frost_rate_last_sample_ms) == 0) {
-                          if (!isnan(rh) && p4_rtd_valid(t)) {
-                              id(ctl_frost_rate_last_humidity_pct) = rh;
-                              id(ctl_frost_rate_last_temp_c) = t;
-                              id(ctl_frost_rate_last_sample_ms) = now_ms;
-                          }
-                      } else if (p4_ctl_frost_rate_ready(
-                          true, false, id(ctl_frost_rate_defrost_triggered),
-                          rh, t,
-                          id(ctl_frost_rate_last_humidity_pct),
-                          id(ctl_frost_rate_last_temp_c),
-                          id(ctl_frost_rate_last_sample_ms),
-                          (uint32_t)(id(ctl_frost_rate_window_s) * 1000.0f),
-                          id(ctl_frost_rate_humidity_threshold_pct))) {
-                          frost_rate_start = true;
-                          id(ctl_frost_rate_defrost_triggered) = true;
-                          ESP_LOGI("ctl", "Frost-rate defrost: humidity drop over window");
-                      }
-                      // Advance baseline once the window elapses (even if no trigger)
-                      uint32_t win_ms = (uint32_t)(id(ctl_frost_rate_window_s) * 1000.0f);
-                      if (id(ctl_frost_rate_last_sample_ms) != 0 &&
-                          (now_ms - id(ctl_frost_rate_last_sample_ms)) >= win_ms &&
-                          !isnan(rh) && p4_rtd_valid(t)) {
-                          id(ctl_frost_rate_last_humidity_pct) = rh;
-                          id(ctl_frost_rate_last_temp_c) = t;
-                          id(ctl_frost_rate_last_sample_ms) = now_ms;
-                      }
-                  } else {
-                      id(ctl_frost_rate_last_sample_ms) = 0;
-                  }
-
-                  if (manual_start || smart_start || time_start || dew_point_start ||
-                      force_max_start || frost_rate_start) {
-                      id(ctl_manual_defrost_req) = false;
-                      id(ctl_defrost_delta_since_ms) = 0;
-                      if (id(relay_compressor).state) {
-                          id(relay_compressor).turn_off();
-                          id(ctl_comp_last_off_ms) = now_ms;
-                          id(ctl_comp_on_since_ms) = 0;
-                      }
-                      id(ctl_defrost_active) = true;
-                      id(ctl_defrost_on_since_ms) = now_ms;
-                      id(ctl_defrost_last_start_ms) = now_ms;
-                      // Coil 0 is the fan now — defrost is always passive
-                      // (compressor held off; heater if any is external).
-                      const char* reason = manual_start ? "manual" :
-                                           (force_max_start ? "force_max" :
-                                           (frost_rate_start ? "frost_rate" :
-                                           (smart_start ? "smart_delta" :
-                                           (dew_point_start ? "dew_point" : "interval"))));
-                      ESP_LOGI("ctl", "Defrost started: %s", reason);
-                      {
-                          char detail[112];
-                          snprintf(detail, sizeof(detail), "%s coolroom=%.1f evap=%.1f setpoint=%.1f",
-                                   reason, t, evap, id(ctl_setpoint));
-                          p4_sd_log_event("DEFROST_START", detail);
-                          id(speak_info_defrost_on).execute();
-                      }
-                  }
-
-                  // ── 6. Compressor hysteresis (skip if defrost, dripping, locked out) ──
-                  if (!locked_out) {
-                      int cmd = p4_ctl_compressor_eval(
-                          t, id(ctl_setpoint), id(ctl_comp_diff),
-                          id(relay_compressor).state,
-                          id(rtd1_ch1_last_ms),
-                          ${probe_stale_ms});
-                      // Min-run hold: refuse cut-out until min ON time elapsed
-                      if (cmd == -1 && id(relay_compressor).state && p4_rtd_valid(t)) {
-                          const float half = id(ctl_comp_diff) / 2.0f;
-                          bool at_cutout = t < (id(ctl_setpoint) - half);
-                          if (p4_ctl_comp_min_run_hold(
-                                  at_cutout, true, id(ctl_comp_on_since_ms),
-                                  (uint32_t)(id(ctl_comp_min_run_min) * 60000.0f))) {
-                              cmd = 0;
-                          }
-                      }
-                      if (cmd == 1 && relay_board_ok && !door_hold_comp) {
-                          id(relay_compressor).turn_on();
-                          if (id(ctl_comp_on_since_ms) == 0) id(ctl_comp_on_since_ms) = now_ms;
-                      }
-                      if (cmd == -1 || door_hold_comp) {
-                          if (id(relay_compressor).state) {
-                              id(relay_compressor).turn_off();
-                              id(ctl_comp_last_off_ms) = now_ms;
-                              id(ctl_comp_on_since_ms) = 0;
-                          }
-                      }
-                  }
-              }
-          }
-
-          // ── Door open alarm (with configurable delay) ────────────────────
-          // Evaluated every tick, outside the probe-fault / grace branches:
-          // the reed and the delay do not depend on any temperature probe, so
-          // a failed probe must not silently disable the door alarm (it also
-          // used to block the soft-mute lift, since the door bit could never
-          // appear while a probe fault was latched).
-          // Gated on input_door_sensor_enabled as a safety net — the reed
-          // sensor's on_state already refuses to start the timer while
-          // disabled, but this catches a stale timestamp from the switch being
-          // turned off mid-open.
-          if (id(input_door_sensor_enabled) && id(ctl_door_open_since_ms) > 0) {
-              const uint32_t door_delay_ms = (uint32_t)(id(ctl_door_alarm_delay_s) * 1000.0f);
-              if ((now_ms - id(ctl_door_open_since_ms)) >= door_delay_ms)
-                  id(ctl_door_alarm_active) = true;
-          }
-
-          // ── 7. Alarm evaluation (with grace + persist + hysteresis) ──────
-          if (!fault && !in_grace) {
-              bool raw_hi = p4_ctl_alarm_high(t, id(ctl_setpoint), id(ctl_alarm_high_delta));
-              bool raw_lo = p4_ctl_alarm_low(t, id(ctl_setpoint), id(ctl_alarm_low_delta));
-              // Persist tracking
-              if (raw_hi && id(ctl_high_alarm_since_ms) == 0) id(ctl_high_alarm_since_ms) = now_ms;
-              if (!raw_hi) id(ctl_high_alarm_since_ms) = 0;
-              if (raw_lo && id(ctl_low_alarm_since_ms) == 0) id(ctl_low_alarm_since_ms) = now_ms;
-              if (!raw_lo) id(ctl_low_alarm_since_ms) = 0;
-              bool hi = raw_hi && p4_ctl_alarm_persisted(id(ctl_high_alarm_since_ms), alarm_persist_ms);
-              bool lo = raw_lo && p4_ctl_alarm_persisted(id(ctl_low_alarm_since_ms), alarm_persist_ms);
-              id(ctl_alarm_high_active) = hi;
-              id(ctl_alarm_low_active)  = lo;
-              // No-cool alarm
-              bool nc = p4_ctl_no_cool_alarm(t, id(ctl_setpoint), id(ctl_comp_diff),
-                                              id(relay_compressor).state, id(ctl_comp_on_since_ms),
-                                              (uint32_t)(id(ctl_no_cool_alarm_min) * 60000.0f));
-              id(ctl_no_cool_alarm_active) = nc;
-              // Ice alarm — Precision polarity (large coolroom−evap gap) + dwell.
-              // Needs ice-detect enable, probe2, compressor ON, not in defrost.
-              bool ice = false;
-              if (id(input_ice_detect_enabled) && evap_ok &&
-                  !id(ctl_defrost_active) && id(relay_compressor).state &&
-                  p4_ctl_ice_condition(t, evap, id(ctl_ice_delta_c))) {
-                  if (id(ctl_ice_since_ms) == 0) id(ctl_ice_since_ms) = now_ms;
-                  ice = p4_ctl_ice_alarm_dwelt(
-                      id(ctl_ice_since_ms),
-                      (uint32_t)(id(ctl_ice_dwell_min) * 60000.0f));
-              } else {
-                  id(ctl_ice_since_ms) = 0;
-              }
-              id(ctl_ice_alarm_active) = ice;
-              // Siren: any active alarm drives it unless the operator muted
-              // from the home-screen bell. Soft-mute is lifted below when the
-              // alarm set is empty or a *new* condition appears.
-              bool any_alarm = hi || lo || nc || ice || id(ctl_door_alarm_active);
-              if (id(input_siren_enabled)) {
-                  if (any_alarm && !id(ctl_alarm_silenced) && !id(relay_siren).state)
-                      id(relay_siren).turn_on();
-                  if ((!any_alarm || id(ctl_alarm_silenced)) && id(relay_siren).state)
-                      id(relay_siren).turn_off();
-              }
-          } else if (!fault) {
-              // In grace: clear alarm flags, silence siren
-              id(ctl_alarm_high_active) = false;
-              id(ctl_alarm_low_active)  = false;
-              id(ctl_no_cool_alarm_active) = false;
-              id(ctl_ice_alarm_active)  = false;
-              id(ctl_ice_since_ms) = 0;
-              id(ctl_alarm_silenced) = false;
-              id(ctl_alarm_silenced_mask) = 0;
-              if (id(relay_siren).state) id(relay_siren).turn_off();
-          }
-
-          // Soft-mute lifecycle (after all alarm/fault flags for this tick):
-          // clear when nothing remains, or when a new condition bit appears
-          // that was not active when the operator tapped the bell.
-          {
-              uint8_t mask = p4_ctl_alarm_mask(
-                  id(ctl_alarm_high_active), id(ctl_alarm_low_active),
-                  id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-                  id(ctl_ice_alarm_active), id(ctl_probe_fault));
-              if (p4_ctl_alarm_silence_should_clear(
-                      id(ctl_alarm_silenced), id(ctl_alarm_silenced_mask), mask)) {
-                  const bool new_cond = mask != 0;
-                  id(ctl_alarm_silenced) = false;
-                  id(ctl_alarm_silenced_mask) = 0;
-                  if (new_cond)
-                      ESP_LOGI("ui", "Alarm silence lifted — new condition active");
-              }
-              // Reconcile siren after mute may have just cleared (same tick as
-              // a new condition — don't wait another 10 s control interval).
-              const bool any_for_siren = mask != 0;
-              if (id(input_siren_enabled)) {
-                  if (any_for_siren && !id(ctl_alarm_silenced) && !id(relay_siren).state)
-                      id(relay_siren).turn_on();
-                  if ((!any_for_siren || id(ctl_alarm_silenced)) && id(relay_siren).state)
-                      id(relay_siren).turn_off();
-              }
-          }
-
-          // ── 7b. Event-log edge detection (independent of WiFi/ntfy) ─────
-          // Every alarm transition is logged to the SD event log for
-          // troubleshooting regardless of whether ntfy delivery succeeds or
-          // the device is online — reads the persisted *_active globals
-          // (set in both branches above) rather than the if/else-scoped
-          // locals, so it's agnostic to which branch actually ran this tick.
-          {
-              bool alarm_hi_now = id(ctl_alarm_high_active);
-              if (alarm_hi_now && !id(ctl_alarm_hi_logged)) {
-                  id(ctl_alarm_hi_logged) = true;
-                  char d[96];
-                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f delta=%.1f",
-                           t, id(ctl_setpoint), id(ctl_alarm_high_delta));
-                  p4_sd_log_event("ALARM_HI", d);
-                  id(speak_alarm_high).execute();
-              } else if (!alarm_hi_now && id(ctl_alarm_hi_logged)) {
-                  id(ctl_alarm_hi_logged) = false;
-                  char d[64];
-                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f", t, id(ctl_setpoint));
-                  p4_sd_log_event("ALARM_HI_CLEAR", d);
-              }
-
-              bool alarm_lo_now = id(ctl_alarm_low_active);
-              if (alarm_lo_now && !id(ctl_alarm_lo_logged)) {
-                  id(ctl_alarm_lo_logged) = true;
-                  char d[96];
-                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f delta=%.1f",
-                           t, id(ctl_setpoint), id(ctl_alarm_low_delta));
-                  p4_sd_log_event("ALARM_LO", d);
-                  id(speak_alarm_low).execute();
-              } else if (!alarm_lo_now && id(ctl_alarm_lo_logged)) {
-                  id(ctl_alarm_lo_logged) = false;
-                  char d[64];
-                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f", t, id(ctl_setpoint));
-                  p4_sd_log_event("ALARM_LO_CLEAR", d);
-              }
-
-              if (fault && !id(ctl_probe_fault_logged)) {
-                  id(ctl_probe_fault_logged) = true;
-                  p4_sd_log_event("PROBE_FAULT", "probe1 stale_or_invalid");
-                  id(speak_alarm_probe).execute();
-              } else if (!fault && id(ctl_probe_fault_logged)) {
-                  id(ctl_probe_fault_logged) = false;
-                  p4_sd_log_event("PROBE_FAULT_CLEAR", "probe1 recovered");
-              }
-
-              bool door_now = id(ctl_door_alarm_active);
-              if (door_now && !id(ctl_door_alarm_logged)) {
-                  id(ctl_door_alarm_logged) = true;
-                  char d[80];
-                  uint32_t open_s = id(ctl_door_open_since_ms) > 0 ?
-                      (now_ms - id(ctl_door_open_since_ms)) / 1000U : 0U;
-                  snprintf(d, sizeof(d), "open_for=%us delay=%.0fs", (unsigned) open_s, id(ctl_door_alarm_delay_s));
-                  p4_sd_log_event("DOOR_ALARM", d);
-                  id(speak_alarm_door).execute();
-              } else if (!door_now && id(ctl_door_alarm_logged)) {
-                  id(ctl_door_alarm_logged) = false;
-                  p4_sd_log_event("DOOR_ALARM_CLEAR", "door closed");
-              }
-
-              bool nc_now = id(ctl_no_cool_alarm_active);
-              if (nc_now && !id(ctl_no_cool_alarm_logged)) {
-                  id(ctl_no_cool_alarm_logged) = true;
-                  char d[112];
-                  snprintf(d, sizeof(d), "coolroom=%.1f setpoint=%.1f diff=%.1f compressor_on=%d",
-                           t, id(ctl_setpoint), id(ctl_comp_diff), (int) id(relay_compressor).state);
-                  p4_sd_log_event("NO_COOL_ALARM", d);
-                  id(speak_alarm_no_cool).execute();
-              } else if (!nc_now && id(ctl_no_cool_alarm_logged)) {
-                  id(ctl_no_cool_alarm_logged) = false;
-                  p4_sd_log_event("NO_COOL_ALARM_CLEAR", "room cooling normally");
-              }
-
-              bool ice_now = id(ctl_ice_alarm_active);
-              if (ice_now && !id(ctl_ice_alarm_logged)) {
-                  id(ctl_ice_alarm_logged) = true;
-                  char d[96];
-                  snprintf(d, sizeof(d), "coolroom=%.1f evap=%.1f delta_threshold=%.1f", t, evap, id(ctl_ice_delta_c));
-                  p4_sd_log_event("ICE_ALARM", d);
-                  id(speak_alarm_ice).execute();
-              } else if (!ice_now && id(ctl_ice_alarm_logged)) {
-                  id(ctl_ice_alarm_logged) = false;
-                  p4_sd_log_event("ICE_ALARM_CLEAR", "delta recovered");
-              }
-
-              // Hardware offline — matches the rotating centre-status labels.
-              // Speak once on the rising edge; clear the latch when the bus /
-              // sensor comes back (same pattern as probe fault).
-              if (!id(hw_rs485_relay_ok) && !id(ctl_relay_board_offline_logged)) {
-                  id(ctl_relay_board_offline_logged) = true;
-                  p4_sd_log_event("RELAY_BOARD_OFFLINE", "modbus relay no response");
-                  id(speak_alarm_relay_board).execute();
-              } else if (id(hw_rs485_relay_ok) && id(ctl_relay_board_offline_logged)) {
-                  id(ctl_relay_board_offline_logged) = false;
-                  p4_sd_log_event("RELAY_BOARD_ONLINE", "modbus relay recovered");
-              }
-
-              // Probe 1 is always RTD coolroom; Probe 2 is RTD evap when enabled.
-              const bool rtd_expected = true;
-              const bool rtd_offline = rtd_expected && !id(hw_rs485_rtd1_ok);
-              if (rtd_offline && !id(ctl_temp_board_offline_logged)) {
-                  id(ctl_temp_board_offline_logged) = true;
-                  p4_sd_log_event("TEMP_BOARD_OFFLINE", "modbus rtd no response");
-                  id(speak_alarm_temp_board).execute();
-              } else if (!rtd_offline && id(ctl_temp_board_offline_logged)) {
-                  id(ctl_temp_board_offline_logged) = false;
-                  p4_sd_log_event("TEMP_BOARD_ONLINE", "modbus rtd recovered");
-              }
-
-              const bool humidity_offline = id(input_humidity_internal_enabled) &&
-                  isnan(id(sht31_internal_temp_raw).state);
-              if (humidity_offline && !id(ctl_humidity_sensor_offline_logged)) {
-                  id(ctl_humidity_sensor_offline_logged) = true;
-                  p4_sd_log_event("HUMIDITY_SENSOR_OFFLINE", "sht31 no response");
-                  id(speak_alarm_humidity_sensor).execute();
-              } else if (!humidity_offline && id(ctl_humidity_sensor_offline_logged)) {
-                  id(ctl_humidity_sensor_offline_logged) = false;
-                  p4_sd_log_event("HUMIDITY_SENSOR_ONLINE", "sht31 recovered");
-              }
-
-              const bool ambient_offline = id(input_humidity_external_enabled) &&
-                  isnan(id(sht20_external_temp_raw).state);
-              if (ambient_offline && !id(ctl_ambient_sensor_offline_logged)) {
-                  id(ctl_ambient_sensor_offline_logged) = true;
-                  p4_sd_log_event("AMBIENT_SENSOR_OFFLINE", "sht20 no response");
-                  id(speak_alarm_ambient_sensor).execute();
-              } else if (!ambient_offline && id(ctl_ambient_sensor_offline_logged)) {
-                  id(ctl_ambient_sensor_offline_logged) = false;
-                  p4_sd_log_event("AMBIENT_SENSOR_ONLINE", "sht20 recovered");
-              }
-
-              // Optional CT clamp — events only while enabled (no voice/ntfy).
-              const bool ct_offline = id(input_ct_clamp_enabled) && !id(hw_rs485_ct_ok);
-              if (ct_offline && !id(ctl_ct_clamp_offline_logged)) {
-                  id(ctl_ct_clamp_offline_logged) = true;
-                  p4_sd_log_event("CT_CLAMP_OFFLINE", "modbus ct no response");
-              } else if (!ct_offline && id(ctl_ct_clamp_offline_logged)) {
-                  id(ctl_ct_clamp_offline_logged) = false;
-                  if (id(input_ct_clamp_enabled))
-                      p4_sd_log_event("CT_CLAMP_ONLINE", "modbus ct recovered");
-              }
-          }
-
-          // ── 8. SD temperature logging (Phase 5) ─────────────────────────
-          const uint32_t log_every_ticks = (uint32_t)(${log_interval_min}) * 6U;
-          id(log_tick_count) = id(log_tick_count) + 1U;
-          if (id(sd_card_ok) && id(log_tick_count) >= log_every_ticks) {
-              id(log_tick_count) = 0;
-              p4_sd_log_temps(
-                  id(probe1_temp).state, id(probe2_temp).state, id(probe_external_temp).state,
-                  id(ctl_setpoint), id(relay_compressor).state, id(ctl_defrost_active),
-                  id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_probe_fault),
-                  id(ct_clamp_current).state);
-          }
-
-            // ── 9. ntfy push notifications — edge-triggered (Phase 5) ───────
-            // Network delivery is optional; local control/alarm logic stays autonomous.
-            // Event LOGGING for these already happened unconditionally in 7b above —
-            // this block is purely about the WiFi-dependent push notification.
-            if (id(ctl_wifi_connected) && id(input_ntfy_enabled)) {
-              bool ntfy_hi = id(ctl_alarm_high_active);
-              bool ntfy_lo = id(ctl_alarm_low_active);
-              bool ntfy_pf = id(ctl_probe_fault);
-              if (ntfy_hi && !id(ntfy_alarm_hi_sent)) {
-                id(ntfy_alarm_hi_sent) = true;
-                id(ntfy_high_alarm_request).trigger();
-              } else if (!ntfy_hi && id(ntfy_alarm_hi_sent)) {
-                id(ntfy_alarm_hi_sent) = false;
-                id(ntfy_alarm_clear_request).trigger();
-              }
-              if (ntfy_lo && !id(ntfy_alarm_lo_sent)) {
-                id(ntfy_alarm_lo_sent) = true;
-                id(ntfy_low_alarm_request).trigger();
-              } else if (!ntfy_lo && id(ntfy_alarm_lo_sent)) {
-                id(ntfy_alarm_lo_sent) = false;
-                id(ntfy_alarm_clear_request).trigger();
-              }
-              if (ntfy_pf && !id(ntfy_probe_fault_sent)) {
-                id(ntfy_probe_fault_sent) = true;
-                id(ntfy_probe_fault_request).trigger();
-              } else if (!ntfy_pf && id(ntfy_probe_fault_sent)) {
-                id(ntfy_probe_fault_sent) = false;
-              }
-              // Door/no-cool/ice — previously event-log only, now pushed too,
-              // reusing the same generic "cleared" push the hi/lo alarms use.
-              bool ntfy_door = id(ctl_door_alarm_active);
-              bool ntfy_nc   = id(ctl_no_cool_alarm_active);
-              bool ntfy_ice  = id(ctl_ice_alarm_active);
-              if (ntfy_door && !id(ntfy_door_alarm_sent)) {
-                id(ntfy_door_alarm_sent) = true;
-                id(ntfy_door_alarm_request).trigger();
-              } else if (!ntfy_door && id(ntfy_door_alarm_sent)) {
-                id(ntfy_door_alarm_sent) = false;
-                id(ntfy_alarm_clear_request).trigger();
-              }
-              if (ntfy_nc && !id(ntfy_no_cool_alarm_sent)) {
-                id(ntfy_no_cool_alarm_sent) = true;
-                id(ntfy_no_cool_alarm_request).trigger();
-              } else if (!ntfy_nc && id(ntfy_no_cool_alarm_sent)) {
-                id(ntfy_no_cool_alarm_sent) = false;
-                id(ntfy_alarm_clear_request).trigger();
-              }
-              if (ntfy_ice && !id(ntfy_ice_alarm_sent)) {
-                id(ntfy_ice_alarm_sent) = true;
-                id(ntfy_ice_alarm_request).trigger();
-              } else if (!ntfy_ice && id(ntfy_ice_alarm_sent)) {
-                id(ntfy_ice_alarm_sent) = false;
-                id(ntfy_alarm_clear_request).trigger();
-              }
-              // SD card failure — fires once per failure episode (mount-failed-at-boot
-              // or a runtime write failure via p4_sd_mark_failed()), independent of the
-              // event-log edge tracking above since a failed card can't log its own
-              // failure. The "recovered" push itself is sent by the 60s auto-remount
-              // interval, not here — this just clears the sent-flag defensively in
-              // case the card came back some other way (e.g. a reboot) without going
-              // through that interval.
-              if (!id(sd_card_ok) && !id(ntfy_sd_failure_sent)) {
-                id(ntfy_sd_failure_sent) = true;
-                id(ntfy_sd_failure_request).trigger();
-              } else if (id(sd_card_ok) && id(ntfy_sd_failure_sent)) {
-                id(ntfy_sd_failure_sent) = false;
-              }
-              // Hardware offline — same conditions as step 7b speak/SD edges and
-              // rotating centre status. Recovery uses the shared All-Clear priority.
-              const bool ntfy_relay_off = !id(hw_rs485_relay_ok);
-              const bool ntfy_rtd_expected = true;
-              const bool ntfy_temp_off = ntfy_rtd_expected && !id(hw_rs485_rtd1_ok);
-              const bool ntfy_hum_off = id(input_humidity_internal_enabled) &&
-                  isnan(id(sht31_internal_temp_raw).state);
-              const bool ntfy_amb_off = id(input_humidity_external_enabled) &&
-                  isnan(id(sht20_external_temp_raw).state);
-              if (ntfy_relay_off && !id(ntfy_relay_board_offline_sent)) {
-                id(ntfy_relay_board_offline_sent) = true;
-                id(ntfy_relay_board_offline_request).trigger();
-              } else if (!ntfy_relay_off && id(ntfy_relay_board_offline_sent)) {
-                id(ntfy_relay_board_offline_sent) = false;
-                id(ntfy_relay_board_online_request).trigger();
-              }
-              if (ntfy_temp_off && !id(ntfy_temp_board_offline_sent)) {
-                id(ntfy_temp_board_offline_sent) = true;
-                id(ntfy_temp_board_offline_request).trigger();
-              } else if (!ntfy_temp_off && id(ntfy_temp_board_offline_sent)) {
-                id(ntfy_temp_board_offline_sent) = false;
-                id(ntfy_temp_board_online_request).trigger();
-              }
-              if (ntfy_hum_off && !id(ntfy_humidity_sensor_offline_sent)) {
-                id(ntfy_humidity_sensor_offline_sent) = true;
-                id(ntfy_humidity_sensor_offline_request).trigger();
-              } else if (!ntfy_hum_off && id(ntfy_humidity_sensor_offline_sent)) {
-                id(ntfy_humidity_sensor_offline_sent) = false;
-                id(ntfy_humidity_sensor_online_request).trigger();
-              }
-              if (ntfy_amb_off && !id(ntfy_ambient_sensor_offline_sent)) {
-                id(ntfy_ambient_sensor_offline_sent) = true;
-                id(ntfy_ambient_sensor_offline_request).trigger();
-              } else if (!ntfy_amb_off && id(ntfy_ambient_sensor_offline_sent)) {
-                id(ntfy_ambient_sensor_offline_sent) = false;
-                id(ntfy_ambient_sensor_online_request).trigger();
-              }
-            } else {
-              // Keep edge flags reset while offline so active alarms can notify after reconnect.
-              id(ntfy_alarm_hi_sent) = false;
-              id(ntfy_alarm_lo_sent) = false;
-              id(ntfy_probe_fault_sent) = false;
-              id(ntfy_door_alarm_sent) = false;
-              id(ntfy_no_cool_alarm_sent) = false;
-              id(ntfy_ice_alarm_sent) = false;
-              id(ntfy_sd_failure_sent) = false;
-              id(ntfy_relay_board_offline_sent) = false;
-              id(ntfy_temp_board_offline_sent) = false;
-              id(ntfy_humidity_sensor_offline_sent) = false;
-              id(ntfy_ambient_sensor_offline_sent) = false;
-            }
-
-          // ── 10. Relay hardware enables + fan follow ──────────────────────
-          // Door-hold catch-all (covers lockout / paths that skip §6).
-          if (door_hold_comp && id(relay_compressor).state) {
-              id(relay_compressor).turn_off();
-              id(ctl_comp_last_off_ms) = now_ms;
-              id(ctl_comp_on_since_ms) = 0;
-          }
-          // Last word on every output, after all the logic above has had its
-          // say. Enforced here as one block rather than as a condition on each
-          // individual turn_on() so there is exactly one place that decides
-          // whether a coil may be energised — a disabled relay cannot be
-          // energised by any path, including ones added later. Alarms, logging
-          // and notifications are untouched: only the physical output stops.
-          // Compressor also requires the RS485 relay board online: without it
-          // there is nowhere for the coil write to go, so local "ON" would only
-          // drive the UI animation.
-          if ((!id(ctl_relay_compressor_enabled) || !id(hw_rs485_relay_ok)) &&
-              id(relay_compressor).state) {
-              id(relay_compressor).turn_off();
-              id(ctl_comp_last_off_ms) = now_ms;
-              id(ctl_comp_on_since_ms) = 0;
-          }
-          // Fan (coil 0): follows compressor when enabled; forced off during
-          // defrost / drip, when the master enable is off, or board offline.
-          {
-              const bool fan_want =
-                  id(ctl_relay_fan_enabled) && id(hw_rs485_relay_ok) &&
-                  id(relay_compressor).state &&
-                  !id(ctl_defrost_active) && !id(ctl_defrost_dripping);
-              if (fan_want && !id(relay_fan).state) id(relay_fan).turn_on();
-              else if (!fan_want && id(relay_fan).state) id(relay_fan).turn_off();
-          }
-          if (!id(ctl_relay_light_enabled) && id(relay_light).state)
-              id(relay_light).turn_off();
-          if (!id(ctl_relay_siren_enabled) && id(relay_siren).state)
-              id(relay_siren).turn_off();
-
-          // ── 11. Compressor on/off event logging ──────────────────────────
-          // Single check for the whole tick rather than a log call scattered
-          // across every relay_compressor.turn_on()/turn_off() site above —
-          // guarantees exactly one log entry per actual transition, with the
-          // reason inferred from which mode was active this tick.
-          {
-              bool comp_is_on = id(relay_compressor).state;
-              if (comp_is_on != comp_was_on) {
-                  const char* reason = fault ? "sensor_fallback" :
-                                       (id(ctl_defrost_active) || id(ctl_defrost_dripping)) ? "defrost" :
-                                       locked_out ? "lockout_end" : "hysteresis";
-                  char d[112];
-                  snprintf(d, sizeof(d), "%s coolroom=%.1f setpoint=%.1f diff=%.1f",
-                           reason, t, id(ctl_setpoint), id(ctl_comp_diff));
-                  p4_sd_log_event(comp_is_on ? "COMPRESSOR_ON" : "COMPRESSOR_OFF", d);
-                  if (comp_is_on) id(speak_info_cooling_on).execute();
-                  else            id(speak_info_cooling_off).execute();
-              }
-          }
-
-          // ── 12. SD card runtime-failure detection ────────────────────────
-          // p4_sd_mark_failed() (called from inside p4_logging.h's write
-          // paths) flips this the instant a write actually fails — mirror it
-          // into the sd_card_ok diagnostic immediately rather than waiting
-          // for something else to notice, so "SD Card Mounted" stops lying
-          // the moment the card is actually gone.
-          {
-              bool sd_is_ready = p4_sd_is_ready();
-              if (sd_was_ready && !sd_is_ready) {
-                  id(sd_card_ok) = false;
-                  ESP_LOGE("ctl", "SD card failure detected during runtime — logging/backup now unavailable");
-              }
-          }
-
-          // ── 13. Probe auto-calibrate FSM (SHT31 reference) ───────────────
-          if (id(ctl_calibration_state) == 2) {
-              float sht = id(sht31_internal_temp_raw).state;
-              float r1 = id(probe1_temp).state;
-              float r2 = id(probe2_temp).state;
-              if (p4_rtd_valid(r1)) {
-                  id(ctl_calibration_probe1_sum) += r1;
-                  id(ctl_calibration_probe1_count)++;
-              }
-              if (id(input_probe2_enabled) && p4_rtd_valid(r2)) {
-                  id(ctl_calibration_probe2_sum) += r2;
-                  id(ctl_calibration_probe2_count)++;
-              }
-              id(ctl_calibration_sample_count)++;
-              if (id(ctl_calibration_sample_count) >= id(ctl_calibration_samples_max)) {
-                  id(ctl_calibration_state) = 3;
-              }
-              (void) sht;
-          }
-          if (id(ctl_calibration_state) == 3) {
-              float sht = id(sht31_internal_temp_raw).state;
-              if (id(ctl_calibration_sample_count) < id(ctl_calibration_samples_min) ||
-                  isnan(sht)) {
-                  ESP_LOGW("calibration", "Aborted — not enough samples or SHT31 lost");
-                  id(ctl_calibration_state) = 0;
-              } else {
-                  if (id(ctl_calibration_probe1_count) > 0) {
-                      float avg = id(ctl_calibration_probe1_sum) /
-                                  (float) id(ctl_calibration_probe1_count);
-                      float off = p4_ctl_calibration_offset(sht, avg);
-                      if (!isnan(off)) {
-                          id(ctl_probe1_offset_c) = off;
-                          ESP_LOGI("calibration", "Probe1 offset -> %.2f (avg %.2f, sht %.2f)",
-                                   off, avg, sht);
-                      }
-                  }
-                  if (id(input_probe2_enabled) && id(ctl_calibration_probe2_count) > 0) {
-                      float avg = id(ctl_calibration_probe2_sum) /
-                                  (float) id(ctl_calibration_probe2_count);
-                      float off = p4_ctl_calibration_offset(sht, avg);
-                      if (!isnan(off)) {
-                          id(ctl_probe2_offset_c) = off;
-                          ESP_LOGI("calibration", "Probe2 offset -> %.2f (avg %.2f, sht %.2f)",
-                                   off, avg, sht);
-                      }
-                  }
-                  id(ctl_calibration_state) = 0;
-                  p4_sd_log_event("CALIBRATION", "complete");
-              }
-          }
-
-  # ── Phase 4: 1s LVGL display updates ─────────────────────────────────────
+  # ── Phase 4: 1s LVGL display updates (orchestrator in p4_ui_second_tick.h) ─
+  # Stays on loopTask / CPU 1 — LVGL is not called from the C0 control worker.
   - interval: 1s
     then:
       - lambda: |-
-          // Safety-net NVS flush. Config switches/numbers also call
-          // persist_config_to_nvs immediately after changing a value; this
-          // catches anything that only mutated RAM (e.g. LVGL steppers that
-          // write a global without going through that script).
-          if (esphome::global_preferences != nullptr)
-              esphome::global_preferences->sync();
-          // Drives the wireless scan / test-before-keep switchover state
-          // machine from the main loop (see p4_wifi.h).
-          p4_wifi::poll();
-          // Keep HA clients off while the opt-in switch is disabled (covers
-          // races between accept and on_client_connected).
-          if (!id(input_ha_api_enabled)) p4_ha_api_drop_clients();
-      - lvgl.label.update:
-          id: lbl_date
-          text: !lambda 'return p4_ui_fmt_date_short();'
-      - lvgl.label.update:
-          id: lbl_clock
-          text: !lambda 'return p4_ui_fmt_clock_12h();'
-      - lvgl.label.update:
-          id: lbl_wifi_hdr
-          text: !lambda |-
-            // Visual bars only — numeric dBm stays on the Info page.
-            if (!id(ctl_wifi_connected)) return std::string("\U000F092D");  // wifi-strength-off
-            float rssi = id(wifi_rssi).state;
-            if (isnan(rssi)) return std::string("\U000F0924");  // outline
-            if (rssi >= -55) return std::string("\U000F0928");  // 4
-            if (rssi >= -65) return std::string("\U000F0925");  // 3
-            if (rssi >= -75) return std::string("\U000F0922");  // 2
-            return std::string("\U000F091F");  // 1
-      - lvgl.label.update:
-          id: lbl_wifi_hdr
-          text_color: !lambda |-
-            if (!id(ctl_wifi_connected)) return id(col_grey);
-            float rssi = id(wifi_rssi).state;
-            if (!isnan(rssi) && rssi >= -65) return id(col_cyan);
-            if (!isnan(rssi) && rssi >= -75) return id(col_orange);
-            return id(col_subtext);
-      - lvgl.label.update:
-          id: lbl_power_info
-          text: !lambda |-
-            char buf[24];
-            snprintf(buf, sizeof(buf), "Heap: %.0f KB", p4_free_heap_kb());
-            return std::string(buf);
-      - lvgl.label.update:
-          # Previously a dead "0 min" label — never updated by anything.
-          # Now shows the live compressor lockout countdown, mirroring
-          # comp_lockout_remaining_sec on the web dashboard.
-          id: lbl_lockout_timer_display
-          text: !lambda |-
-            float remaining_s = p4_ui_comp_lockout_remaining_s(
-                id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
-            if (remaining_s <= 0.0f) return std::string("Ready");
-            int total_s = (int) remaining_s;
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%dm %02ds", total_s / 60, total_s % 60);
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_home_lockout
-          text: !lambda |-
-            float remaining_s = p4_ui_comp_lockout_remaining_s(
-                id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
-            if (remaining_s <= 0.0f) return std::string("");
-            int total_s = (int) remaining_s;
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%d:%02d", total_s / 60, total_s % 60);
-            return std::string(buf);
-      - lvgl.label.update:
-          # Driven every second rather than only from the relay's transition
-          # actions: those never fire for a state the relay was already in, so
-          # after a reboot the icon kept whatever colour it was drawn with, and
-          # there was no colour for "off because the off-delay says so".
-          id: ui_compressor_icon
-          text_color: !lambda |-
-            if (id(relay_compressor).state) return id(col_blue);
-            if (!id(hw_rs485_relay_ok) || !id(ctl_relay_compressor_enabled))
-                return id(col_red);
-            float remaining_s = p4_ui_comp_lockout_remaining_s(
-                id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
-            if (remaining_s > 0.0f) return id(col_orange);
-            return id(col_grey);
-      - lambda: |-
-          // Centre status: rotate through every active fault/offline bit so
-          // RTU / RTD / SHT / probe / temp / door alarms are all visible when
-          // several are latched at once. Mirrored to text_sensor.status for
-          // the web gauge twin.
-          float remaining_s = p4_ui_comp_lockout_remaining_s(
-              id(ctl_comp_last_off_ms), id(ctl_comp_lockout_min));
-          const bool rtd_expected = true;
-          P4UiHomeStatusIn st_in{};
-          st_in.relay_ok        = id(hw_rs485_relay_ok);
-          st_in.rtd_ok          = id(hw_rs485_rtd1_ok);
-          st_in.rtd_expected    = rtd_expected;
-          st_in.sht31_enabled   = id(input_humidity_internal_enabled);
-          st_in.sht31_ok        = !isnan(id(sht31_internal_temp_raw).state);
-          st_in.sht20_enabled   = id(input_humidity_external_enabled);
-          st_in.sht20_ok        = !isnan(id(sht20_external_temp_raw).state);
-          st_in.probe_fault     = id(ctl_probe_fault);
-          st_in.alarm_hi        = id(ctl_alarm_high_active);
-          st_in.alarm_lo        = id(ctl_alarm_low_active);
-          st_in.alarm_door      = id(ctl_door_alarm_active);
-          st_in.alarm_no_cool   = id(ctl_no_cool_alarm_active);
-          st_in.alarm_ice       = id(ctl_ice_alarm_active);
-          st_in.defrost         = id(ctl_defrost_active) || id(ctl_defrost_dripping);
-          st_in.compressor_on   = id(relay_compressor).state;
-          st_in.lockout         = remaining_s > 0.0f;
-          st_in.rotate_period_ms = 2500;
-          std::string st = p4_ui_home_status_text(
-              st_in, id(ui_status_rotate_idx), id(ui_status_rotate_ms));
-          lv_label_set_text(id(lbl_status_text), st.c_str());
-          lv_label_set_text(id(lbl_status_text_v2), st.c_str());
-          const bool faultish = p4_ui_home_status_is_fault(st_in);
-          lv_color_t col = id(col_green);
-          if (faultish) col = id(col_red);
-          else if (st_in.defrost || st_in.lockout) col = id(col_orange);
-          else if (st_in.compressor_on) col = id(col_blue);
-          lv_obj_set_style_text_color(id(lbl_status_text), col, 0);
-          lv_obj_set_style_text_color(id(lbl_status_text_v2), col, 0);
-          if (id(status_text).state != st) id(status_text).publish_state(st);
-      # Home setpoint readout. Previously updated only inside the Setpoint
-      # number's set_action, so it kept its "Set: --°C" placeholder after every
-      # reboot and ignored any change made from the web dashboard until someone
-      # set the value again. Driven from the global here so the touchscreen and
-      # the web GUI always agree, whoever changed it.
-      - lvgl.label.update:
-          id: lbl_setpoint_status
-          text: !lambda |-
-            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Set: " + p4_fmt_temp(id(ctl_setpoint), f);
-      - lvgl.label.update:
-          id: lbl_setpoint_status_v2
-          text: !lambda |-
-            const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
-            return "Set: " + p4_fmt_temp(id(ctl_setpoint), f);
-      - lvgl.arc.update:
-          id: home_setpoint_arc
-          value: !lambda |-
-            return p4_ui_setpoint_to_arc_pct(id(ctl_setpoint), ${dial_min_c}, ${dial_max_c});
-      - lambda: |-
-          if (!id(page_home_active) || !id(home2_view_active)) return;
-          p4_ui_update_home2_cooling(
-              id(home2_set_arc), id(home2_temp_arc), id(home2_temp_delta_arc),
-              id(home2_knob_set), id(home2_knob_cur),
-              id(probe1_temp).state, id(ctl_setpoint), ${dial_min_c}, ${dial_max_c},
-              id(home2_ambient_arc));
-      - lvgl.widget.update:
-          id: lbl_home_alarm_banner
-          hidden: !lambda |-
-            return !p4_ui_any_banner_alarm(
-                id(ctl_alarm_high_active), id(ctl_alarm_low_active),
-                id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-                id(ctl_ice_alarm_active));
-      - lvgl.label.update:
-          id: lbl_home_alarm_banner
-          text: !lambda |-
-            std::string s;
-            if (id(ctl_alarm_high_active))    s += "HIGH TEMPERATURE   ";
-            if (id(ctl_alarm_low_active))     s += "LOW TEMPERATURE   ";
-            if (id(ctl_door_alarm_active))    s += "DOOR OPEN   ";
-            if (id(ctl_no_cool_alarm_active)) s += "NO COOLING   ";
-            if (id(ctl_ice_alarm_active))     s += "ICE DETECTED   ";
-            return s;
-      - lambda: |-
-          // Background motion: falling snowflakes while compressor runs,
-          // flickering orange border while defrost runs. Suppressed during
-          // probe fault / any alarm so the screen stays readable. Was briefly
-          // force-hidden after a redraw-artifact scare on first hardware bring-
-          // up; re-enabled now that the gauge orientation/clip issues that
-          // caused those artifacts are fixed.
-          const bool motion_suppressed = p4_ui_any_alarm(
-              id(ctl_alarm_high_active), id(ctl_alarm_low_active),
-              id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-              id(ctl_ice_alarm_active), id(ctl_probe_fault));
-          const bool snow_active = !motion_suppressed && id(relay_compressor).state && !id(ctl_defrost_active);
-          const bool flame_active = !motion_suppressed && id(ctl_defrost_active);
-          if (snow_active || flame_active) {
-            id(fx_anim_tick) = (id(fx_anim_tick) + 1U) % 240U;
-          } else {
-            id(fx_anim_tick) = 0U;
-          }
-      - lvgl.widget.update:
-          id: bg_fx_defrost_border
-          hidden: !lambda |-
-            return !p4_ui_fx_flame_visible(
-                id(ctl_defrost_active),
-                p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active),
-                                id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-                                id(ctl_ice_alarm_active), id(ctl_probe_fault)));
-          border_width: !lambda |-
-            if (!p4_ui_fx_flame_visible(
-                    id(ctl_defrost_active),
-                    p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active),
-                                    id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-                                    id(ctl_ice_alarm_active), id(ctl_probe_fault))))
-              return 0;
-            switch (id(fx_anim_tick) % 4U) {
-              case 0: return 3;
-              case 1: return 6;
-              case 2: return 4;
-              default: return 7;
-            }
-          border_opa: !lambda |-
-            if (!p4_ui_fx_flame_visible(
-                    id(ctl_defrost_active),
-                    p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active),
-                                    id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-                                    id(ctl_ice_alarm_active), id(ctl_probe_fault))))
-              return 0;
-            switch (id(fx_anim_tick) % 4U) {
-              case 0: return 55;
-              case 1: return 90;
-              case 2: return 70;
-              default: return 100;
-            }
-          border_color: !lambda |-
-            return (id(fx_anim_tick) % 2U == 0U) ? id(col_orange) : lv_color_hex(0xFFCF33);
-      - lvgl.widget.update:
-          id: bg_fx_snow_1
-          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
-          x: !lambda |-
-            return 120 + (int)((id(fx_anim_tick) * 7U + 11U) % 760U);
-          y: !lambda |-
-            return 60 + (int)((id(fx_anim_tick) * 13U + 19U) % 470U);
-      - lvgl.widget.update:
-          id: bg_fx_snow_2
-          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
-          x: !lambda |-
-            return 250 + (int)((id(fx_anim_tick) * 9U + 29U) % 660U);
-          y: !lambda |-
-            return 80 + (int)((id(fx_anim_tick) * 11U + 37U) % 450U);
-      - lvgl.widget.update:
-          id: bg_fx_snow_3
-          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
-          x: !lambda |-
-            return 390 + (int)((id(fx_anim_tick) * 5U + 53U) % 560U);
-          y: !lambda |-
-            return 100 + (int)((id(fx_anim_tick) * 15U + 71U) % 430U);
-      - lvgl.widget.update:
-          id: bg_fx_snow_4
-          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
-          x: !lambda |-
-            return 530 + (int)((id(fx_anim_tick) * 8U + 97U) % 460U);
-          y: !lambda |-
-            return 70 + (int)((id(fx_anim_tick) * 17U + 23U) % 460U);
-      - lvgl.widget.update:
-          id: bg_fx_snow_5
-          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
-          x: !lambda |-
-            return 690 + (int)((id(fx_anim_tick) * 6U + 131U) % 360U);
-          y: !lambda |-
-            return 90 + (int)((id(fx_anim_tick) * 12U + 41U) % 440U);
-      - lvgl.widget.update:
-          id: bg_fx_snow_6
-          hidden: !lambda 'return !p4_ui_fx_snow_visible(id(relay_compressor).state, id(ctl_defrost_active), p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault)));'
-          x: !lambda |-
-            return 840 + (int)((id(fx_anim_tick) * 10U + 173U) % 220U);
-          y: !lambda |-
-            return 110 + (int)((id(fx_anim_tick) * 14U + 59U) % 420U);
-      # Phase 10: Update info page diagnostics
-      - lvgl.label.update:
-          id: lbl_info_heap
-          text: !lambda |-
-            char buf[64];
-            p4_fmt_heap_mb(buf, sizeof(buf));
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_cpu
-          text: !lambda |-
-            char buf[32];
-            p4_fmt_cpu_usage(buf, sizeof(buf));
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_psram
-          text: !lambda |-
-            char buf[64];
-            p4_fmt_psram_mb(buf, sizeof(buf));
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_uptime
-          text: !lambda |-
-            uint32_t uptime_s = millis() / 1000;
-            uint32_t days = uptime_s / 86400;
-            uint32_t hours = (uptime_s % 86400) / 3600;
-            uint32_t mins = (uptime_s % 3600) / 60;
-            char buf[48];
-            snprintf(buf, sizeof(buf), "Uptime: %lu d %02lu h %02lu m", days, hours, mins);
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_signal
-          text: !lambda |-
-            char buf[48];
-            int rssi = id(wifi_rssi).state;
-            snprintf(buf, sizeof(buf), "Signal: %d dBm", rssi);
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_ssid
-          text: !lambda |-
-            std::string ssid = id(wifi_ssid_text).state;
-            return "SSID: " + ssid;
-      - lvgl.label.update:
-          id: lbl_info_ip
-          text: !lambda |-
-            std::string ip = id(ip_address).state;
-            return "IP: " + ip;
-      - lvgl.label.update:
-          id: lbl_info_rs485
-          text: !lambda |-
-            char buf[64];
-            bool relay_ok = id(hw_rs485_relay_ok);
-            bool rtd_ok = id(hw_rs485_rtd1_ok);
-            snprintf(buf, sizeof(buf), "Relay:%s RTD:%s",
-              relay_ok ? "OK" : "NO", rtd_ok ? "OK" : "NO");
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_probes
-          text: !lambda |-
-            char buf[80];
-            bool rtd_ok = id(hw_rs485_rtd1_ok);
-            bool sht31_ok = !isnan(id(sht31_internal_temp_raw).state);
-            bool sht20_ok = !isnan(id(sht20_external_temp_raw).state);
-            snprintf(buf, sizeof(buf), "RTD:%s SHT31:%s SHT20:%s Fault:%s",
-              rtd_ok ? "OK" : "NO", sht31_ok ? "OK" : "NO", sht20_ok ? "OK" : "NO",
-              id(ctl_probe_fault) ? "YES" : "no");
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_sd
-          text: !lambda |-
-            if (!id(sd_card_ok))
-              return std::string("SD: not mounted");
-            char buf[80];
-            float free_mb = id(sd_free_mb).state;
-            float total_mb = p4_sd_total_mb();
-            if (total_mb > 0)
-              snprintf(buf, sizeof(buf), "SD: mounted  %.0f MB total", total_mb);
-            else
-              snprintf(buf, sizeof(buf), "SD: mounted  %.0f MB free", free_mb);
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_sd_detail
-          text: !lambda |-
-            if (!id(sd_card_ok))
-              return std::string("Logs/files: use web SD tab");
-            char buf[96];
-            const float total_mb = p4_sd_total_mb();
-            const float free_mb = id(sd_free_mb).state;
-            if (total_mb > 0 && free_mb >= 0) {
-              const float used_mb = total_mb - free_mb;
-              snprintf(buf, sizeof(buf),
-                       "Used %.0f MB (%.2f%%)  Free %.0f MB (%.0f%%)  backup: %s",
-                       used_mb, used_mb * 100.0f / total_mb,
-                       free_mb, free_mb * 100.0f / total_mb,
-                       p4_sd_backup_present() ? "yes" : "no");
-            } else {
-              snprintf(buf, sizeof(buf), "Free %.0f MB  backup: %s", free_mb,
-                       p4_sd_backup_present() ? "yes" : "no");
-            }
-            return std::string(buf);
-      - lvgl.label.update:
-          id: lbl_info_rtc
-          text: !lambda |-
-            if (!p4_wall_clock_ok())
-              return std::string("Time: pending — waiting for first NTP sync");
-            const int32_t age_s = p4_ntp_synced() ? p4_ntp_sync_age_s() : -1;
-            if (age_s < 0)
-              return std::string("Time: valid — LP RTC held, no NTP sync yet");
-            char buf[64];
-            if (age_s < 3600)
-              snprintf(buf, sizeof(buf), "Time: valid — NTP synced %d min ago", (int)(age_s / 60));
-            else
-              snprintf(buf, sizeof(buf), "Time: valid — NTP synced %.1f h ago", age_s / 3600.0f);
-            return std::string(buf);
-      - lambda: |-
-          id(system_time_valid).publish_state(p4_wall_clock_ok());
-      - lvgl.led.update:
-          id: led_rs485
-          brightness: !lambda 'return (id(hw_rs485_relay_ok) && id(hw_rs485_rtd1_ok)) ? 100.0f : 0.0f;'
-      - lvgl.led.update:
-          id: led_rtc
-          brightness: !lambda 'return p4_wall_clock_ok() ? 100.0f : 0.0f;'
+          // Ensure C0 worker exists soon after setup (non-blocking create),
+          // so the first 10 s signal does not also pay task-create cost.
+          p4_ctl_tick_worker_start(${probe_stale_ms}, ${startup_grace_max_min}, ${log_interval_min});
+          p4_ui_second_tick(${dial_min_c}, ${dial_max_c});
 
-  # ── Home screen icon animations ──────────────────────────────────────────
-  # 20fps (50ms) tick driving simple procedural animations on the 4 left-
-  # rail status icons, each only while its underlying state is actually
-  # active (matches the existing on/off color logic elsewhere -- an idle
-  # grey icon shouldn't be animating). Uses raw LVGL style calls
-  # (lv_obj_set_style_transform_rotation/opa) directly against id(<label>)
-  # rather than YAML-level widget properties, since ESPHome's lvgl:
-  # component doesn't expose rotation as a settable action property (only
-  # opa is a first-class config key, and even that isn't exposed as a
-  # runtime action) -- both need direct LVGL 9.5 API calls either way, so
-  # it's one consistent implementation rather than a mix of YAML actions +
-  # lambdas. transform_rotation is in 0.1-degree units. These icon label
-  # ids are declared as plain `static lv_obj_t *` globals (not wrapped in
-  # ESPHome's LvCompound), so id(ui_x_icon) already IS the raw pointer --
-  # no `.obj` needed (and using `.obj` anyway fails to compile: it forces
-  # the compiler to look up a member inside lv_obj_t's layout, which is
-  # only forward-declared in lambda-visible headers, not fully defined).
-  - interval: 50ms
+  # ── Home screen icon animations (Option C) ───────────────────────────────
+  # 10 fps (100 ms) on Home — half the former 50 ms wakeups; motion coeffs in
+  # p4_ui.h are scaled so spin/flicker speed stays the same. Off-Home the
+  # icons are not visible → early return (no LVGL style work). Uses raw LVGL
+  # style calls (lv_obj_set_style_transform_rotation/opa) against id(<label>).
+  # transform_rotation is in 0.1-degree units. Icon label ids are plain
+  # `static lv_obj_t *` globals (not LvCompound), so id(ui_x_icon) is the
+  # raw pointer — no `.obj`.
+  - interval: 100ms
     then:
       - lambda: |-
+          if (!id(page_home_active)) return;
           static uint32_t tick = 0;
           tick++;
           P4UiHomeIconAnimIn in{};
@@ -6012,9 +4845,8 @@ globals:
     restore_value: yes
     initial_value: "true"
 
-  # Speaker loudness as percent (50–90). Applied to coolroom_media on set, on
-  # boot, and again before every announcement. Floor stops alarm speech being
-  # silenced by accident; ceiling matches volume_max (avoids ES8311 clipping).
+  # Speaker loudness as UI percent (20–100), mapped to codec via
+  # p4_audio_ui_to_codec (100% → 0.82). Applied on set, boot, unmute.
   - id: ctl_audio_volume_pct
     type: float
     restore_value: yes
@@ -6509,6 +5341,7 @@ lvgl:
         # one anyone looks at when wondering why the compressor isn't running
         # after a power cut — without it the idle grey snowflake looks like a
         # fault rather than a timer. Blank whenever nothing is being withheld.
+        # Updated every 1 s via p4_ui_comp_lockout_remaining_s (not the 3 s sensor).
         - label:
             id: lbl_home_lockout
             x: 0
@@ -6516,7 +5349,7 @@ lvgl:
             width: 87
             text: ""
             text_align: CENTER
-            text_font: font_small
+            text_font: font_medium
             text_color: col_orange
 
         # Defrost status (not clickable)
@@ -6547,6 +5380,19 @@ lvgl:
                   text: "\U000F0238"
                   text_font: font_mdi_large
                   text_color: col_grey
+
+        # Next-defrost countdown under the flame icon (mirrors compressor
+        # lockout placement). Blank while a cycle is active/dripping or due.
+        # 1 s via p4_ui_next_defrost_remaining_s — independent of the 3 s sensor.
+        - label:
+            id: lbl_home_next_defrost
+            x: 0
+            y: 282
+            width: 87
+            text: ""
+            text_align: CENTER
+            text_font: font_medium
+            text_color: col_orange
 
         # Light — manual toggle when Light Relay Enabled
         - button:
@@ -9972,7 +8818,15 @@ lvgl:
                         pad_right: 0
                         widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
                         on_click:
-                          - number.increment: {id: audio_volume_pct, cycle: false}
+                          # Step from the NVS global (not number.state): after a
+                          # range change, state can sit above max and ESPHome's
+                          # number.increment/decrement then rejects every press
+                          # (target still > max). set_value after clamp always works.
+                          - lambda: |-
+                              float v = p4_audio_clamp_ui_pct(id(ctl_audio_volume_pct) + 5.0f);
+                              v = roundf(v / 5.0f) * 5.0f;
+                              v = p4_audio_clamp_ui_pct(v);
+                              id(audio_volume_pct).make_call().set_value(v).perform();
                           - script.execute: refresh_all_settings_labels
                     - button:
                         x: 348
@@ -9988,7 +8842,11 @@ lvgl:
                         pad_right: 0
                         widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
                         on_click:
-                          - number.decrement: {id: audio_volume_pct, cycle: false}
+                          - lambda: |-
+                              float v = p4_audio_clamp_ui_pct(id(ctl_audio_volume_pct) - 5.0f);
+                              v = roundf(v / 5.0f) * 5.0f;
+                              v = p4_audio_clamp_ui_pct(v);
+                              id(audio_volume_pct).make_call().set_value(v).perform();
                           - script.execute: refresh_all_settings_labels
               - label: {x: 0, y: 108, width: 460, text: "Test Speaker", text_font: font_medium, text_color: col_text}
               - button:
@@ -10038,8 +8896,19 @@ lvgl:
                         pad_right: 0
                         widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
                         on_click:
+                          # Snappy path: paint the new state first, then flip
+                          # GPIO. Do NOT call refresh_all_settings_labels here —
+                          # that script updates every settings label under
+                          # full_refresh and lbl_sw_pa is near the end, so the
+                          # first press looked ignored (second press "worked").
+                          # Soft-start / web toggles update via on_turn_on/off.
+                          - lvgl.label.update:
+                              id: lbl_sw_pa
+                              text: !lambda |-
+                                return std::string(id(audio_pa_enable).state ? "OFF" : "ON");
+                              text_color: !lambda |-
+                                return id(audio_pa_enable).state ? id(col_grey) : id(col_green);
                           - switch.toggle: audio_pa_enable
-                          - script.execute: refresh_all_settings_labels
               - label: {x: 0, y: 216, width: 460, text: "Speak High Temp", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
@@ -11478,9 +10347,11 @@ script:
   # Call it from every config switch/number action, and once a second from
   # the display interval as a safety net.
   - id: persist_config_to_nvs
-    mode: queued
-    max_runs: 3
+    # restart + short delay: rapid Settings +/- clicks coalesce into one
+    # stage+sync instead of blocking loopTask on every press (NVS flash write).
+    mode: restart
     then:
+      - delay: 300ms
       - lambda: |-
           // RestoringGlobalsComponent is a PollingComponent, but ESPHome's
           // component.update action types the ID as GlobalsComponent and
@@ -12293,3 +11164,6 @@ script:
           id(page_settings_active) = false;
           id(page_info_active) = true;
       - lvgl.page.show: page_info
+      # Immediate diagnostics paint (Info LVGL is page-gated; 1 s tick refreshes while on Info).
+      - lambda: |-
+          p4_ui_second_tick(${dial_min_c}, ${dial_max_c});
