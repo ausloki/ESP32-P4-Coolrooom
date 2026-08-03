@@ -441,7 +441,7 @@ inline int p4_sd_prune_temp_logs(int keep_days) {
 
 /// Append one CSV row to the daily log file (/sdcard/YYYY-MM-DD.csv).
 /// Creates the file with a header row if it does not exist.
-/// coolroom_c / evap_c / ambient_c / cpu_*: NaN is written as empty field.
+/// coolroom_c / evap_c / ambient_c / ct_a / cpu_*: NaN is written as empty field.
 /// CPU % is sampled here via p4_cpu_usage_* (same helpers as Info/web sensors).
 inline bool p4_sd_log_temps(
     float coolroom_c,
@@ -452,7 +452,8 @@ inline bool p4_sd_log_temps(
     bool  defrost_on,
     bool  alarm_hi,
     bool  alarm_lo,
-    bool  probe_fault
+    bool  probe_fault,
+    float ct_a = NAN
 ) {
     if (!p4_sd_ready) return false;
     if (!p4_sd_allow_write("p4_sd_log_temps")) return false;
@@ -485,7 +486,7 @@ inline bool p4_sd_log_temps(
     if (is_new) {
         fputs("timestamp,coolroom_c,evap_c,ambient_c,setpoint_c,"
               "compressor,defrost,alarm_hi,alarm_lo,probe_fault,"
-              "cpu_pct,cpu_c0_pct,cpu_c1_pct\n", f);
+              "cpu_pct,cpu_c0_pct,cpu_c1_pct,ct_a\n", f);
     }
 
     char ts[24];
@@ -496,21 +497,22 @@ inline bool p4_sd_log_temps(
         if (std::isfinite(v)) snprintf(buf, n, "%.1f", v);
         else if (n > 0) buf[0] = '\0';
     };
-    char sc[12], ec[12], ac[12], sp[12];
+    char sc[12], ec[12], ac[12], sp[12], cta[12];
     char cpu[12], c0[12], c1[12];
     fmtf(sc, sizeof(sc), coolroom_c);
     fmtf(ec, sizeof(ec), evap_c);
     fmtf(ac, sizeof(ac), ambient_c);
     fmtf(sp, sizeof(sp), setpoint_c);
+    fmtf(cta, sizeof(cta), ct_a);
     fmtf(cpu, sizeof(cpu), p4_cpu_usage_pct());
     fmtf(c0, sizeof(c0), p4_cpu_usage_core_pct(0));
     fmtf(c1, sizeof(c1), p4_cpu_usage_core_pct(1));
 
-    int written = fprintf(f, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%d,%s,%s,%s\n",
+    int written = fprintf(f, "%s,%s,%s,%s,%s,%d,%d,%d,%d,%d,%s,%s,%s,%s\n",
             ts, sc, ec, ac, sp,
             (int)compressor_on, (int)defrost_on,
             (int)alarm_hi, (int)alarm_lo, (int)probe_fault,
-            cpu, c0, c1);
+            cpu, c0, c1, cta);
     if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     return true;
@@ -616,7 +618,8 @@ inline bool p4_sd_backup_params(
     bool  dew_point_trigger_enabled,
     float startup_grace_min,
     bool  door_light_enabled,
-    bool  door_hold_compressor
+    bool  door_hold_compressor,
+    bool  ct_clamp_enabled = false
 ) {
     if (!p4_sd_ready) {
         ESP_LOGW(TAG_SD, "SD not ready for backup — attempting remount");
@@ -682,7 +685,8 @@ inline bool p4_sd_backup_params(
         "  \"dew_point_trigger_enabled\": %s,\n"
         "  \"startup_grace_min\": %.1f,\n"
         "  \"door_light_enabled\": %s,\n"
-        "  \"door_hold_compressor\": %s\n"
+        "  \"door_hold_compressor\": %s,\n"
+        "  \"ct_clamp_enabled\": %s\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -706,7 +710,8 @@ inline bool p4_sd_backup_params(
         dew_point_trigger_enabled ? "true" : "false",
         startup_grace_min,
         door_light_enabled ? "true" : "false",
-        door_hold_compressor ? "true" : "false");
+        door_hold_compressor ? "true" : "false",
+        ct_clamp_enabled ? "true" : "false");
     if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
@@ -763,7 +768,8 @@ inline bool p4_sd_restore_params(
     bool&  dew_point_trigger_enabled,
     float& startup_grace_min,
     bool&  door_light_enabled,
-    bool&  door_hold_compressor
+    bool&  door_hold_compressor,
+    bool&  ct_clamp_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -819,6 +825,8 @@ inline bool p4_sd_restore_params(
     // door_light_enabled: brand new setting, same seeding rationale.
     bool b_door_light_en = door_light_enabled;
     bool b_door_hold_en = door_hold_compressor;
+    // Seeded: older backup.json files pre-date the optional CT clamp toggle.
+    bool b_ct_clamp_en = ct_clamp_enabled;
     float startup_grace = startup_grace_min;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
@@ -876,6 +884,7 @@ inline bool p4_sd_restore_params(
     parse_field("\"startup_grace_min\"", startup_grace);
     parse_bool("\"door_light_enabled\"", b_door_light_en);
     parse_bool("\"door_hold_compressor\"", b_door_hold_en);
+    parse_bool("\"ct_clamp_enabled\"", b_ct_clamp_en);
 
     // Naming the offending key matters: a bare "parse failed" gives no way to
     // tell a missing key from a malformed value from a stale file, and every
@@ -940,6 +949,7 @@ inline bool p4_sd_restore_params(
     startup_grace_min = startup_grace;
     door_light_enabled = b_door_light_en;
     door_hold_compressor = b_door_hold_en;
+    ct_clamp_enabled = b_ct_clamp_en;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

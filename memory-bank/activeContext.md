@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03  
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
-**Status:** ESPHome OTA confirmed working. Next: RS485/RTD bench bring-up (revisit Nest
+**Status:** Optional RS485 CT clamp (QNDBK3 addr 110) in firmware (default OFF). ESPHome OTA confirmed. Next: RS485/RTD/CT bench bring-up (revisit Nest
 alt gauge with live temps).
 
 ## Working well
@@ -16,6 +16,7 @@ alt gauge with live temps).
 - Audio: Kokoro af_sarah; soft-start anti-click (canonical — `AUDIO_ALERTS.md`);
   web Audio toggles optimistic + retry GET refresh
 - Settings persistence across **reboot** confirmed live
+- Optional **CT Clamp Enabled** (default OFF): Modbus **110**, `ct_a` SD column; whole-plant feed intent; not fitted on bench
 - ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF)
 - Coverage checker + persist-script staging check green
 - Rotating centre status + matching audio + ntfy hardware-offline

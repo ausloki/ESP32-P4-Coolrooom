@@ -721,6 +721,10 @@
                     <div id="rs485Status" style="margin-top: 8px;"></div>
                 </div>
                 <div>
+                    <strong>CT Clamp</strong>
+                    <div id="ctClampStatus" style="margin-top: 8px;">--</div>
+                </div>
+                <div>
                     <strong>Memory / CPU</strong>
                     <div id="memoryStatus" style="margin-top: 8px;"></div>
                 </div>
@@ -841,6 +845,12 @@
                                 <td>—</td>
                                 <td id="probeLiveShtCorr">--</td>
                             </tr>
+                            <tr>
+                                <td>CT Clamp (optional)</td>
+                                <td id="probeLiveCt">--</td>
+                                <td>—</td>
+                                <td id="probeLiveCtCorr">--</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -928,6 +938,8 @@
                             <div><strong>IP Address</strong><span id="hwIp">--</span></div>
                             <div><strong>RS485 Relay Board</strong><span id="hwRs485Relay">--</span></div>
                             <div><strong>RS485 RTD Board</strong><span id="hwRs485Rtd">--</span></div>
+                            <div><strong>RS485 CT Clamp</strong><span id="hwRs485Ct">--</span></div>
+                            <div><strong>CT Current</strong><span id="hwCtCurrent">--</span></div>
                             <div><strong>System Time</strong><span id="hwRtc">--</span></div>
                             <div><strong>SHT31 (Internal)</strong><span id="hwSht31">--</span></div>
                             <div><strong>SHT20 (External)</strong><span id="hwSht20">--</span></div>
@@ -1843,6 +1855,9 @@
             'binary_sensor-no-cool_alarm': 'alarm_nocool_active',
             'binary_sensor-rs485_relay_board_online': 'rs485_relay_ok',
             'binary_sensor-rs485_rtd_board_1_online': 'rs485_rtd_ok',
+            'binary_sensor-rs485_ct_clamp_online': 'rs485_ct_ok',
+            'sensor-ct_clamp_current': 'ct_current',
+            'switch-ct_clamp_enabled': 'ct_clamp_enabled',
             'binary_sensor-system_time_valid': 'system_time_ok',
             'text_sensor-status': 'controller_status',
             'binary_sensor-sht31__internal_humidity__online': 'sht31_ok',
@@ -1894,7 +1909,8 @@
         const BOOL_FIELDS = new Set([
             'compressor_on', 'fan_on', 'defrost_phase', 'alarm_high_active', 'alarm_low_active',
             'alarm_ice_active', 'alarm_door_active', 'alarm_nocool_active',
-            'rs485_relay_ok', 'rs485_rtd_ok', 'system_time_ok', 'sht31_ok', 'sht20_ok',
+            'rs485_relay_ok', 'rs485_rtd_ok', 'rs485_ct_ok', 'ct_clamp_enabled',
+            'system_time_ok', 'sht31_ok', 'sht20_ok',
             'wifi_connected', 'probe_fault', 'light_on', 'sd_card_ok', 'controller_online',
             'siren_on', 'relay_en_compressor', 'relay_en_fan', 'relay_en_light', 'relay_en_siren',
             'ha_api_enabled',
@@ -2150,6 +2166,15 @@
             rs485Html += `Time: <span class="status-badge ${data.system_time_ok ? 'status-ok' : 'status-error'}">${data.system_time_ok ? '✓' : '✗'}</span>`;
             setHtml('rs485Status', rs485Html);
 
+            const ctEnabled = data.ct_clamp_enabled === true;
+            const ctAmps = (typeof data.ct_current === 'number' && !isNaN(data.ct_current))
+                ? `${data.ct_current.toFixed(1)} A`
+                : '--';
+            const ctBadge = !ctEnabled
+                ? '<span class="status-badge status-idle">disabled</span>'
+                : `<span class="status-badge ${data.rs485_ct_ok ? 'status-ok' : 'status-error'}">${data.rs485_ct_ok ? '✓ online' : '✗ offline'}</span>`;
+            setHtml('ctClampStatus', `${ctBadge}<br>${ctAmps}`);
+
             const cpuTxt = formatCpuUsagePct(
                 data.cpu_usage_pct, data.cpu_usage_core0_pct, data.cpu_usage_core1_pct);
             const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>CPU: ${cpuTxt}<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
@@ -2198,6 +2223,15 @@
             setText('hwIp', data.ip_address || '--');
             setHtml('hwRs485Relay', okBadge(data.rs485_relay_ok));
             setHtml('hwRs485Rtd', okBadge(data.rs485_rtd_ok));
+            if (data.ct_clamp_enabled === true) {
+                setHtml('hwRs485Ct', okBadge(data.rs485_ct_ok));
+            } else {
+                setHtml('hwRs485Ct', '<span class="status-badge status-idle">disabled</span>');
+            }
+            setText('hwCtCurrent',
+                (typeof data.ct_current === 'number' && !isNaN(data.ct_current))
+                    ? `${data.ct_current.toFixed(1)} A`
+                    : '--');
             setHtml('hwRtc', okBadge(data.system_time_ok));
             setHtml('hwSht31', okBadge(data.sht31_ok));
             setHtml('hwSht20', okBadge(data.sht20_ok));
@@ -2686,6 +2720,8 @@
                       help: 'Whether the internal (in-coolroom) SHT31 temperature/humidity sensor is read. The dew-point / frost-rate triggers and auto-calibrate need this enabled. SHT31 is not a substitute for Probe 1.' },
                     { type: 'switch', entity: 'external_sht20_sensor_enabled', name: 'External SHT20 Sensor Enabled', label: 'External SHT20 Sensor Enabled',
                       help: 'Whether the external (ambient) SHT20 temperature/humidity sensor is read.' },
+                    { type: 'switch', entity: 'ct_clamp_enabled', name: 'CT Clamp Enabled', label: 'CT Clamp Enabled',
+                      help: 'Optional RS485 CT clamp (QNDBK3) on the same Modbus bus. Default off. When on, polls slave address 110 at 9600 for current (Amps). Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay board).' },
                 ],
             },
             {
@@ -2934,6 +2970,11 @@
             // SHT31 has no calibration offset in firmware — raw and "corrected" match.
             setText('probeLiveShtRaw', fmtProbeTemp(data.int_temp));
             setText('probeLiveShtCorr', fmtProbeTemp(data.int_temp));
+            const ctTxt = (typeof data.ct_current === 'number' && !isNaN(data.ct_current))
+                ? `${data.ct_current.toFixed(1)} A`
+                : (data.ct_clamp_enabled === true ? '--' : 'disabled');
+            setText('probeLiveCt', ctTxt);
+            setText('probeLiveCtCorr', ctTxt);
         }
 
         async function toggleAdvancedSwitch(entityName, label) {

@@ -98,6 +98,15 @@ substitutions:
   rtd_temp_reg_ch2:             "2"
   rtd_temp_scale:               "0.1"
 
+  # ── Optional QNDBK3/RS485 CT clamp (same bus; default OFF) ────────────────
+  # Address 110 avoids relay(1), RTD(100), RTD universal(249). Clamp factory
+  # examples often use addr 1 — reconfigure to 110 before joining the bus.
+  # Baud must stay 9600 (clamp baud code 1) to match this UART. Current at
+  # holding 0x1002 with ÷10 — see reference/QNDBK3-RS485-CT-clamp.md.
+  modbus_ct_address:            "110"
+  ct_current_reg:               "4098"   # 0x1002
+  ct_current_scale:             "0.1"
+
   # ── WiFi co-processor (ESP32-C6 via SDIO) ─────────────────────────────────
   # ✅ CONFIRMED from Waveshare esp32_p4_function_ev_board.h (CONFIG_BSP_BOARD_TYPE_FIB)
   wifi_sdio_clk_pin: GPIO18
@@ -362,6 +371,14 @@ esphome:
     - priority: -90
       then:
         - logger.log: "Wi-Fi enable_on_boot=true (SD on SDMMC slot 0, hosted on slot 1)"
+        - lambda: |-
+            // Optional CT clamp: NVS may restore enable=ON after globals load;
+            // resume 5s Modbus polls (yaml default is 24h while disabled).
+            if (id(input_ct_clamp_enabled)) {
+                id(ct_clamp).set_update_interval(5000);
+                ESP_LOGI("rs485", "CT clamp enabled from NVS — polling addr %s",
+                         "${modbus_ct_address}");
+            }
 
 esp32:
   variant: esp32p4
@@ -703,6 +720,23 @@ modbus_controller:
       - lambda: |-
           id(hw_rs485_rtd1_ok) = false;
           ESP_LOGW("rs485", "RTD board 1 OFFLINE");
+
+  # Optional CT clamp — polled only while CT Clamp Enabled is on (default off
+  # uses a 24h interval so an unfitted clamp does not spam the bus).
+  - id: ct_clamp
+    address: ${modbus_ct_address}
+    modbus_id: rs485_modbus
+    setup_priority: -10
+    update_interval: 24h
+    on_online:
+      - lambda: |-
+          id(hw_rs485_ct_ok) = true;
+          ESP_LOGI("rs485", "CT clamp ONLINE (addr %s)", "${modbus_ct_address}");
+    on_offline:
+      - lambda: |-
+          id(hw_rs485_ct_ok) = false;
+          if (id(input_ct_clamp_enabled))
+              ESP_LOGW("rs485", "CT clamp OFFLINE");
 
 ##############################################################################
 # Relay Switches — coils 0-3 on relay_board
@@ -1745,6 +1779,35 @@ switch:
       - script.execute: persist_config_to_nvs
     lambda: 'return id(input_humidity_external_enabled);'
 
+  - platform: template
+    id: sw_ct_clamp_enabled
+    name: "CT Clamp Enabled"
+    icon: "mdi:current-ac"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 23
+    turn_on_action:
+      - lambda: |-
+          id(input_ct_clamp_enabled) = true;
+          // Resume Modbus polls (paused at 24h while disabled).
+          id(ct_clamp).set_update_interval(5000);
+          ESP_LOGI("config", "CT clamp ENABLED (addr %s @ 9600)", "${modbus_ct_address}");
+          p4_sd_log_event("CT_CLAMP_ENABLED", "modbus poll 5s");
+      - component.update: ct_clamp
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_ct_clamp_enabled) = false;
+          id(hw_rs485_ct_ok) = false;
+          id(ctl_ct_clamp_offline_logged) = false;
+          id(ct_clamp).set_update_interval(86400000UL);  // 24h — effectively paused
+          ESP_LOGI("config", "CT clamp DISABLED");
+          p4_sd_log_event("CT_CLAMP_DISABLED", "modbus poll paused");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_ct_clamp_enabled);'
+
 ##############################################################################
 # ntfy per-alert-type priority
 #
@@ -2016,6 +2079,18 @@ sensor:
           if (!isnan(x)) id(rtd1_ch2_last_ms) = millis();
           return x * ${rtd_temp_scale};
 
+  # Optional QNDBK3 CT clamp — holding 0x1002, ÷10 → Amps (see digest).
+  - platform: modbus_controller
+    modbus_controller_id: ct_clamp
+    id: ct_clamp_raw
+    internal: true
+    register_type: holding
+    address: ${ct_current_reg}
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - multiply: ${ct_current_scale}
+
   # ── Published probe sensors ────────────────────────────────────────────────
   - platform: template
     id: probe1_temp
@@ -2267,6 +2342,22 @@ sensor:
           text: !lambda |-
             const bool f = id(sel_temperature_display_unit).current_option() == "Fahrenheit";
             return p4_fmt_ext_humidity_label(id(probe_external_temp).state, x, f);
+
+  - platform: template
+    id: ct_clamp_current
+    name: "CT Clamp Current"
+    icon: "mdi:current-ac"
+    unit_of_measurement: "A"
+    accuracy_decimals: 1
+    state_class: measurement
+    device_class: current
+    update_interval: 5s
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 8
+    lambda: |-
+      if (!id(input_ct_clamp_enabled)) return NAN;
+      return id(ct_clamp_raw).state;
 
   # ── Probe staleness diagnostics ────────────────────────────────────────────
   - platform: template
@@ -2544,6 +2635,16 @@ binary_sensor:
       sorting_group_id: group_diagnostics
       sorting_weight: 31
     lambda: 'return id(hw_rs485_rtd1_ok);'
+
+  - platform: template
+    id: rs485_ct_clamp_online
+    name: "RS485 CT Clamp Online"
+    device_class: connectivity
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+      sorting_weight: 32
+    lambda: 'return id(input_ct_clamp_enabled) && id(hw_rs485_ct_ok);'
 
   - platform: template
     id: system_time_valid
@@ -3773,7 +3874,8 @@ button:
           id(input_humidity_internal_enabled), id(input_humidity_external_enabled),
           id(ctl_probe1_offset_c), id(ctl_probe2_offset_c),
           id(input_dew_point_trigger_enabled), id(ctl_startup_grace_min),
-          id(input_door_light_enabled), id(input_door_hold_compressor));
+          id(input_door_light_enabled), id(input_door_hold_compressor),
+          id(input_ct_clamp_enabled));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -3823,6 +3925,7 @@ button:
           float startup_grace = id(ctl_startup_grace_min);
           bool door_light_en = id(input_door_light_enabled);
           bool door_hold_en = id(input_door_hold_compressor);
+          bool ct_clamp_en = id(input_ct_clamp_enabled);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -3832,7 +3935,7 @@ button:
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en,
               p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en,
-              door_hold_en)) {
+              door_hold_en, ct_clamp_en)) {
               // Clamp to the live dial floor (backup may pre-date the clamp).
               if (sp < ${dial_min_c}) {
                 ESP_LOGW("config", "Restore: setpoint %.1f°C raised to %.0f°C",
@@ -3884,6 +3987,9 @@ button:
             }
             id(input_door_light_enabled) = door_light_en;
             id(input_door_hold_compressor) = door_hold_en;
+            id(input_ct_clamp_enabled) = ct_clamp_en;
+            if (ct_clamp_en) id(ct_clamp).set_update_interval(5000);
+            else             id(ct_clamp).set_update_interval(86400000UL);
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");
@@ -4437,6 +4543,17 @@ interval:
                   id(ctl_ambient_sensor_offline_logged) = false;
                   p4_sd_log_event("AMBIENT_SENSOR_ONLINE", "sht20 recovered");
               }
+
+              // Optional CT clamp — events only while enabled (no voice/ntfy).
+              const bool ct_offline = id(input_ct_clamp_enabled) && !id(hw_rs485_ct_ok);
+              if (ct_offline && !id(ctl_ct_clamp_offline_logged)) {
+                  id(ctl_ct_clamp_offline_logged) = true;
+                  p4_sd_log_event("CT_CLAMP_OFFLINE", "modbus ct no response");
+              } else if (!ct_offline && id(ctl_ct_clamp_offline_logged)) {
+                  id(ctl_ct_clamp_offline_logged) = false;
+                  if (id(input_ct_clamp_enabled))
+                      p4_sd_log_event("CT_CLAMP_ONLINE", "modbus ct recovered");
+              }
           }
 
           // ── 8. SD temperature logging (Phase 5) ─────────────────────────
@@ -4447,7 +4564,8 @@ interval:
               p4_sd_log_temps(
                   id(probe1_temp).state, id(probe2_temp).state, id(probe_external_temp).state,
                   id(ctl_setpoint), id(relay_compressor).state, id(ctl_defrost_active),
-                  id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_probe_fault));
+                  id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_probe_fault),
+                  id(ct_clamp_current).state);
           }
 
             // ── 9. ntfy push notifications — edge-triggered (Phase 5) ───────
@@ -5240,6 +5358,22 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+
+  # Optional RS485 CT clamp — default OFF (not fitted on most installs).
+  - id: input_ct_clamp_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+  - id: hw_rs485_ct_ok
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ct_clamp_offline_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
   # ── Settings-screen PIN lock (same design as the earlier S3 project) ──────
   # djb2("0000") = 2088252485 — plaintext PIN is never stored, only the hash.
@@ -11362,6 +11496,7 @@ script:
           input_probe2_enabled->update();
           input_humidity_internal_enabled->update();
           input_humidity_external_enabled->update();
+          input_ct_clamp_enabled->update();
           ctl_pin_hash->update();
           ctl_ntfy_server->update();
           ctl_ntfy_topic->update();

@@ -30,7 +30,8 @@ Prefer schematic / demo sample pin macros over table wording when names disagree
 
 **Not connected yet** — do not treat as bugs or spend time diagnosing:
 
-- RS485 relay board / RTD Modbus boards (Modbus timeouts and `* Online` OFF are expected)
+- RS485 relay board / RTD Modbus boards / optional CT clamp (Modbus timeouts and `* Online`
+  OFF are expected; CT Clamp Enabled defaults OFF so it does not poll until turned on)
 - External I2C temp/humidity sensors on the expansion I2C header
 
 Live verification of compressor/defrost/sensor control waits until those are attached.

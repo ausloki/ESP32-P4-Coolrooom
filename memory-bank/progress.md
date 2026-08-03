@@ -1,5 +1,13 @@
 # Progress Tracking
 
+
+### 2026-08-03 — Optional QNDBK3 CT clamp
+
+- [x] Firmware + dashboard + SD `ct_a` + backup key; default OFF
+- [x] Docs (USER_MANUAL / QUICK_START / hardware_pins / QNDBK3 digest) + bench rule
+- [x] Whole-plant feed install note (~64 W idle / ~190 W run); run-proof deferred
+- [ ] Live CT Modbus once clamp is addressed to 110 and wired
+
 ## 2026-08-03 — ESPHome OTA confirmed working
 
 - ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF).

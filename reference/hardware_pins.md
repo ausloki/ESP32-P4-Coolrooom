@@ -23,9 +23,10 @@ naming inversion here.
 
 ### Bench note (current)
 
-RS485 (relay / RTD boards) and external I2C temp sensors are **not** connected on the
-current bench setup. Offline Modbus / missing external readings are expected until that
-hardware is fitted — see `.cursor/rules/bench-hardware-status.mdc`.
+RS485 (relay / RTD boards / optional CT clamp) and external I2C temp sensors are **not**
+connected on the current bench setup. Offline Modbus / missing external readings are
+expected until that hardware is fitted — see `.cursor/rules/bench-hardware-status.mdc`.
+CT Clamp Enabled defaults **OFF**, so an unfitted clamp does not poll the bus.
 
 ---
 
@@ -372,6 +373,33 @@ Waveshare Modbus RTU Relay 4-CH, slave address **1**:
 
 Defrost is always **passive** on this controller (compressor held off; no heater coil).
 See `reference/USER_MANUAL.md` §4.13 and `reference/CAREL_CONTROL_DECISIONS.md`.
+
+
+### Modbus slave address map (this coolroom)
+
+| Address | Device | Notes |
+| --- | --- | --- |
+| **1** | Waveshare Modbus RTU Relay 4-CH | Coils 0–3 (fan / compressor / light / siren) |
+| **100** | 2CH PT100 → RS485 | Probe 1 CH1 room air, Probe 2 CH2 evaporator |
+| **110** | Optional Qineng QNDBK3 CT clamp | Current Amps; enable with **CT Clamp Enabled** (default OFF) |
+| **249** | RTD universal / discover | Module sheet universal address — do not use as permanent ID |
+
+### Optional Modbus CT clamp (firmware)
+
+Nanjing Qineng **QNDBK3/RS485** split-core CT on the **same** RS485 bus (H10 A/B),
+**DC 12 V** on Power+/Power−. Digest: `reference/QNDBK3-RS485-CT-clamp.md`.
+
+| Item | Value |
+| --- | --- |
+| Default slave address | **110** (`modbus_ct_address`) — free of relay **1**, RTD **100**, universal **249** |
+| Baud | **9600** (must match UART; clamp baud code **1**) |
+| Current register | Holding **`0x1002`**, Amps = raw ÷ 10 |
+| Enable | `CT Clamp Enabled` — default **OFF**; Modbus polls only while on |
+| Entities | `sensor.ct_clamp_current`, `binary_sensor.rs485_ct_clamp_online`, SD column `ct_a` |
+| Sense point | **Whole plant feed** (compressor + fans + controller), not compressor-only — ~64 W idle / ~190 W run @ this plant; future run-proof may use those bands |
+
+Factory examples often ship at address **1** (collides with the relay). Reconfigure to
+**110** via broadcast `0xFF` write to `0x100B` before joining the live bus.
 
 #### Grounding Requirement
 

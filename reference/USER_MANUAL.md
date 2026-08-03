@@ -119,6 +119,7 @@ notification to your phone.
 | Fan relay | Coil 0 reserved for evaporator fan **if** you later switch from continuous hardwired fans to controller control (§4.13). Leave **Fan Relay Enabled** off while fans run constantly. |
 | Light relay | Cabinet light — home-screen tap and/or door-triggered (§0 home icons, §4.6) |
 | Siren relay | Audible alarm — automatic when Alarm Siren Enabled; mute from home bell (§0, §4.4) |
+| CT clamp (optional) | RS485 Qineng QNDBK3 on plant **whole feed** (not compressor-only); addr **110** @ 9600; enable under Probes (§4.7). Off by default |
 | Door sensor | Optional — off by default, see §4.6 |
 | SD card | Event/temperature logging + settings backup — optional, device runs fine without one |
 
@@ -558,6 +559,13 @@ Probe 2, and the internal SHT31 (SHT31 has no offset — raw and corrected match
 | **Evaporator Probe (Probe 2) Enabled** | Master switch for the evaporator RTD. | On/Off | On | Smart Defrost (§4.3) and the Ice Alarm (§4.5) both need Probe 2 — disabling it disables those features too, even if their own switches are on. Does **not** reassign which physical sensor is Probe 1 or Probe 2. |
 | **Internal SHT31 Sensor Enabled** | Cabinet humidity/temperature sensor. | On/Off | On | Informational + dew-point / frost-rate / auto-cal — see note below. Not a substitute for Probe 1. |
 | **External SHT20 Sensor Enabled** | Room/ambient humidity/temperature sensor. | On/Off | On | Informational only — see note below. |
+| **CT Clamp Enabled** | Optional RS485 CT clamp (Qineng QNDBK3) on the same Modbus bus. | On/Off | **Off** | Default off. When on, polls slave **110** @ **9600** for current (Amps). Not on the home gauge — see System Health / Hardware / HA `CT Clamp Current`. Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay). Clamp the **whole plant feed** (compressor + fans + controller), not compressor-only — plant bands are roughly ~64 W idle / ~190 W run; future run-proof can use idle vs run, but that is not implemented yet. |
+
+> **CT install intent (optional).** Fit the clamp on the **whole coolroom plant feed**
+> (compressor + evaporator fans + this controller), not on the compressor lead alone.
+> That keeps idle (~64 W) vs run (~190 W @ this plant) distinguishable in logs (`ct_a`)
+> for a possible future run-proof check. Monitoring only today — no automatic run-proof.
+> Digest: `reference/QNDBK3-RS485-CT-clamp.md`.
 
 > **Probe wiring is fixed.** Probe 1 (RTD CH1) is always coolroom **room air** temperature;
 > Probe 2 (RTD CH2) is always the **evaporator coil** sensor. Do not swap the sensors on the
@@ -669,7 +677,7 @@ no-ops (silently skipped) rather than crashing or affecting cooling control.
 | Feature / Setting | Range / Default | What it does |
 |---|---|---|
 | **Event Log** | — | Alarm, defrost, compressor, and similar events append to `events.csv` on the card (also streamed live on the web **Events** tab). This file is **not** auto-pruned — download or delete it from the SD Card browser if it grows large. |
-| **Temperature Log** | — | Periodic temperature/state samples go to one file per day named `YYYY-MM-DD.csv` (cadence = `log_interval_min`). Each sample also records average and per-core CPU % (`cpu_pct`, `cpu_c0_pct`, `cpu_c1_pct` — same readings as Info/web). Samples taken before the controller has learned the time go to `nodate.csv` instead (small; not auto-pruned). |
+| **Temperature Log** | — | Periodic temperature/state samples go to one file per day named `YYYY-MM-DD.csv` (cadence = `log_interval_min`). Columns include temps/setpoint/relay/alarm flags, average and per-core CPU % (`cpu_pct`, `cpu_c0_pct`, `cpu_c1_pct` — same readings as Info/web), and optional CT current **`ct_a`** (Amps; empty when CT Clamp Enabled is off or the clamp is offline). Samples taken before the controller has learned the time go to `nodate.csv` instead (small; not auto-pruned). |
 | **SD Temp Log Retention (days)** | 7–365 / **60** | Keeps only the last N daily `YYYY-MM-DD.csv` temperature logs. Older dated files are deleted on successful mount, after auto-remount, at most once per calendar day while the card is OK, and immediately when you change this value. Never deletes `events.csv`, `nodate.csv`, or `backup.json`. |
 | **Free-space write gate** | fixed **32 MB** free | Before appending temperature/event logs or writing `backup.json`, the controller checks free space. Below 32 MB it **skips the write** (once per low-space episode it also records `SD_SPACE_LOW` on the live Events tab). The card stays reported as mounted — a full card is not treated as a failed card. Cooling is unaffected. Free space usually recovers after retention prune or manual delete. |
 | **Backup All Settings to SD** *(button)* | — | Saves every setting in this manual to a `backup.json` file on the card. Confirms success in-place — it does **not** force a browser download. Download a copy yourself from the file list below when you want one. Settings themselves live in flash (NVS) and survive reboots without this button; Backup is an off-device copy for factory-reset recovery or cloning to another unit. Skipped when free space is below the gate above. |

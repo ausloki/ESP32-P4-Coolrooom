@@ -18,6 +18,20 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-03 — Optional RS485 CT clamp (QNDBK3) + closeout
+
+- Firmware: optional **CT Clamp Enabled** (NVS, default OFF); Modbus slave **110** @ 9600;
+  entities `ct_clamp_current` / `rs485_ct_clamp_online`; SD CSV column **`ct_a`**; backup.json
+  key `ct_clamp_enabled`. Polls paused while disabled (24 h interval).
+- Docs: USER_MANUAL §4.7 + SD columns, QUICK_START, `hardware_pins.md` address map,
+  `QNDBK3-RS485-CT-clamp.md` (+ PDF/PNGs), bench rule / CLAUDE — CT not fitted = expected.
+- Install intent: clamp on **whole plant feed** (~64 W idle / ~190 W run); no run-proof yet.
+- Web dashboard Probes/Hardware/System Health + coverage/persist hooks.
+- Closeout: embed + coverage + compile + graph; commit on `cursor/wifi-sdmmc-slot-fix`.
+  Left untracked: `assets/audio/info_silence_warmup.wav` (unrelated).
+
+---
+
 ## 2026-08-02 — Docs: continuous evaporator fans (coil 0 future)
 
 - Plant fans run constantly hardwired today; coil 0 / Fan Relay Enabled kept off
