@@ -5981,13 +5981,29 @@ lvgl:
             long_mode: SCROLL_CIRCULAR
             hidden: true
 
-        # Tab bar buttons at bottom — 3-way Home/Settings/Info. Settings
+        # Tab bar buttons at bottom — 3-way Info/Home/Settings. Settings
         # always resets the PIN buffer and forces the lock flag false before
         # showing the keypad — same rule as the old S3 project's single
         # entry point (no per-category tab shortcuts on this project either
         # any more; PIN gate is the only path into the 8 settings pages).
         - button:
             x: 0
+            y: 552
+            width: 340
+            height: 48
+            bg_color: col_panel
+            border_width: 0
+            radius: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: "Info"
+                  text_font: font_small
+            on_click:
+              - script.execute: switch_to_page_info
+
+        - button:
+            x: 342
             y: 552
             width: 340
             height: 48
@@ -6003,7 +6019,7 @@ lvgl:
               - script.execute: switch_to_page_home
 
         - button:
-            x: 342
+            x: 684
             y: 552
             width: 340
             height: 48
@@ -6017,22 +6033,6 @@ lvgl:
                   text_font: font_small
             on_click:
               - script.execute: switch_to_page_settings
-
-        - button:
-            x: 684
-            y: 552
-            width: 340
-            height: 48
-            bg_color: col_panel
-            border_width: 0
-            radius: 0
-            widgets:
-              - label:
-                  align: CENTER
-                  text: "Info"
-                  text_font: font_small
-            on_click:
-              - script.execute: switch_to_page_info
 
 
     # Settings 1 page
@@ -9822,6 +9822,18 @@ lvgl:
             y: 552
             width: 340
             height: 48
+            bg_color: col_blue
+            border_width: 0
+            radius: 0
+            widgets:
+              - label: {align: CENTER, text: "Info", text_font: font_medium}
+            on_click:
+              - script.execute: switch_to_page_info
+        - button:
+            x: 342
+            y: 552
+            width: 340
+            height: 48
             bg_color: col_panel
             border_width: 0
             radius: 0
@@ -9830,7 +9842,7 @@ lvgl:
             on_click:
               - script.execute: switch_to_page_home
         - button:
-            x: 342
+            x: 684
             y: 552
             width: 340
             height: 48
@@ -9841,18 +9853,6 @@ lvgl:
               - label: {align: CENTER, text: "Settings", text_font: font_medium}
             on_click:
               - script.execute: switch_to_page_settings
-        - button:
-            x: 684
-            y: 552
-            width: 340
-            height: 48
-            bg_color: col_blue
-            border_width: 0
-            radius: 0
-            widgets:
-              - label: {align: CENTER, text: "Info", text_font: font_medium}
-            on_click:
-              - script.execute: switch_to_page_info
 
     # ── PIN unlock keypad — shown by switch_to_page_settings whenever
     # ctl_settings_unlocked is false. Same djb2-hash design as the earlier S3
