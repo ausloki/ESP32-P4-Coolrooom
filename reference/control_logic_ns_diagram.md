@@ -75,13 +75,11 @@ Temperature
     │
     │  ┄┄┄┄ setpoint + alarm_high_delta ┄┄┄┄  ← HIGH ALARM
     │
-    │  ──── setpoint + diff/2 ────────────────  ← compressor turns ON
+    │  ──── setpoint + differential ───────────  ← compressor turns ON
     │                                           (if currently OFF)
     │
-    │  ════ SETPOINT ═════════════════════════
-    │
-    │  ──── setpoint − diff/2 ────────────────  ← compressor turns OFF
-    │                                           (if currently ON)
+    │  ════ SETPOINT ═════════════════════════  ← compressor turns OFF
+    │                                           (if currently ON; after min-run)
     │
     │  ┄┄┄┄ setpoint − alarm_low_delta  ┄┄┄┄  ← LOW ALARM
     │

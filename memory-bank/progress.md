@@ -624,3 +624,10 @@
 **Last Updated:** 2026-07-23  
 **By:** Copilot Agent  
 **Status:** Compile flow hardened; Phase 5 still active
+
+
+### 2026-08-06 — Prescision control port (PR #1)
+
+- Asymmetric compressor hysteresis + related Prescision control behaviors ported to P4 firmware.
+- Operator docs/diagrams updated off symmetric ±half differential wording.
+- Closeout: compile, flash, graph, push on branch `cursor/port-precision-control-c3a7`; PR left open.

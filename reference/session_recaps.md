@@ -2859,3 +2859,21 @@ and untouched by this entry.
 - No USER_MANUAL / QUICK_START changes (internal only). Working tree uncommitted.
 
 ---
+
+---
+
+## 2026-08-06 — Prescision control port closeout (PR #1)
+
+**Branch:** `cursor/port-precision-control-c3a7` → `main` (PR #1). Do not merge unless asked.
+
+### What landed
+
+- Ported asymmetric Carel compressor hysteresis from ESP32-Coolroom-Prescision: **ON at SP+diff**, **OFF at SP**, plus min-run hold, defrost skip-if-cold / force-max, and alarm clear hysteresis (`p4_control.h` / YAML call sites).
+- Docs: USER_MANUAL §4.1 table + structogram; QUICK_START compressor diagram; `program_control_logic_flowchart.md`; `control_logic_ns_diagram.md`; provenance notes in `reference/P4_PORT_PRECISION_CONTROL.md` (+ mailbox patch).
+- No `CAREL_CONTROL_DECISIONS.md` on this branch. `assets/dashboard.html` unchanged this closeout → no `embed_dashboard.py`. Repo has no `tools/check_dashboard_coverage.py` / `tools/esphome_flash.sh` at closeout time.
+
+### Closeout checklist
+
+- Compile / OTA-or-NVS-safe flash / code-review graph / push results recorded in the closeout agent report.
+- ntfy left alone. PR left open (not merged).
+

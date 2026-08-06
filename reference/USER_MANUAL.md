@@ -153,10 +153,10 @@ the compressor.
 │  Force compressor OFF now       │  Compressor currently OFF?         │
 │  (safety — see §4.7 Probe Fault)│ ┌───────────────┬─────────────────┐│
 │                                 │ │ YES            │ NO              ││
-│                                 │ │ Temp above     │ Temp below      ││
-│                                 │ │ setpoint +      │ setpoint −      ││
-│                                 │ │ half the diff?  │ half the diff?  ││
-│                                 │ │  → turn ON      │  → turn OFF     ││
+│                                 │ │ Temp ≥         │ Temp ≤          ││
+│                                 │ │ setpoint +      │ setpoint?       ││
+│                                 │ │ differential?   │  → turn OFF     ││
+│                                 │ │  → turn ON      │ (after min-run) ││
 │                                 │ └───────────────┴─────────────────┘│
 ├─────────────────────────────────┴────────────────────────────────────┤
 │ Before turning ON: has it been at least "Compressor Off-Delay"       │

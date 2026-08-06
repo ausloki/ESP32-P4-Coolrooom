@@ -71,7 +71,7 @@ suffer freeze damage a little below 0 °C.
 | Setting | Recommended | Why |
 |---|---|---|
 | **Setpoint** | `0.5 °C` | Close to optimal storage temperature for stone fruit while leaving a safety margin above freezing. |
-| **Compressor Differential** | `1.0 °C` (default) | Keeps the swing tight around 0.5 °C without excessive compressor cycling. |
+| **Compressor Differential** | `1.0 °C` (default) | ON at 1.5 °C / OFF at 0.5 °C (asymmetric band) — tight control without excessive cycling. |
 | **Compressor Off-Delay** | `3 min` (default) | No produce-specific reason to change this. |
 | **Defrost System Enabled** | `On` | Needed — a near-0 °C, high-humidity room frosts the coil steadily. |
 | **Defrost Interval** | `480 min` (default, 8 h) | Reasonable baseline; shorten if you see visible frost buildup between cycles. |
@@ -117,10 +117,9 @@ the less this list matches your actual product and packaging.
 ┌──────────────────────────────────────────────────────────────────────┐
 │           Probe reading missing/stale/out of range?                  │
 ├─────────────────────────────────┬────────────────────────────────────┤
-│ YES → compressor OFF (safety)    │ NO → compare to setpoint ± half    │
-│                                   │      the differential:            │
-│                                   │  above upper band → ON            │
-│                                   │  below lower band → OFF           │
+│ YES → compressor OFF (safety)    │ NO → asymmetric Carel band:       │
+│                                   │  ≥ setpoint + differential → ON    │
+│                                   │  ≤ setpoint → OFF (after min-run) │
 │                                   │  in between → hold current state  │
 ├─────────────────────────────────┴────────────────────────────────────┤
 │ Off-Delay lockout still active? → wait, don't restart yet            │
