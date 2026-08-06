@@ -135,7 +135,7 @@ the compressor.
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
 | **Setpoint** | The temperature you want the coolroom to hold. | -30 – 15 °C | 2.0 °C | Set to whatever your stored product needs. |
-| **Compressor Differential** | The "dead band" around the setpoint. Compressor switches ON at setpoint + half the differential, OFF at setpoint − half. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing. Narrower = tighter temperature control but more frequent cycling. |
+| **Compressor Differential** | Carel-style dead band above the setpoint. Compressor switches **ON at setpoint + differential**, **OFF at setpoint**. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing above SP. Narrower = tighter control but more frequent cycling. |
 | **Compressor Off-Delay (Lockout)** | Minimum time the compressor must stay off before it's allowed to restart, even if the temperature calls for cooling. | 0 – 10 min | 3 min | Protects the compressor motor from rapid restart. Only lower this if your compressor's manufacturer explicitly allows shorter cycling. |
 | **Sensor Fallback Duty-Cycle Enabled** | If the main probe fails, run the compressor on a fixed timer instead of stopping cooling completely. | On/Off | On | Leave on unless you'd rather the room simply stop cooling during a sensor fault (some sites prefer that so staff notice immediately). |
 | **Fallback Compressor ON Time** | How long the compressor runs per fallback cycle when the probe has failed. | 1 – 30 min | 3 min | Works together with OFF time below — together they set a safe average duty cycle without real temperature feedback. |
