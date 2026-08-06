@@ -28,13 +28,14 @@ echo ""
 echo "=== ESP32-P4 Coolroom — Log tools (macOS) ==="
 echo "Python: ${PY}"
 echo "Repo:   ${COOLROOM_REPO_ROOT}"
-echo "Note:   Tweaks require ≥30 days of events.csv (or dated temps if no events)."
+echo "Note:   Tweaks require ≥30 days of history in the selected window."
 echo "Docs:   tools/README_LOG_TUNING.md"
 echo ""
 echo "  1) Analyse + recommend (pull from host, ≥30-day gate)"
 echo "  2) Pull logs only"
 echo "  3) List SD files on controller"
 echo "  4) Analyse existing local log folder (≥30-day gate)"
+echo "  5) Seasonal / windowed recommend-only → logs/tune_reports/"
 echo "  Q) Quit"
 echo ""
 read -r -p "Choose: " choice || true
@@ -64,6 +65,19 @@ case "$(echo "${choice}" | tr '[:lower:]' '[:upper:]')" in
       "${PY}" "${TOOLS_DIR}/analyse_logs_tune_settings.py" --log-dir "${dir}" --settings-host "${host}"
     else
       "${PY}" "${TOOLS_DIR}/analyse_logs_tune_settings.py" --log-dir "${dir}"
+    fi
+    ;;
+  5)
+    host="$(read_default "Controller host/IP (blank = use local --log-dir)" "${DEFAULT_HOST}")"
+    window="$(read_default "Window (last30|picking)" "last30")"
+    if [[ -n "${host}" ]]; then
+      "${TOOLS_DIR}/run_seasonal_log_tune.sh" --host "${host}" --window "${window}"
+    else
+      latest="$(ls -1dt "${COOLROOM_REPO_ROOT}/logs/controller"/*/ 2>/dev/null | head -1 || true)"
+      latest="${latest%/}"
+      default_dir="${latest:-${COOLROOM_REPO_ROOT}/logs/controller}"
+      dir="$(read_default "Log directory" "${default_dir}")"
+      "${TOOLS_DIR}/run_seasonal_log_tune.sh" --log-dir "${dir}" --window "${window}"
     fi
     ;;
   Q|"")

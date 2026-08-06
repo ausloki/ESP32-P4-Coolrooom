@@ -253,11 +253,18 @@ or aggressive defrost cadence, and compare suggestions to the 2 °C profile abov
 | **Windows** | `tools\analyse_logs_tune_settings.cmd --host <controller-ip>` |
 | **Offline** | Download logs from the web **SD Card** tab (or the same script), then `--log-dir <folder>` |
 
-The tool refuses to invent tweaks with **&lt; 30 days** of usable history (exit code 2). It
-does **not** change the controller unless you pass `--apply --yes`, and then only an
-allowlisted set of number settings (never setpoint, never probe enables). Full protocol /
-venv notes: `tools/README_LOG_TUNING.md`. Printable starting tables remain in
-`reference/recommended_settings_2c.html`.
+The tool refuses to invent tweaks with **&lt; 30 days** of usable history **in the selected
+window** (exit code 2). It does **not** change the controller unless you pass `--apply --yes`,
+and then only an allowlisted set of number settings (never setpoint, never probe enables).
+
+**WA fruit picking (late Dec → Apr):** external ambient can near ~40 °C — re-run the tune
+monthly or per harvest block with `--since`/`--until` or `--window picking` (preset =
+20 Dec → 30 Apr); keep setpoint at 2.0 °C and re-check differential / defrost / alarms.
+Reports also summarise ambient (when logged) and compressor cycle rate. Scheduled
+recommend-only HTML under `logs/tune_reports/`: `tools/run_seasonal_log_tune.sh` (macOS) /
+`.cmd` / `.ps1` (Windows), or menu item **5** in `CoolroomLogTools`. Full protocol / venv /
+launchd / Task Scheduler notes: `tools/README_LOG_TUNING.md`. Printable starting tables
+remain in `reference/recommended_settings_2c.html`.
 
 ---
 

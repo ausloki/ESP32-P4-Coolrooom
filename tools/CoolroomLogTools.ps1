@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Ensures tools\.venv-log-tuning, then runs pull / analyse / recommend scripts.
-  Tweaks require ≥30 days of events.csv (see tools/README_LOG_TUNING.md).
+  Tweaks require ≥30 days of history in the selected window (see tools/README_LOG_TUNING.md).
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -55,17 +55,34 @@ function Invoke-Analyze {
   }
 }
 
+function Invoke-Seasonal {
+  $h = Read-HostDefault 'Controller host/IP (blank = local --log-dir)' $DefaultHost
+  $window = Read-HostDefault 'Window (last30|picking)' 'last30'
+  $runner = Join-Path $Tools 'run_seasonal_log_tune.ps1'
+  if (-not [string]::IsNullOrWhiteSpace($h)) {
+    & $runner --host $h --window $window
+  } else {
+    $latest = Get-ChildItem -Path (Join-Path $Repo 'logs\controller') -Directory -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    $defaultDir = if ($latest) { $latest.FullName } else { (Join-Path $Repo 'logs\controller') }
+    $dir = Read-HostDefault 'Log directory' $defaultDir
+    & $runner --log-dir $dir --window $window
+  }
+}
+
 Write-Host ''
 Write-Host '=== ESP32-P4 Coolroom — Log tools (Windows) ==='
 Write-Host "Python: $Py"
 Write-Host "Repo:   $Repo"
-Write-Host 'Note:   Tweaks require ≥30 days of events.csv (or dated temps if no events).'
+Write-Host 'Note:   Tweaks require ≥30 days of history in the selected window.'
 Write-Host 'Docs:   tools/README_LOG_TUNING.md'
 Write-Host ''
 Write-Host '  1) Analyse + recommend (pull from host, ≥30-day gate)'
 Write-Host '  2) Pull logs only'
 Write-Host '  3) List SD files on controller'
 Write-Host '  4) Analyse existing local log folder (≥30-day gate)'
+Write-Host '  5) Seasonal / windowed recommend-only → logs/tune_reports/'
 Write-Host '  Q) Quit'
 Write-Host ''
 
@@ -75,6 +92,7 @@ switch ($choice.Trim().ToUpperInvariant()) {
   '2' { Invoke-Pull }
   '3' { Invoke-List }
   '4' { Invoke-Analyze }
+  '5' { Invoke-Seasonal }
   'Q' { exit 0 }
   default {
     Write-Host "Unknown choice: $choice"

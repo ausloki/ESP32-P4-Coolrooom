@@ -4,6 +4,20 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-06 — Seasonal log-tune windows + scheduled runner (docs closeout)
+
+- Analysis windows: `--since` / `--until` / `--window last30|picking` (WA fruit season
+  **20 Dec → 30 Apr**; ambient toward ~40 °C notes). Ambient mean/p95/max + cycle-rate
+  (and prior equal-length window) in CLI/HTML.
+- Recommend-only scheduled runners: `tools/run_seasonal_log_tune.{sh,cmd,ps1}` →
+  `logs/tune_reports/` (never `--apply`; apply allowlist unchanged). launchd / cron /
+  Task Scheduler examples in `tools/README_LOG_TUNING.md`.
+- Fixtures: `tools/testdata/log_tune_seasonal/`. CoolroomLogTools menu item 5.
+- Docs: README_LOG_TUNING (primary), QUICK_START §7, recommended_settings_2c.html,
+  USER_MANUAL §4.9 pointer. `.gitignore` `logs/tune_reports/`.
+
+---
+
 ## 2026-08-06 — Control: asymmetric hysteresis + alarm clear + smart lockout
 
 - **Asymmetric hysteresis:** `p4_ctl_compressor_eval` ON at `SP + diff`, OFF at `SP`

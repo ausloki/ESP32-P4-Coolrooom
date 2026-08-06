@@ -3,11 +3,12 @@
 
 Cross-platform (Windows + macOS). Stdlib + project helpers only.
 
-Requires ≥ 30 days of usable history before recommending:
-  • Prefer events.csv (last − first parseable timestamp ≥ 30 days).
-  • If events.csv is missing / unparseable, fall back to dated YYYY-MM-DD.csv
-    filename span. If events.csv exists but is shorter than 30 days, exit 2
-    (do not invent tweaks from a short event window).
+Requires ≥ 30 days of usable history **in the selected window** before recommending
+(default; override with --min-days):
+  • Prefer events.csv (last − first parseable timestamp in-window ≥ min-days).
+  • If events.csv is missing / unparseable in-window, fall back to dated
+    YYYY-MM-DD.csv filename span. If events.csv exists but is shorter than
+    min-days in-window, exit 2 (do not invent tweaks from a short event window).
 
 Default is recommend-only. --apply writes only an allowlisted set of number
 entities (never setpoint, never probe/sensor enables) and needs --yes.
@@ -20,13 +21,19 @@ Examples:
   # Pull from device then analyse
   python tools/analyse_logs_tune_settings.py --host 192.168.37.237
 
-  # HTML report
-  python tools/analyse_logs_tune_settings.py --log-dir path --report out.html
+  # WA picking / harvest month window
+  python tools/analyse_logs_tune_settings.py --log-dir path \\
+      --since 2025-12-20 --until 2026-01-31 --report out.html
+
+  # Preset: last 30 days or current WA picking season
+  python tools/analyse_logs_tune_settings.py --log-dir path --window last30
+  python tools/analyse_logs_tune_settings.py --log-dir path --window picking
 
   # Apply allowlisted suggestions (explicit)
   python tools/analyse_logs_tune_settings.py --host 192.168.1.50 --apply --yes
 
 Wrappers: tools/analyse_logs_tune_settings.{cmd,ps1,sh,command}
+Scheduled (recommend-only): tools/run_seasonal_log_tune.{sh,cmd,ps1}
 See tools/README_LOG_TUNING.md
 """
 
@@ -37,7 +44,7 @@ import html
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 _TOOLS = Path(__file__).resolve().parent
@@ -49,8 +56,10 @@ from analyze_coolroom_logs import (  # noqa: E402
     MIN_HISTORY_DAYS,
     attach_current,
     build_report,
+    parse_iso_date,
     print_report,
     report_to_dict,
+    resolve_preset_window,
 )
 from coolroom_http import (  # noqa: E402
     APPLY_ALLOWLIST,
@@ -94,9 +103,27 @@ def _parse_args() -> argparse.Namespace:
         "--min-days",
         type=float,
         default=float(MIN_HISTORY_DAYS),
-        help=f"Minimum history span in days (default {MIN_HISTORY_DAYS})",
+        help=f"Minimum history span in days within the selected window (default {MIN_HISTORY_DAYS})",
     )
     p.add_argument("--min-samples", type=int, default=24)
+    p.add_argument(
+        "--since",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Inclusive start of analysis window",
+    )
+    p.add_argument(
+        "--until",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Inclusive end of analysis window",
+    )
+    p.add_argument(
+        "--window",
+        default=None,
+        metavar="PRESET",
+        help="Preset window: last30 | picking (WA fruit season late Dec→Apr). Overrides --since/--until.",
+    )
     p.add_argument(
         "--settings-host",
         default=None,
@@ -135,6 +162,16 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _resolve_window(args: argparse.Namespace) -> tuple[date | None, date | None]:
+    if args.window:
+        return resolve_preset_window(args.window)
+    since = parse_iso_date(args.since) if args.since else None
+    until = parse_iso_date(args.until) if args.until else None
+    if since is not None and until is not None and until < since:
+        raise ValueError("--until must be ≥ --since")
+    return since, until
+
+
 def _pull_logs(host: str, out: Path, days: int, python: str) -> int:
     cmd = [
         python,
@@ -150,6 +187,22 @@ def _pull_logs(host: str, out: Path, days: int, python: str) -> int:
         cmd.extend(["--days", str(days)])
     print("→", " ".join(cmd), flush=True)
     return subprocess.run(cmd, cwd=str(_REPO)).returncode
+
+
+def _fmt_dur(block: dict) -> str:
+    if not block or not block.get("n"):
+        return "—"
+    med, p10, p90 = block.get("median"), block.get("p10"), block.get("p90")
+    if med is None or p10 is None or p90 is None:
+        return "—"
+    return f"{med:.1f} / {p10:.1f} / {p90:.1f} min (n={block.get('n')})"
+
+
+def _fmt_spd(block: dict) -> str:
+    spd = block.get("starts_per_day")
+    if spd is None:
+        return "—"
+    return f"{spd:.2f}"
 
 
 def _write_html_report(path: Path, report, host: str | None) -> None:
@@ -172,6 +225,31 @@ def _write_html_report(path: Path, report, host: str | None) -> None:
         )
     notes = "".join(f"<li>{html.escape(n)}</li>" for n in report.notes)
     hist = report.history.detail if report.history else "(none)"
+    win = (report.window or {}).get("label") or "full log span"
+    amb = report.ambient or {}
+    cr = report.cycle_rate or {}
+    prior = cr.get("prior") or {}
+    amb_html = html.escape(amb.get("detail") or "Ambient not summarised.")
+    cycle_rows = (
+        "<tr>"
+        f"<td>{html.escape(cr.get('label') or 'window')}</td>"
+        f"<td class='val'>{cr.get('starts', '—')}</td>"
+        f"<td class='val'>{html.escape(_fmt_spd(cr))}</td>"
+        f"<td>{html.escape(_fmt_dur(cr.get('on_duration_min') or {}))}</td>"
+        f"<td>{html.escape(_fmt_dur(cr.get('off_duration_min') or {}))}</td>"
+        "</tr>"
+    )
+    if prior.get("present"):
+        cycle_rows += (
+            "<tr>"
+            f"<td>{html.escape(prior.get('label') or 'prior')}</td>"
+            f"<td class='val'>{prior.get('starts', '—')}</td>"
+            f"<td class='val'>{html.escape(_fmt_spd(prior))}</td>"
+            f"<td>{html.escape(_fmt_dur(prior.get('on_duration_min') or {}))}</td>"
+            f"<td>{html.escape(_fmt_dur(prior.get('off_duration_min') or {}))}</td>"
+            "</tr>"
+        )
+    vs_prior = html.escape(cr.get("vs_prior") or "")
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     body = f"""<!DOCTYPE html>
 <html lang="en">
@@ -203,6 +281,7 @@ def _write_html_report(path: Path, report, host: str | None) -> None:
       <h1>Coolroom log analysis — setting recommendations</h1>
       <div class="meta">Generated {html.escape(generated)}
         · log dir {html.escape(str(report.log_dir))}
+        · window {html.escape(win)}
         {(" · host " + html.escape(host)) if host else ""}</div>
     </header>
     <div class="callout">
@@ -210,7 +289,24 @@ def _write_html_report(path: Path, report, host: str | None) -> None:
       Default mode is recommend-only. Apply uses ESPHome REST number POSTs on the LAN
       (no secrets printed). Never auto-changes setpoint or probe enables.
       Baseline profile: Quick Start §4 / <code>recommended_settings_2c.html</code>.
+      WA picking season (late Dec→Apr): re-run monthly / per block; keep SP 2.0, re-check
+      differential / defrost / alarms when ambient climbs toward ~40&nbsp;°C.
     </div>
+    <h2>Ambient</h2>
+    <p>{amb_html}</p>
+    <h2>Cycle rate</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Window</th><th>Starts</th><th>/day</th>
+          <th>ON median/p10/p90</th><th>OFF median/p10/p90</th>
+        </tr>
+      </thead>
+      <tbody>
+        {cycle_rows}
+      </tbody>
+    </table>
+    {f'<p class="meta">{vs_prior}</p>' if vs_prior else ''}
     <h2>Current vs suggested</h2>
     <table>
       <thead>
@@ -255,13 +351,21 @@ def main() -> int:
     log_dir = args.log_dir or args.log_dir_positional
     host = args.host
 
+    try:
+        since, until = _resolve_window(args)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
     # Allow: analyse_logs_tune_settings.py --host X  OR bare host via wrappers
     if log_dir is None and host is None:
         # Interactive-friendly default: require an explicit source
         print(
             "ERROR: provide --log-dir PATH or --host IP\n"
             "  Example: python tools/analyse_logs_tune_settings.py --log-dir tools/testdata/log_tune_30d\n"
-            "  Example: python tools/analyse_logs_tune_settings.py --host 192.168.37.237",
+            "  Example: python tools/analyse_logs_tune_settings.py --host 192.168.37.237\n"
+            "  Example: … --since 2025-12-20 --until 2026-01-31  (WA picking month)\n"
+            "  Example: … --window picking",
             file=sys.stderr,
         )
         return 1
@@ -283,7 +387,12 @@ def main() -> int:
         log_dir = (_REPO / log_dir).resolve()
 
     try:
-        report = build_report(log_dir, min_samples=args.min_samples)
+        report = build_report(
+            log_dir,
+            min_samples=args.min_samples,
+            since=since,
+            until=until,
+        )
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -292,11 +401,15 @@ def main() -> int:
     if hist is None or hist.span_days < args.min_days:
         detail = hist.detail if hist else "no history measured"
         span = hist.span_days if hist else 0.0
+        win = (report.window or {}).get("label") or "full log span"
         print(
-            f"ERROR: need ≥ {args.min_days:g} days of usable log history before recommending tweaks.\n"
+            f"ERROR: need ≥ {args.min_days:g} days of usable log history in the selected window "
+            f"before recommending tweaks.\n"
+            f"  Window: {win}\n"
             f"  Found {span:.1f} days ({detail}).\n"
-            f"  Gate rule: prefer events.csv timestamp span; if events.csv is missing/unparseable,\n"
-            f"  use dated YYYY-MM-DD.csv filename span. Short events.csv does not fall back to temps.\n"
+            f"  Gate rule: prefer events.csv timestamp span in-window; if events.csv is "
+            f"missing/unparseable in-window, use dated YYYY-MM-DD.csv filename span. "
+            f"Short events.csv does not fall back to temps.\n"
             f"  Device prerequisites: SD card mounted, logging enabled, web reachable on LAN.",
             file=sys.stderr,
         )

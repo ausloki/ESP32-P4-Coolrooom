@@ -14,6 +14,7 @@ Examples:
   python tools/analyze_coolroom_logs.py logs/controller/20260801T120000Z
   python tools/analyze_coolroom_logs.py logs/controller/latest --host 192.168.37.237
   python tools/analyze_coolroom_logs.py path/to/dir --json-out report.json
+  python tools/analyze_coolroom_logs.py path/to/dir --since 2025-12-20 --until 2026-01-31
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import re
 import statistics
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -46,6 +47,74 @@ _COMP_DETAIL = re.compile(
 
 # Primary gate used by analyse_logs_tune_settings.py (keep in sync).
 MIN_HISTORY_DAYS = 30
+
+# Ambient high-load heuristics (WA summer / fruit picking — external can near ~40 °C).
+AMBIENT_HIGH_P95_C = 30.0
+AMBIENT_VERY_HIGH_P95_C = 35.0
+AMBIENT_NEAR_40_MAX_C = 38.0
+
+# Accept these daily-CSV columns for external/ambient (first non-empty wins).
+_AMBIENT_KEYS = (
+    "ambient_c",
+    "external_c",
+    "external_temp_c",
+    "ambient_temp_c",
+    "outside_c",
+)
+
+# WA fruit picking season: late December → end of April (season year = April year).
+PICKING_SEASON_START_MONTH = 12
+PICKING_SEASON_START_DAY = 20
+PICKING_SEASON_END_MONTH = 4
+PICKING_SEASON_END_DAY = 30
+
+
+def parse_iso_date(text: str) -> date:
+    """Parse YYYY-MM-DD into a date (raises ValueError)."""
+    return datetime.strptime(text.strip(), "%Y-%m-%d").date()
+
+
+def picking_season_bounds(today: date | None = None) -> tuple[date, date]:
+    """Return (start, end) for the WA picking season relevant to *today*.
+
+    Season for harvest ending in year H: 20 Dec (H-1) → 30 Apr H.
+    During an open season, end is clipped to *today*. Outside season (1 May–
+    19 Dec), returns the most recently completed season.
+    """
+    today = today or date.today()
+    in_open = (today.month == PICKING_SEASON_START_MONTH and today.day >= PICKING_SEASON_START_DAY) or (
+        today.month <= PICKING_SEASON_END_MONTH
+    )
+    if in_open:
+        if today.month == PICKING_SEASON_START_MONTH:
+            start = date(today.year, PICKING_SEASON_START_MONTH, PICKING_SEASON_START_DAY)
+            return start, today
+        start = date(today.year - 1, PICKING_SEASON_START_MONTH, PICKING_SEASON_START_DAY)
+        season_end = date(today.year, PICKING_SEASON_END_MONTH, PICKING_SEASON_END_DAY)
+        return start, min(today, season_end)
+    # 1 May … 19 Dec → last completed season (Dec 20 prior year → Apr 30 this year)
+    start = date(today.year - 1, PICKING_SEASON_START_MONTH, PICKING_SEASON_START_DAY)
+    end = date(today.year, PICKING_SEASON_END_MONTH, PICKING_SEASON_END_DAY)
+    return start, end
+
+
+def resolve_preset_window(
+    preset: str,
+    today: date | None = None,
+) -> tuple[date, date]:
+    """Map schedule presets to inclusive (since, until) dates.
+
+    Presets: ``last30``, ``picking`` (current / last WA fruit season).
+    """
+    today = today or date.today()
+    key = preset.strip().lower().replace("_", "").replace("-", "")
+    if key in ("last30", "last30days", "30d", "30day", "30days"):
+        return today - timedelta(days=29), today
+    if key in ("picking", "pickingseason", "season", "wafruit", "harvest"):
+        return picking_season_bounds(today)
+    raise ValueError(
+        f"Unknown window preset {preset!r} (use last30 or picking)"
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -67,7 +136,25 @@ def _parse_args() -> argparse.Namespace:
         "--min-days",
         type=float,
         default=0.0,
-        help="If >0, require this many days of history (events preferred) or exit 2",
+        help="If >0, require this many days of history in the selected window (events preferred) or exit 2",
+    )
+    p.add_argument(
+        "--since",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Inclusive start of analysis window (filter temps + events)",
+    )
+    p.add_argument(
+        "--until",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Inclusive end of analysis window",
+    )
+    p.add_argument(
+        "--window",
+        default=None,
+        metavar="PRESET",
+        help="Preset window: last30 | picking (WA fruit season late Dec→Apr). Overrides --since/--until.",
     )
     return p.parse_args()
 
@@ -85,9 +172,62 @@ def _f(row: dict[str, str], key: str) -> float | None:
     return v
 
 
+def _ambient_from_row(norm: dict[str, str]) -> float | None:
+    for key in _AMBIENT_KEYS:
+        v = _f(norm, key)
+        if v is not None:
+            return v
+    return None
+
+
 def _b(row: dict[str, str], key: str) -> bool:
     raw = (row.get(key) or "").strip().lower()
     return raw in ("1", "true", "on", "yes")
+
+
+def _date_in_window(d: date, since: date | None, until: date | None) -> bool:
+    if since is not None and d < since:
+        return False
+    if until is not None and d > until:
+        return False
+    return True
+
+
+def _ts_in_window(ts: datetime | None, since: date | None, until: date | None) -> bool:
+    if ts is None:
+        return since is None and until is None
+    return _date_in_window(ts.date(), since, until)
+
+
+def _window_label(since: date | None, until: date | None) -> str:
+    if since is None and until is None:
+        return "full log span"
+    if since is not None and until is not None:
+        return f"{since.isoformat()} → {until.isoformat()} (inclusive)"
+    if since is not None:
+        return f"{since.isoformat()} → end"
+    return f"start → {until.isoformat()}"
+
+
+def _prior_equal_window(
+    since: date | None,
+    until: date | None,
+    hist_first: date | None,
+    hist_last: date | None,
+) -> tuple[date, date] | None:
+    """Equal-length calendar window immediately before the analysis window."""
+    if since is None and until is None:
+        return None
+    eff_until = until or hist_last
+    eff_since = since or hist_first
+    if eff_since is None or eff_until is None:
+        return None
+    if eff_until < eff_since:
+        return None
+    length = (eff_until - eff_since).days + 1
+    prior_until = eff_since - timedelta(days=1)
+    prior_since = prior_until - timedelta(days=length - 1)
+    return prior_since, prior_until
 
 
 def _parse_ts(text: str) -> datetime | None:
@@ -168,6 +308,9 @@ class Report:
     non_defrost_count: int = 0
     span_hours: float | None = None
     history: HistorySpan | None = None
+    window: dict[str, Any] = field(default_factory=dict)
+    ambient: dict[str, Any] = field(default_factory=dict)
+    cycle_rate: dict[str, Any] = field(default_factory=dict)
     stats: dict[str, Any] = field(default_factory=dict)
     event_stats: dict[str, Any] = field(default_factory=dict)
     recommendations: list[Recommendation] = field(default_factory=list)
@@ -188,7 +331,7 @@ def load_temp_rows(paths: Iterable[Path]) -> list[TempRow]:
                         ts=_parse_ts(norm.get("timestamp", "")),
                         coolroom=_f(norm, "coolroom_c"),
                         evap=_f(norm, "evap_c"),
-                        ambient=_f(norm, "ambient_c"),
+                        ambient=_ambient_from_row(norm),
                         setpoint=_f(norm, "setpoint_c"),
                         compressor=_b(norm, "compressor"),
                         defrost=_b(norm, "defrost"),
@@ -201,7 +344,21 @@ def load_temp_rows(paths: Iterable[Path]) -> list[TempRow]:
     return rows
 
 
-def load_event_stats(path: Path) -> dict[str, Any]:
+def filter_temp_rows(
+    rows: list[TempRow],
+    since: date | None,
+    until: date | None,
+) -> list[TempRow]:
+    if since is None and until is None:
+        return rows
+    return [r for r in rows if _ts_in_window(r.ts, since, until)]
+
+
+def load_event_stats(
+    path: Path,
+    since: date | None = None,
+    until: date | None = None,
+) -> dict[str, Any]:
     counts: dict[str, int] = {}
     on_offs: list[tuple[datetime, str, dict[str, float]]] = []
     timestamps: list[datetime] = []
@@ -212,8 +369,11 @@ def load_event_stats(path: Path) -> dict[str, Any]:
             ev = (norm.get("event") or "").strip().upper()
             if not ev:
                 continue
-            counts[ev] = counts.get(ev, 0) + 1
             ts = _parse_ts(norm.get("timestamp", ""))
+            if since is not None or until is not None:
+                if not _ts_in_window(ts, since, until):
+                    continue
+            counts[ev] = counts.get(ev, 0) + 1
             if ts is not None:
                 timestamps.append(ts)
             if ev in ("COMPRESSOR_ON", "COMPRESSOR_OFF"):
@@ -259,10 +419,14 @@ def load_event_stats(path: Path) -> dict[str, Any]:
         if first_ts is not None and last_ts is not None
         else 0.0
     )
+    starts = int(counts.get("COMPRESSOR_ON", 0))
+    starts_per_day = (starts / span_days) if span_days > 0 else None
 
     return {
         "counts": counts,
         "compressor_transitions": len(on_offs),
+        "compressor_starts": starts,
+        "starts_per_day": starts_per_day,
         "event_rows": sum(counts.values()),
         "first_ts": first_ts.isoformat(sep=" ") if first_ts else None,
         "last_ts": last_ts.isoformat(sep=" ") if last_ts else None,
@@ -303,15 +467,44 @@ def list_log_paths(log_dir: Path) -> tuple[list[Path], Path | None]:
     return temp_paths, event_path
 
 
-def measure_history(log_dir: Path) -> HistorySpan:
-    """Measure usable history for the ≥30-day gate.
+def filter_temp_paths(
+    temp_paths: list[Path],
+    since: date | None,
+    until: date | None,
+) -> list[Path]:
+    """Keep dated CSVs whose filename date intersects the window; always keep nodate.csv."""
+    if since is None and until is None:
+        return temp_paths
+    out: list[Path] = []
+    for p in temp_paths:
+        m = _DATE_CSV.match(p.name)
+        if not m:
+            out.append(p)  # nodate.csv — still load; row timestamps are filtered later
+            continue
+        try:
+            d = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        except ValueError:
+            out.append(p)
+            continue
+        if _date_in_window(d, since, until):
+            out.append(p)
+    return out
+
+
+def measure_history(
+    log_dir: Path,
+    since: date | None = None,
+    until: date | None = None,
+) -> HistorySpan:
+    """Measure usable history for the ≥30-day gate (within the selected window).
 
     Clear rule (documented in tools/README_LOG_TUNING.md):
-      1. Prefer events.csv: span = last − first parseable timestamp.
-         If events.csv exists with ≥2 parseable timestamps but span < min days,
+      1. Prefer events.csv: span = last − first parseable timestamp **in the window**.
+         If events.csv exists with ≥2 parseable timestamps in-window but span < min days,
          that is a hard fail — do not fall back to temp files to invent tweaks.
-      2. If events.csv is missing or has <2 parseable timestamps, fall back to
-         dated YYYY-MM-DD.csv filenames: span = (latest − earliest) calendar days.
+      2. If events.csv is missing or has <2 parseable timestamps in-window, fall back to
+         dated YYYY-MM-DD.csv filenames intersecting the window:
+         span = (latest − earliest) calendar days.
     """
     temp_paths, event_path = list_log_paths(log_dir)
     dated = []
@@ -319,12 +512,17 @@ def measure_history(log_dir: Path) -> HistorySpan:
         m = _DATE_CSV.match(p.name)
         if m:
             try:
-                dated.append(datetime.strptime(m.group(1), "%Y-%m-%d").date())
+                d = datetime.strptime(m.group(1), "%Y-%m-%d").date()
             except ValueError:
-                pass
+                continue
+            if _date_in_window(d, since, until):
+                dated.append(d)
+
+    win = _window_label(since, until)
+    win_note = f" [window {win}]" if since is not None or until is not None else ""
 
     if event_path is not None:
-        stats = load_event_stats(event_path)
+        stats = load_event_stats(event_path, since=since, until=until)
         span = float(stats.get("span_days") or 0.0)
         first = stats.get("first_ts")
         last = stats.get("last_ts")
@@ -341,10 +539,10 @@ def measure_history(log_dir: Path) -> HistorySpan:
                 dated_temp_files=len(dated),
                 detail=(
                     f"events.csv: {rows} rows from {first_dt.date()} → {last_dt.date()} "
-                    f"({span:.1f} days)"
+                    f"({span:.1f} days){win_note}"
                 ),
             )
-        # events present but unusable clock → try temps, note the issue
+        # events present but unusable clock in window → try temps, note the issue
         if dated:
             span_d = float((max(dated) - min(dated)).days)
             return HistorySpan(
@@ -355,9 +553,9 @@ def measure_history(log_dir: Path) -> HistorySpan:
                 event_rows=rows,
                 dated_temp_files=len(dated),
                 detail=(
-                    f"events.csv present but <2 parseable timestamps "
+                    f"events.csv present but <2 parseable timestamps in window "
                     f"(rows={rows}); using dated temp files {min(dated)} → {max(dated)} "
-                    f"({span_d:.0f} calendar days)"
+                    f"({span_d:.0f} calendar days){win_note}"
                 ),
             )
         return HistorySpan(
@@ -367,7 +565,7 @@ def measure_history(log_dir: Path) -> HistorySpan:
             last_ts=None,
             event_rows=rows,
             dated_temp_files=0,
-            detail="events.csv has no usable timestamps and no dated temp CSVs found",
+            detail=f"events.csv has no usable timestamps in window and no dated temp CSVs{win_note}",
         )
 
     if dated:
@@ -381,7 +579,7 @@ def measure_history(log_dir: Path) -> HistorySpan:
             dated_temp_files=len(dated),
             detail=(
                 f"No events.csv; dated temp files {min(dated)} → {max(dated)} "
-                f"({span_d:.0f} calendar days). Event-based heuristics will be limited."
+                f"({span_d:.0f} calendar days). Event-based heuristics will be limited.{win_note}"
             ),
         )
 
@@ -392,7 +590,7 @@ def measure_history(log_dir: Path) -> HistorySpan:
         last_ts=None,
         event_rows=0,
         dated_temp_files=0,
-        detail="No events.csv and no dated YYYY-MM-DD.csv temperature logs found",
+        detail=f"No events.csv and no dated YYYY-MM-DD.csv temperature logs in window{win_note}",
     )
 
 
@@ -412,6 +610,179 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 def _round_setting(v: float, step: float) -> float:
     return round(v / step) * step
+
+
+def summarise_ambient(rows: list[TempRow]) -> dict[str, Any]:
+    """Summarise ambient/external temps from daily CSV rows (no invention if missing)."""
+    paired = [(r.ts, r.ambient) for r in rows if r.ambient is not None]
+    if not paired:
+        return {
+            "present": False,
+            "n": 0,
+            "mean_c": None,
+            "p95_c": None,
+            "max_c": None,
+            "trend": None,
+            "high_load": False,
+            "detail": (
+                "No ambient/external temperature column in the selected window "
+                f"(looked for {', '.join(_AMBIENT_KEYS)}). Ambient trends skipped."
+            ),
+        }
+    vals = [v for _, v in paired]
+    mean_c = statistics.mean(vals)
+    p95_c = _percentile(vals, 95)
+    max_c = max(vals)
+    # Simple half-window trend on chronological samples with timestamps
+    timed = [(ts, v) for ts, v in paired if ts is not None]
+    trend = None
+    if len(timed) >= 4:
+        timed.sort(key=lambda x: x[0])
+        mid = len(timed) // 2
+        first = statistics.mean(v for _, v in timed[:mid])
+        second = statistics.mean(v for _, v in timed[mid:])
+        delta = second - first
+        if abs(delta) < 1.0:
+            trend = "stable"
+        elif delta > 0:
+            trend = "rising"
+        else:
+            trend = "falling"
+    high_load = bool(
+        (p95_c is not None and p95_c >= AMBIENT_HIGH_P95_C)
+        or (max_c is not None and max_c >= AMBIENT_NEAR_40_MAX_C)
+    )
+    very_high = bool(p95_c is not None and p95_c >= AMBIENT_VERY_HIGH_P95_C) or (
+        max_c is not None and max_c >= AMBIENT_NEAR_40_MAX_C
+    )
+    detail = (
+        f"Ambient n={len(vals)}: mean {mean_c:.1f} °C, p95 {p95_c:.1f} °C, "
+        f"max {max_c:.1f} °C"
+        + (f", trend {trend}" if trend else "")
+    )
+    if high_load:
+        detail += (
+            " — WA summer / picking-season style load (p95≥30 °C or max near 40 °C)."
+            if very_high
+            else " — elevated external ambient (p95≥30 °C)."
+        )
+    return {
+        "present": True,
+        "n": len(vals),
+        "mean_c": mean_c,
+        "p95_c": p95_c,
+        "max_c": max_c,
+        "trend": trend,
+        "high_load": high_load,
+        "very_high": very_high,
+        "detail": detail,
+    }
+
+
+def build_cycle_rate_report(
+    event_stats: dict[str, Any] | None,
+    *,
+    label: str = "window",
+) -> dict[str, Any]:
+    """Compressor starts/day + ON/OFF duration percentiles from event stats."""
+    if not event_stats:
+        return {
+            "label": label,
+            "present": False,
+            "starts": 0,
+            "starts_per_day": None,
+            "span_days": 0.0,
+            "on_duration_min": {},
+            "off_duration_min": {},
+            "detail": "No events.csv cycle timing in this window.",
+        }
+    on = dict(event_stats.get("on_duration_min") or {})
+    off = dict(event_stats.get("off_duration_min") or {})
+    starts = int(event_stats.get("compressor_starts") or 0)
+    span = float(event_stats.get("span_days") or 0.0)
+    spd = event_stats.get("starts_per_day")
+    if spd is None and span > 0:
+        spd = starts / span
+    detail_parts = [f"{label}: {starts} compressor starts"]
+    if spd is not None:
+        detail_parts.append(f"{spd:.2f}/day over {span:.1f} d")
+    if on.get("n"):
+        detail_parts.append(
+            f"ON median/p10/p90={on.get('median'):.1f}/{on.get('p10'):.1f}/{on.get('p90'):.1f} min"
+        )
+    if off.get("n"):
+        detail_parts.append(
+            f"OFF median/p10/p90={off.get('median'):.1f}/{off.get('p10'):.1f}/{off.get('p90'):.1f} min"
+        )
+    return {
+        "label": label,
+        "present": True,
+        "starts": starts,
+        "starts_per_day": spd,
+        "span_days": span,
+        "on_duration_min": on,
+        "off_duration_min": off,
+        "detail": "; ".join(detail_parts),
+    }
+
+
+def _compare_cycle_rates(current: dict[str, Any], prior: dict[str, Any] | None) -> str | None:
+    if not prior or not prior.get("present") or not current.get("present"):
+        return None
+    cur_spd = current.get("starts_per_day")
+    pri_spd = prior.get("starts_per_day")
+    if cur_spd is None or pri_spd is None or pri_spd <= 0:
+        return None
+    pct = ((cur_spd - pri_spd) / pri_spd) * 100.0
+    if abs(pct) < 0.5:
+        return (
+            f"Cycle rate vs prior window: {cur_spd:.2f}/day now vs {pri_spd:.2f}/day before "
+            "(≈ unchanged)."
+        )
+    direction = "higher" if pct > 0 else "lower"
+    return (
+        f"Cycle rate vs prior window: {cur_spd:.2f}/day now vs {pri_spd:.2f}/day before "
+        f"({abs(pct):.0f}% {direction})."
+    )
+
+
+def _apply_ambient_bias(report: Report, ambient: dict[str, Any]) -> None:
+    """Bias notes / rationales when external ambient is high (WA summer load)."""
+    if not ambient.get("present"):
+        report.notes.append(ambient.get("detail") or "Ambient column missing — not invented.")
+        return
+    report.notes.append(ambient["detail"])
+    if not ambient.get("high_load"):
+        return
+    report.notes.append(
+        "WA fruit-picking / summer load: watch compressor differential and cycle rate, "
+        "defrost interval / ice risk, and no-cool / high-alarm nuisance as ambient climbs "
+        "toward ~40 °C. Keep setpoint at product need (2.0 °C profile) — re-evaluate "
+        "diff / defrost / alarms monthly or per harvest block."
+    )
+    # Soften high-alarm / no-cool messaging when ambient is brutal
+    for rec in report.recommendations:
+        if rec.key == "differential_c" and ambient.get("very_high"):
+            rec.rationale += (
+                " High external ambient raises load — prefer confirming cycle-rate before "
+                "widening differential further."
+            )
+        if rec.key == "defrost_interval_min":
+            rec.rationale += (
+                " Hot/humid ingress during picking increases frost risk — do not lengthen "
+                "interval without checking ICE_ALARM / coil condition."
+            )
+        if rec.key in ("alarm_high_delta_c", "alarm_persist_min", "no_cool_timeout_min"):
+            rec.rationale += (
+                " Summer ambient can cause brief pull-down lag after door/load — treat "
+                "nuisance HI / no-cool trips cautiously before widening further."
+            )
+    counts = (report.event_stats or {}).get("counts") or {}
+    if counts.get("NO_COOL_ALARM"):
+        report.notes.append(
+            "NO_COOL_ALARM present under high ambient — verify capacity/airflow before "
+            "shortening No-Cool Timeout; hot weather alone is not a timeout fix."
+        )
 
 
 def _rec(
@@ -653,7 +1024,13 @@ def _add_event_pattern_recommendations(report: Report, event_stats: dict[str, An
         )
 
 
-def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples: int) -> Report:
+def analyze(
+    rows: list[TempRow],
+    event_stats: dict[str, Any] | None,
+    min_samples: int,
+    *,
+    prior_event_stats: dict[str, Any] | None = None,
+) -> Report:
     report = Report(log_dir="")
     report.notes.append(
         "Temperature CSV is sampled every 5 minutes — short compressor cycles are under-resolved; "
@@ -663,6 +1040,19 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
         "Recommendations are heuristics for holding the logged setpoint, cross-checked against the "
         "2 °C food profile (Quick Start §4 / recommended_settings_2c.html). Confirm before applying."
     )
+
+    ambient = summarise_ambient(rows)
+    report.ambient = ambient
+    cycle = build_cycle_rate_report(event_stats, label="analysis window")
+    prior_cycle = None
+    if prior_event_stats is not None:
+        prior_cycle = build_cycle_rate_report(prior_event_stats, label="prior window")
+        cmp = _compare_cycle_rates(cycle, prior_cycle)
+        if cmp:
+            cycle["vs_prior"] = cmp
+            report.notes.append(cmp)
+    cycle["prior"] = prior_cycle
+    report.cycle_rate = cycle
 
     usable = [r for r in rows if r.coolroom is not None]
     report.sample_count = len(usable)
@@ -704,6 +1094,7 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
             _add_cycle_recommendations(report, event_stats)
             _add_event_pattern_recommendations(report, event_stats)
         _dedupe_recommendations(report)
+        _apply_ambient_bias(report, ambient)
         return report
 
     cools = [r.coolroom for r in non_defrost if r.coolroom is not None]
@@ -917,6 +1308,7 @@ def analyze(rows: list[TempRow], event_stats: dict[str, Any] | None, min_samples
         _add_event_pattern_recommendations(report, event_stats)
 
     _dedupe_recommendations(report)
+    _apply_ambient_bias(report, ambient)
     return report
 
 
@@ -939,6 +1331,8 @@ def attach_current(report: Report, current: dict[str, float | None]) -> None:
 
 def print_report(report: Report) -> None:
     print(f"Log dir: {report.log_dir}")
+    if report.window:
+        print(f"Window: {report.window.get('label', _window_label(None, None))}")
     print(f"Temp files: {', '.join(report.temp_files) or '(none)'}")
     print(f"Events: {report.event_file or '(none)'}")
     if report.history is not None:
@@ -947,6 +1341,24 @@ def print_report(report: Report) -> None:
         f"Samples: {report.sample_count} total, {report.non_defrost_count} non-defrost"
         + (f", span {report.span_hours:.1f} h" if report.span_hours is not None else "")
     )
+    if report.ambient:
+        amb = report.ambient
+        if amb.get("present"):
+            print("\nAmbient (external):")
+            print(f"  {amb.get('detail')}")
+        else:
+            print(f"\nAmbient: {amb.get('detail', 'not present')}")
+
+    if report.cycle_rate and report.cycle_rate.get("present"):
+        cr = report.cycle_rate
+        print("\nCycle rate:")
+        print(f"  {cr.get('detail')}")
+        prior = cr.get("prior") or {}
+        if prior.get("present"):
+            print(f"  prior: {prior.get('detail')}")
+        if cr.get("vs_prior"):
+            print(f"  {cr['vs_prior']}")
+
     if report.stats and report.stats.get("coolroom_mean_c") is not None:
         s = report.stats
         print("\nHold quality (non-defrost):")
@@ -976,6 +1388,8 @@ def print_report(report: Report) -> None:
         print(f"  transitions: {es.get('compressor_transitions')}")
         if es.get("span_days") is not None:
             print(f"  event span : {es.get('span_days'):.1f} days")
+        if es.get("starts_per_day") is not None:
+            print(f"  starts/day : {es.get('starts_per_day'):.2f}")
         od, fd = es.get("on_duration_min") or {}, es.get("off_duration_min") or {}
         if od.get("n"):
             print(
@@ -1045,7 +1459,10 @@ def report_to_dict(report: Report) -> dict[str, Any]:
         "sample_count": report.sample_count,
         "non_defrost_count": report.non_defrost_count,
         "span_hours": report.span_hours,
+        "window": report.window,
         "history": hist,
+        "ambient": report.ambient,
+        "cycle_rate": report.cycle_rate,
         "stats": report.stats,
         "event_stats": report.event_stats,
         "notes": report.notes,
@@ -1054,27 +1471,87 @@ def report_to_dict(report: Report) -> dict[str, Any]:
     }
 
 
-def build_report(log_dir: Path, min_samples: int = 24) -> Report:
+def build_report(
+    log_dir: Path,
+    min_samples: int = 24,
+    since: date | None = None,
+    until: date | None = None,
+) -> Report:
     """Load a pulled log directory and run analysis (no host fetch)."""
     if not log_dir.is_dir():
         raise FileNotFoundError(f"not a directory: {log_dir}")
-    temp_paths, event_path = list_log_paths(log_dir)
-    history = measure_history(log_dir)
-    rows = load_temp_rows(temp_paths)
-    event_stats = load_event_stats(event_path) if event_path else None
-    report = analyze(rows, event_stats, min_samples=min_samples)
+    temp_paths_all, event_path = list_log_paths(log_dir)
+    temp_paths = filter_temp_paths(temp_paths_all, since, until)
+    history = measure_history(log_dir, since=since, until=until)
+    rows = filter_temp_rows(load_temp_rows(temp_paths), since, until)
+    event_stats = load_event_stats(event_path, since=since, until=until) if event_path else None
+
+    prior_event_stats = None
+    hist_first = history.first_ts.date() if history.first_ts else None
+    hist_last = history.last_ts.date() if history.last_ts else None
+    # For prior bounds, prefer configured window; else use measured history ends.
+    full_hist = measure_history(log_dir) if (since is not None or until is not None) else history
+    full_first = full_hist.first_ts.date() if full_hist.first_ts else hist_first
+    full_last = full_hist.last_ts.date() if full_hist.last_ts else hist_last
+    prior_bounds = _prior_equal_window(since, until, full_first, full_last)
+    if prior_bounds is not None and event_path is not None:
+        p_since, p_until = prior_bounds
+        # Only compare if prior intersects available history
+        if full_first is not None and p_until >= full_first:
+            clip_since = max(p_since, full_first)
+            prior_event_stats = load_event_stats(event_path, since=clip_since, until=p_until)
+            if int(prior_event_stats.get("event_rows") or 0) < 2:
+                prior_event_stats = None
+
+    report = analyze(
+        rows,
+        event_stats,
+        min_samples=min_samples,
+        prior_event_stats=prior_event_stats,
+    )
     report.log_dir = str(log_dir)
     report.temp_files = [p.name for p in temp_paths]
     report.event_file = event_path.name if event_path else None
     report.history = history
+    report.window = {
+        "since": since.isoformat() if since else None,
+        "until": until.isoformat() if until else None,
+        "label": _window_label(since, until),
+        "prior": (
+            {"since": prior_bounds[0].isoformat(), "until": prior_bounds[1].isoformat()}
+            if prior_bounds
+            else None
+        ),
+    }
     return report
 
 
 def main() -> int:
     args = _parse_args()
+    since: date | None = None
+    until: date | None = None
+    if args.window:
+        try:
+            since, until = resolve_preset_window(args.window)
+        except ValueError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+    else:
+        try:
+            if args.since:
+                since = parse_iso_date(args.since)
+            if args.until:
+                until = parse_iso_date(args.until)
+        except ValueError as e:
+            print(f"ERROR: bad date ({e})", file=sys.stderr)
+            return 1
+    if since is not None and until is not None and until < since:
+        print("ERROR: --until must be ≥ --since", file=sys.stderr)
+        return 1
+
     log_dir = args.log_dir
     try:
-        report = build_report(log_dir, min_samples=args.min_samples)
+        report = build_report(log_dir, min_samples=args.min_samples, since=since, until=until)
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -1084,13 +1561,13 @@ def main() -> int:
         if hist is None or hist.span_days < args.min_days:
             detail = hist.detail if hist else "no history measured"
             print(
-                f"ERROR: need ≥ {args.min_days:g} days of usable log history; "
+                f"ERROR: need ≥ {args.min_days:g} days of usable log history in the selected window; "
                 f"found {hist.span_days if hist else 0:.1f} days ({detail}).",
                 file=sys.stderr,
             )
             print(
-                "Pull more SD logs (events.csv preferred) or wait until the card has "
-                f"≥ {args.min_days:g} days before recommending tweaks.",
+                "Pull more SD logs (events.csv preferred), widen --since/--until, or wait until the "
+                f"card has ≥ {args.min_days:g} days in-window before recommending tweaks.",
                 file=sys.stderr,
             )
             return 2

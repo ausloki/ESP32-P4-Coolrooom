@@ -710,6 +710,13 @@ no-ops (silently skipped) rather than crashing or affecting cooling control.
 from the web dashboard, **operator (logged-in) access only** — see §4.11. There is no
 touchscreen equivalent, and deletion is never available on the touchscreen by design.
 
+**Optional PC re-tune from downloaded logs:** after about a month of history (or a harvest
+window), a recommend-only helper on a LAN PC can suggest allowlisted number tweaks from
+`events.csv` / daily CSVs — including WA picking-season windows (`--window picking`,
+20 Dec → 30 Apr) and ambient / compressor cycle-rate notes. It never auto-changes setpoint.
+See Quick Start §7 and `tools/README_LOG_TUNING.md` (scheduled runner:
+`tools/run_seasonal_log_tune.sh` / `.cmd`).
+
 > 📷 **Screenshot placeholder — Web Dashboard: System / SD Card buttons**
 > 📷 **Screenshot placeholder — Web Dashboard: Log file manager**
 
