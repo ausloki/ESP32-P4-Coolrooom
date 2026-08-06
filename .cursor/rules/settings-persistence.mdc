@@ -1,0 +1,34 @@
+# Settings persistence (mandatory — every build)
+
+Operator settings must **survive reboot**. This is standing practice for all
+features, not a special case.
+
+## When adding / renaming a restoring switch, number, or config select
+
+1. **Global** with `restore_value: yes` (and a sensible `initial_value`).
+2. **Entity** writes that global on every change (`turn_on`/`turn_off` /
+   `set_action` / select `set_action` as applicable). Switches that store
+   state in a global use `restore_mode: DISABLED`.
+3. **Call** `script.execute: persist_config_to_nvs` from those actions.
+4. **Stage** the global in `persist_config_to_nvs` (`gid->update()` list).
+5. **Dashboard** — add to `ADVANCED_SETTINGS_GROUPS` (or a hand panel);
+   re-embed with `python3 scripts/embed_dashboard.py`.
+6. **SD backup/restore** — extend `p4_sd_backup_params` /
+   `p4_sd_restore_params` (+ callers) when peer settings already live there.
+
+Selects that use ESPHome `restore_value: true` on the template select itself
+still need dashboard coverage; they are not staged via the globals script.
+
+## Closeout gate (fail closed)
+
+```bash
+.venv/bin/python tools/check_dashboard_coverage.py
+```
+
+Exits non-zero on dashboard gaps, missing `restore_value` / `persist_config_to_nvs`
+on DISABLED switches & numbers, or restoring globals omitted from the staging
+list. Do not ship past a red check. Deliberate absences go in
+`EXPECTED_ABSENT` **with a reason**.
+
+Prefer reboot (not USB factory flash) when verifying persistence — plain
+`esphome upload` over USB wipes NVS.

@@ -34,12 +34,25 @@ Clamp the CT on the **whole plant AC feed** that supplies the compressor, evapor
 fans, and this controller — **not** the compressor motor lead alone.
 
 At this plant, expect roughly **~64 W idle** (fans + controller, compressor off) vs
-**~190 W when the compressor is running**. Logging that band in SD column `ct_a` is
-enough for operators today; a future **run-proof** (confirm compressor actually draws
-when the relay is on) can key off idle vs run without changing the wiring. Run-proof
-is **not** implemented in firmware yet.
+**~190 W when the compressor is running** (~0.27 A / ~0.79 A @ **240 V**). Logging that
+band in SD column `ct_a` supports operators; firmware **CT run-proof** (opt-in) keys off
+idle vs run Amp thresholds without changing the wiring.
 
+### Run-proof (firmware)
 
+| Setting / entity | Default | Role |
+| --- | --- | --- |
+| `switch.ct_run-proof_enabled` | **Off** | Opt-in even when CT is enabled |
+| `number.ct_idle_max_current` | **0.40 A** | Idle band ceiling (~96 W @ 240 V) |
+| `number.ct_running_min_current` | **0.55 A** | Run band floor (~132 W @ 240 V) |
+| `number.ct_run-proof_delay` | **30 s** | Persist before trip |
+| `number.ct_overcurrent_limit` | **1.50 A** | Optional; **0** disables |
+| Alarms | — | `binary_sensor.ct_fail_to_start_alarm`, `ct_stuck_on_alarm`, `ct_overcurrent_alarm` |
+
+Evaluation only when **CT Clamp Enabled** + clamp **online** + run-proof **on**.
+Fail-to-start: relay ON, Amps ≤ idle max. Stuck-on: relay OFF (not defrost/drip), Amps ≥
+run min. Web **and** LVGL Settings 7/8 Probes controls are gated until CT Clamp Enabled is
+on. ntfy pushes on trip/clear (no speak). See USER_MANUAL §4.7 CT run-proof.
 
 ---
 
@@ -98,6 +111,11 @@ example before changing the map.
 | `switch.ct_clamp_enabled` | Master enable (`input_ct_clamp_enabled`, NVS, default false) |
 | `sensor.ct_clamp_current` | Amps (NaN when disabled or offline) |
 | `binary_sensor.rs485_ct_clamp_online` | Online only when **enabled** and Modbus answers |
+| `switch.ct_run-proof_enabled` | Opt-in run-proof (default false) |
+| `number.ct_idle_max_current` / `ct_running_min_current` / `ct_run-proof_delay` / `ct_overcurrent_limit` | Amp thresholds + delay (NVS) |
+| `binary_sensor.ct_fail_to_start_alarm` / `ct_stuck_on_alarm` / `ct_overcurrent_alarm` | Run-proof alarms |
 
-When disabled: no CT offline events / voice / ntfy; published current stays NaN.
-SD daily CSV column: **`ct_a`** (empty when disabled/offline).
+When CT disabled: no CT offline events / voice / ntfy; published current stays NaN;
+run-proof does not evaluate. When CT + run-proof armed: fail/stuck/overcurrent raise
+binary sensors, home banners, SD events, and **ntfy** (no speak clips). SD daily CSV
+column: **`ct_a`** (empty when disabled/offline).

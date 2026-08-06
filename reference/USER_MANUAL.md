@@ -556,13 +556,40 @@ Probe 2, and the internal SHT31 (SHT31 has no offset — raw and corrected match
 | **Evaporator Probe (Probe 2) Enabled** | Master switch for the evaporator RTD. | On/Off | On | Smart Defrost (§4.3) and the Ice Alarm (§4.5) both need Probe 2 — disabling it disables those features too, even if their own switches are on. Does **not** reassign which physical sensor is Probe 1 or Probe 2. |
 | **Internal SHT31 Sensor Enabled** | Cabinet humidity/temperature sensor. | On/Off | On | Informational + dew-point / frost-rate / auto-cal — see note below. Not a substitute for Probe 1. |
 | **External SHT20 Sensor Enabled** | Room/ambient humidity/temperature sensor. | On/Off | On | Informational only — see note below. |
-| **CT Clamp Enabled** | Optional RS485 CT clamp (Qineng QNDBK3) on the same Modbus bus. | On/Off | **Off** | Default off. When on, polls slave **110** @ **9600** for current (Amps). Not on the home gauge — see System Health / Hardware / HA `CT Clamp Current`. Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay). Clamp the **whole plant feed** (compressor + fans + controller), not compressor-only — plant bands are roughly ~64 W idle / ~190 W run; future run-proof can use idle vs run, but that is not implemented yet. |
+| **CT Clamp Enabled** | Optional RS485 CT clamp (Qineng QNDBK3) on the same Modbus bus. | On/Off | **Off** | Default off. When on, polls slave **110** @ **9600** for current (Amps). Not on the home gauge — see System Health / Hardware / HA `CT Clamp Current`. Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay). Clamp the **whole plant feed** (compressor + fans + controller), not compressor-only. |
+| **CT Run-Proof Enabled** | Opt-in plant-feed run-proof using the CT. | On/Off | **Off** | Still off by default even when the clamp is enabled. Web and touchscreen run-proof thresholds/delay are gated until **CT Clamp Enabled** is on. Evaluation requires clamp **online**. |
+| **CT Idle Max Current** | Amps ≤ this = idle band (fans+controller). | 0.05 – 5.0 A | **0.40 A** | ~96 W @ 240 V — above typical ~0.27 A (~64 W) idle with margin. Fail-to-start when compressor relay is ON but current stays ≤ this. |
+| **CT Running Min Current** | Amps ≥ this = run band. | 0.10 – 10.0 A | **0.55 A** | ~132 W @ 240 V — below typical ~0.79 A (~190 W) run with margin. Stuck-on when relay is OFF (not in defrost) but current stays ≥ this. Keep above Idle Max. |
+| **CT Run-Proof Delay** | Persist time before a CT run-proof alarm latches. | 5 – 300 s | **30 s** | Faster than No-Cool (minutes). CT polls every 5 s. |
+| **CT Overcurrent Limit** | Optional plant overcurrent while run-proof is on. | 0 – 20 A | **1.50 A** | ~360 W @ 240 V. Set **0** to disable overcurrent only. |
 
 > **CT install intent (optional).** Fit the clamp on the **whole coolroom plant feed**
 > (compressor + evaporator fans + this controller), not on the compressor lead alone.
-> That keeps idle (~64 W) vs run (~190 W @ this plant) distinguishable in logs (`ct_a`)
-> for a possible future run-proof check. Monitoring only today — no automatic run-proof.
-> Digest: `reference/QNDBK3-RS485-CT-clamp.md`.
+> Idle (~64 W ≈ 0.27 A @ 240 V) vs run (~190 W ≈ 0.79 A) are the plant bands behind the
+> Amp defaults above. Digest: `reference/QNDBK3-RS485-CT-clamp.md`.
+
+### CT run-proof (optional)
+
+*Touchscreen: Settings 7/8 — scroll below Auto Calibrate (run-proof rows grey /
+inactive until CT Clamp Enabled). Web: **Probes** section (same gate). HA: binary
+sensors + config entities. Home centre status / banner show the alarms when active.*
+
+When **CT Clamp Enabled** is off, the clamp is offline, or **CT Run-Proof Enabled** is
+off, run-proof does **not** evaluate and will not raise CT fail / stuck / overcurrent
+alarms.
+
+When armed (enabled + online + run-proof on):
+
+| Alarm | Condition | Event |
+|---|---|---|
+| **CT Fail to Start** | Compressor relay ON, Amps stay ≤ Idle Max for the delay | `CT_FAIL_TO_START` |
+| **CT Stuck On** | Compressor relay OFF (not defrost/drip), Amps stay ≥ Running Min for the delay | `CT_STUCK_ON` |
+| **CT Overcurrent** | Amps ≥ Overcurrent Limit for the delay (limit 0 = off) | `CT_OVERCURRENT` |
+
+Siren follows the shared alarm path (soft-mute from the home bell). **ntfy** pushes on
+latch and uses the shared Alarm CLEARED message on clear (§4.8 — Priority: CT Run-Proof).
+**No spoken / speak clips** for CT alarms by design — SD events, binary sensors, banners,
+and ntfy are the signals. Tune Amps after enable against a real start/stop on your plant feed.
 
 > **Probe wiring is fixed.** Probe 1 (RTD CH1) is always coolroom **room air** temperature;
 > Probe 2 (RTD CH2) is always the **evaporator coil** sensor. Do not swap the sensors on the
@@ -625,6 +652,7 @@ no-account-needed push service. Every message includes a timestamp.
 | **Priority: Ice Alarm** | min / low / default / high / urgent | high | Coil icing / airflow issue |
 | **Priority: Probe Fault** | min / low / default / high / urgent | urgent | With the main probe out, temperature alarms cannot protect the room |
 | **Priority: Hardware Offline** | min / low / default / high / urgent | urgent | Shared priority for relay board / temp board / humidity / ambient offline pushes (same faults as centre status + spoken alerts) |
+| **Priority: CT Run-Proof Alarm** | min / low / default / high / urgent | high | Shared priority for CT fail-to-start / stuck-on / overcurrent (no spoken alert) |
 | **Priority: SD Card Failure** | min / low / default / high / urgent | high | Cooling is unaffected — fair one to turn down |
 | **Priority: All-Clear Messages** | min / low / default / high / urgent | low | Covers Alarm CLEARED, SD Card Recovered, and hardware ONLINE recoveries; low so good news does not wake anyone |
 | **Send Test Notification** *(button)* | — | — | Confirm the phone is subscribed; sent at the High Temp Alarm priority |
@@ -636,6 +664,9 @@ no-account-needed push service. Every message includes a timestamp.
 | 🚪 Coolroom DOOR OPEN Alarm | *(Priority: Door Open)* | Door stays open past the Door Alarm Delay (§4.6) |
 | 🥶 Coolroom NO-COOL Alarm | *(Priority: No-Cool)* | Compressor running but room isn't cooling (§4.5) |
 | ❄️ Coolroom ICE ALARM | *(Priority: Ice)* | Ice Alarm Delta condition met (§4.5) |
+| ⚡ Coolroom CT FAIL TO START | *(Priority: CT Run-Proof)* | Compressor relay ON but plant Amps stay idle (§4.7) |
+| ⚡ Coolroom CT STUCK ON | *(Priority: CT Run-Proof)* | Compressor relay OFF but plant Amps stay in run band (§4.7) |
+| ⚡ Coolroom CT OVERCURRENT | *(Priority: CT Run-Proof)* | Plant Amps at/above overcurrent limit (§4.7) |
 | ✅ Coolroom Alarm CLEARED | *(Priority: All-Clear)* | Any alarm above recovers past its threshold/hysteresis band |
 | ⚠️ Coolroom PROBE FAULT | *(Priority: Probe Fault)* | Main probe fails (§4.7) |
 | ⚠️ Coolroom RELAY BOARD OFFLINE | *(Priority: Hardware Offline)* | Modbus relay board stops responding (§4.3 / centre status) |

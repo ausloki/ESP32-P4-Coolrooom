@@ -207,13 +207,16 @@ inline bool p4_door_is_open(bool nc_mode, bool reed_level) {
 // ─── Alarm / FX predicates ─────────────────────────────────────────────────
 
 /// Any alarm or probe-fault condition active (home bell, snow/flame suppress).
-inline bool p4_ui_any_alarm(bool hi, bool lo, bool door, bool no_cool, bool ice, bool probe) {
-    return hi || lo || door || no_cool || ice || probe;
+inline bool p4_ui_any_alarm(bool hi, bool lo, bool door, bool no_cool, bool ice, bool probe,
+                            bool ct_fail = false, bool ct_stuck = false, bool ct_over = false) {
+    return hi || lo || door || no_cool || ice || probe || ct_fail || ct_stuck || ct_over;
 }
 
 /// Banner conditions (probe fault has its own status path — not listed here).
-inline bool p4_ui_any_banner_alarm(bool hi, bool lo, bool door, bool no_cool, bool ice) {
-    return hi || lo || door || no_cool || ice;
+inline bool p4_ui_any_banner_alarm(bool hi, bool lo, bool door, bool no_cool, bool ice,
+                                   bool ct_fail = false, bool ct_stuck = false,
+                                   bool ct_over = false) {
+    return hi || lo || door || no_cool || ice || ct_fail || ct_stuck || ct_over;
 }
 
 // ─── Home centre status (rotating multi-fault) ─────────────────────────────
@@ -234,6 +237,9 @@ struct P4UiHomeStatusIn {
     bool     alarm_door;
     bool     alarm_no_cool;
     bool     alarm_ice;
+    bool     alarm_ct_fail;
+    bool     alarm_ct_stuck;
+    bool     alarm_ct_over;
     bool     defrost;
     bool     compressor_on;
     bool     lockout;
@@ -256,13 +262,16 @@ inline size_t p4_ui_home_status_collect_(const P4UiHomeStatusIn &in,
     if (in.alarm_door)                             push("DOOR OPEN");
     if (in.alarm_no_cool)                          push("NOT COOLING");
     if (in.alarm_ice)                              push("ICE ON COIL");
+    if (in.alarm_ct_fail)                          push("COMP FAIL TO START");
+    if (in.alarm_ct_stuck)                         push("COMP STUCK ON");
+    if (in.alarm_ct_over)                          push("CT OVERCURRENT");
     return n;
 }
 
 /// True when at least one fault/offline/alarm slot is active (centre text red).
 inline bool p4_ui_home_status_is_fault(const P4UiHomeStatusIn &in) {
-    const char *slots[12];
-    return p4_ui_home_status_collect_(in, slots, 12) > 0;
+    const char *slots[16];
+    return p4_ui_home_status_collect_(in, slots, 16) > 0;
 }
 
 /// Centre status string. With multiple faults, advances rotate_idx every
@@ -271,8 +280,8 @@ inline bool p4_ui_home_status_is_fault(const P4UiHomeStatusIn &in) {
 inline std::string p4_ui_home_status_text(const P4UiHomeStatusIn &in,
                                           uint32_t &rotate_idx,
                                           uint32_t &rotate_last_ms) {
-    const char *slots[12];
-    const size_t n = p4_ui_home_status_collect_(in, slots, 12);
+    const char *slots[16];
+    const size_t n = p4_ui_home_status_collect_(in, slots, 16);
     if (n == 0) {
         rotate_idx = 0;
         rotate_last_ms = 0;

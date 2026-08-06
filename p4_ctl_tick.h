@@ -425,7 +425,10 @@ if (!fault && !in_grace) {
      
      
      
-    bool any_alarm = hi || lo || nc || ice || ctl_door_alarm_active->value();
+    bool any_alarm = hi || lo || nc || ice || ctl_door_alarm_active->value() ||
+                     ctl_ct_fail_to_start_active->value() ||
+                     ctl_ct_stuck_on_active->value() ||
+                     ctl_ct_overcurrent_active->value();
     if (input_siren_enabled->value()) {
         if (any_alarm && !ctl_alarm_silenced->value() && !relay_siren->state)
             relay_siren->turn_on();
@@ -445,13 +448,72 @@ if (!fault && !in_grace) {
 }
 
  
- 
- 
+// CT run-proof — independent of temp grace/fault. Only when CT enabled+online
+// and run-proof opted in. Clears silently when disarmed (no false alarms).
 {
-    uint8_t mask = p4_ctl_alarm_mask(
+    const bool ct_armed = p4_ctl_ct_run_proof_armed(
+        input_ct_clamp_enabled->value(), hw_rs485_ct_ok->value(),
+        input_ct_run_proof_enabled->value());
+    const float ct_amps = ct_clamp_current->state;
+    const uint32_t ct_persist_ms =
+        (uint32_t)(ctl_ct_run_proof_delay_s->value() * 1000.0f);
+    const bool defrost_or_drip =
+        ctl_defrost_active->value() || ctl_defrost_dripping->value();
+
+    if (!ct_armed) {
+        ctl_ct_fail_since_ms->value() = 0;
+        ctl_ct_stuck_since_ms->value() = 0;
+        ctl_ct_over_since_ms->value() = 0;
+        ctl_ct_fail_to_start_active->value() = false;
+        ctl_ct_stuck_on_active->value() = false;
+        ctl_ct_overcurrent_active->value() = false;
+    } else {
+        const bool fail_cond = p4_ctl_ct_fail_to_start_condition(
+            true, relay_compressor->state, ct_amps, ctl_ct_idle_max_a->value());
+        if (fail_cond) {
+            if (ctl_ct_fail_since_ms->value() == 0)
+                ctl_ct_fail_since_ms->value() = now_ms;
+            if (p4_ctl_alarm_persisted(ctl_ct_fail_since_ms->value(), ct_persist_ms))
+                ctl_ct_fail_to_start_active->value() = true;
+        } else {
+            ctl_ct_fail_since_ms->value() = 0;
+            ctl_ct_fail_to_start_active->value() = false;
+        }
+
+        const bool stuck_cond = p4_ctl_ct_stuck_on_condition(
+            true, relay_compressor->state, defrost_or_drip, ct_amps,
+            ctl_ct_run_min_a->value());
+        if (stuck_cond) {
+            if (ctl_ct_stuck_since_ms->value() == 0)
+                ctl_ct_stuck_since_ms->value() = now_ms;
+            if (p4_ctl_alarm_persisted(ctl_ct_stuck_since_ms->value(), ct_persist_ms))
+                ctl_ct_stuck_on_active->value() = true;
+        } else {
+            ctl_ct_stuck_since_ms->value() = 0;
+            ctl_ct_stuck_on_active->value() = false;
+        }
+
+        const bool over_cond = p4_ctl_ct_overcurrent_condition(
+            true, ct_amps, ctl_ct_overcurrent_a->value());
+        if (over_cond) {
+            if (ctl_ct_over_since_ms->value() == 0)
+                ctl_ct_over_since_ms->value() = now_ms;
+            if (p4_ctl_alarm_persisted(ctl_ct_over_since_ms->value(), ct_persist_ms))
+                ctl_ct_overcurrent_active->value() = true;
+        } else {
+            ctl_ct_over_since_ms->value() = 0;
+            ctl_ct_overcurrent_active->value() = false;
+        }
+    }
+}
+
+{
+    uint16_t mask = p4_ctl_alarm_mask(
         ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
         ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-        ctl_ice_alarm_active->value(), ctl_probe_fault->value());
+        ctl_ice_alarm_active->value(), ctl_probe_fault->value(),
+        ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(),
+        ctl_ct_overcurrent_active->value());
     if (p4_ctl_alarm_silence_should_clear(
             ctl_alarm_silenced->value(), ctl_alarm_silenced_mask->value(), mask)) {
         const bool new_cond = mask != 0;
@@ -554,6 +616,42 @@ if (!fault && !in_grace) {
     } else if (!ice_now && ctl_ice_alarm_logged->value()) {
         ctl_ice_alarm_logged->value() = false;
         p4_sd_log_event("ICE_ALARM_CLEAR", "delta recovered");
+    }
+
+    bool ct_fail_now = ctl_ct_fail_to_start_active->value();
+    if (ct_fail_now && !ctl_ct_fail_to_start_logged->value()) {
+        ctl_ct_fail_to_start_logged->value() = true;
+        char d[96];
+        snprintf(d, sizeof(d), "amps=%.2f idle_max=%.2f compressor_on=1",
+                 ct_clamp_current->state, ctl_ct_idle_max_a->value());
+        p4_sd_log_event("CT_FAIL_TO_START", d);
+    } else if (!ct_fail_now && ctl_ct_fail_to_start_logged->value()) {
+        ctl_ct_fail_to_start_logged->value() = false;
+        p4_sd_log_event("CT_FAIL_TO_START_CLEAR", "run current seen or disarmed");
+    }
+
+    bool ct_stuck_now = ctl_ct_stuck_on_active->value();
+    if (ct_stuck_now && !ctl_ct_stuck_on_logged->value()) {
+        ctl_ct_stuck_on_logged->value() = true;
+        char d[96];
+        snprintf(d, sizeof(d), "amps=%.2f run_min=%.2f compressor_on=0",
+                 ct_clamp_current->state, ctl_ct_run_min_a->value());
+        p4_sd_log_event("CT_STUCK_ON", d);
+    } else if (!ct_stuck_now && ctl_ct_stuck_on_logged->value()) {
+        ctl_ct_stuck_on_logged->value() = false;
+        p4_sd_log_event("CT_STUCK_ON_CLEAR", "current dropped or disarmed");
+    }
+
+    bool ct_over_now = ctl_ct_overcurrent_active->value();
+    if (ct_over_now && !ctl_ct_overcurrent_logged->value()) {
+        ctl_ct_overcurrent_logged->value() = true;
+        char d[96];
+        snprintf(d, sizeof(d), "amps=%.2f limit=%.2f",
+                 ct_clamp_current->state, ctl_ct_overcurrent_a->value());
+        p4_sd_log_event("CT_OVERCURRENT", d);
+    } else if (!ct_over_now && ctl_ct_overcurrent_logged->value()) {
+        ctl_ct_overcurrent_logged->value() = false;
+        p4_sd_log_event("CT_OVERCURRENT_CLEAR", "current below limit or disarmed");
     }
 
      
@@ -680,13 +778,32 @@ if (sd_card_ok->value() && log_tick_count->value() >= log_every_ticks) {
       ntfy_ice_alarm_sent->value() = false;
       ntfy_alarm_clear_request->trigger();
     }
-     
-     
-     
-     
-     
-     
-     
+    // CT run-proof — push only (no speak_* scripts).
+    bool ntfy_ct_fail = ctl_ct_fail_to_start_active->value();
+    bool ntfy_ct_stuck = ctl_ct_stuck_on_active->value();
+    bool ntfy_ct_over = ctl_ct_overcurrent_active->value();
+    if (ntfy_ct_fail && !ntfy_ct_fail_sent->value()) {
+      ntfy_ct_fail_sent->value() = true;
+      ntfy_ct_fail_request->trigger();
+    } else if (!ntfy_ct_fail && ntfy_ct_fail_sent->value()) {
+      ntfy_ct_fail_sent->value() = false;
+      ntfy_alarm_clear_request->trigger();
+    }
+    if (ntfy_ct_stuck && !ntfy_ct_stuck_sent->value()) {
+      ntfy_ct_stuck_sent->value() = true;
+      ntfy_ct_stuck_request->trigger();
+    } else if (!ntfy_ct_stuck && ntfy_ct_stuck_sent->value()) {
+      ntfy_ct_stuck_sent->value() = false;
+      ntfy_alarm_clear_request->trigger();
+    }
+    if (ntfy_ct_over && !ntfy_ct_over_sent->value()) {
+      ntfy_ct_over_sent->value() = true;
+      ntfy_ct_over_request->trigger();
+    } else if (!ntfy_ct_over && ntfy_ct_over_sent->value()) {
+      ntfy_ct_over_sent->value() = false;
+      ntfy_alarm_clear_request->trigger();
+    }
+
     if (!sd_card_ok->value() && !ntfy_sd_failure_sent->value()) {
       ntfy_sd_failure_sent->value() = true;
       ntfy_sd_failure_request->trigger();
@@ -738,6 +855,9 @@ if (sd_card_ok->value() && log_tick_count->value() >= log_every_ticks) {
     ntfy_door_alarm_sent->value() = false;
     ntfy_no_cool_alarm_sent->value() = false;
     ntfy_ice_alarm_sent->value() = false;
+    ntfy_ct_fail_sent->value() = false;
+    ntfy_ct_stuck_sent->value() = false;
+    ntfy_ct_over_sent->value() = false;
     ntfy_sd_failure_sent->value() = false;
     ntfy_relay_board_offline_sent->value() = false;
     ntfy_temp_board_offline_sent->value() = false;

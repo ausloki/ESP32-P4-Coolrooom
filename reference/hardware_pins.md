@@ -395,8 +395,8 @@ Nanjing Qineng **QNDBK3/RS485** split-core CT on the **same** RS485 bus (H10 A/B
 | Baud | **9600** (must match UART; clamp baud code **1**) |
 | Current register | Holding **`0x1002`**, Amps = raw ÷ 10 |
 | Enable | `CT Clamp Enabled` — default **OFF**; Modbus polls only while on |
-| Entities | `sensor.ct_clamp_current`, `binary_sensor.rs485_ct_clamp_online`, SD column `ct_a` |
-| Sense point | **Whole plant feed** (compressor + fans + controller), not compressor-only — ~64 W idle / ~190 W run @ this plant; future run-proof may use those bands |
+| Entities | `sensor.ct_clamp_current`, `binary_sensor.rs485_ct_clamp_online`, SD `ct_a`; opt-in run-proof entities (see `QNDBK3-RS485-CT-clamp.md`) |
+| Sense point | **Whole plant feed** (compressor + fans + controller), not compressor-only — ~64 W idle / ~190 W run @ this plant (~0.27 / 0.79 A @ 240 V); run-proof defaults 0.40 / 0.55 A |
 
 Factory examples often ship at address **1** (collides with the relay). Reconfigure to
 **110** via broadcast `0xFF` write to `0x100B` before joining the live bus.

@@ -71,7 +71,7 @@ on any browser on your network.
 | 4 | Alarm Thresholds | Settings 4/8 | High/low temp alarm deltas, persist time, siren |
 | 5 | Alarms Advanced | Settings 5/8 | Ice enable/dwell/delta, no-cool, startup/defrost grace |
 | 6 | Door | Settings 6/8 | Sensor on/off, NC/NO, door light, hold compressor while open, alarm delay |
-| 7 | Probes | Settings 7/8 | Display unit, calibration offsets, calibrate, probe/humidity enables, optional CT clamp (Probe1=room air RTD CH1, Probe2=evap RTD CH2 — fixed) |
+| 7 | Probes | Settings 7/8 | Display unit, calibration offsets, calibrate, probe/humidity enables, optional CT clamp + gated run-proof (Probe1=room air RTD CH1, Probe2=evap RTD CH2 — fixed) |
 | 8 | Audio | Settings 8/8 | Master enable, volume, test, speak toggles, amp diagnostic |
 
 WiFi, the web login password, and SD card log-delete are **web-dashboard only** — by design,
@@ -155,6 +155,7 @@ continuous** (leave **Fan Relay Enabled** off). Humidity is monitored, not contr
 | **Door Alarm Delay** | `300 s` (default) | Routine loading; shorten if doors should never stay open long. |
 | **Evaporator Probe / Internal SHT31 / External SHT20** | `On` (defaults) | All-sensors profile — enable what is fitted; bench Modbus/I2C offline is expected until wired. |
 | **CT Clamp Enabled** | `Off` (default) | Optional RS485 current clamp on the **whole plant feed** — leave off unless fitted and addressed to **110** @ 9600. |
+| **CT Run-Proof** | Leave `Off` until CT is online | Opt-in after enable; defaults 0.40 A idle / 0.55 A run / 30 s (≈64 W idle / 190 W run @ 240 V). |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |
 | **SD Temp Log Retention** | `90 days` (factory 60) | Longer daily CSV history for food-room audit trail. |
 | **ntfy / Audio / Siren** | ntfy `Off` (default); Audio / Siren `On` | Turn ntfy on and subscribe the phone to your topic when you want push alerts; keep local audio/siren on. |

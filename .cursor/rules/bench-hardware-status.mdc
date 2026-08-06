@@ -13,7 +13,8 @@ peripheral boards as **expected**, not regressions, until Cory confirms they are
 - **RS485** — no relay board, no RTD Modbus boards, no optional CT clamp. `RS485 * Online`
   OFF, Modbus timeouts / "Stop waiting for response", and probe-fault / fallback paths are
   **expected** on the bench. **CT Clamp Enabled** defaults OFF (no CT Modbus polls until
-  turned on).
+  turned on). **CT run-proof** does not evaluate until the clamp is enabled and online —
+  do not treat absent run-proof alarms as a bug on the bench.
 - **External I2C temperature / humidity sensors** on the PH2.0 I2C header — not fitted.
   Missing ambient/external readings are **expected**.
 

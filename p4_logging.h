@@ -619,7 +619,12 @@ inline bool p4_sd_backup_params(
     float startup_grace_min,
     bool  door_light_enabled,
     bool  door_hold_compressor,
-    bool  ct_clamp_enabled = false
+    bool  ct_clamp_enabled = false,
+    bool  ct_run_proof_enabled = false,
+    float ct_idle_max_a = 0.40f,
+    float ct_run_min_a = 0.55f,
+    float ct_run_proof_delay_s = 30.0f,
+    float ct_overcurrent_a = 1.50f
 ) {
     if (!p4_sd_ready) {
         ESP_LOGW(TAG_SD, "SD not ready for backup — attempting remount");
@@ -686,7 +691,12 @@ inline bool p4_sd_backup_params(
         "  \"startup_grace_min\": %.1f,\n"
         "  \"door_light_enabled\": %s,\n"
         "  \"door_hold_compressor\": %s,\n"
-        "  \"ct_clamp_enabled\": %s\n"
+        "  \"ct_clamp_enabled\": %s,\n"
+        "  \"ct_run_proof_enabled\": %s,\n"
+        "  \"ct_idle_max_a\": %.2f,\n"
+        "  \"ct_run_min_a\": %.2f,\n"
+        "  \"ct_run_proof_delay_s\": %.1f,\n"
+        "  \"ct_overcurrent_a\": %.2f\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -711,7 +721,9 @@ inline bool p4_sd_backup_params(
         startup_grace_min,
         door_light_enabled ? "true" : "false",
         door_hold_compressor ? "true" : "false",
-        ct_clamp_enabled ? "true" : "false");
+        ct_clamp_enabled ? "true" : "false",
+        ct_run_proof_enabled ? "true" : "false",
+        ct_idle_max_a, ct_run_min_a, ct_run_proof_delay_s, ct_overcurrent_a);
     if (written > 0) p4_sd_note_write((size_t) written);
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
@@ -769,7 +781,12 @@ inline bool p4_sd_restore_params(
     float& startup_grace_min,
     bool&  door_light_enabled,
     bool&  door_hold_compressor,
-    bool&  ct_clamp_enabled
+    bool&  ct_clamp_enabled,
+    bool&  ct_run_proof_enabled,
+    float& ct_idle_max_a,
+    float& ct_run_min_a,
+    float& ct_run_proof_delay_s,
+    float& ct_overcurrent_a
 ) {
     if (!p4_sd_ready) return false;
 
@@ -787,7 +804,7 @@ inline bool p4_sd_restore_params(
     // defaults instead of the backed-up value). Discovered while adding the
     // humidity toggles below; fixed here since they'd otherwise be dead on
     // arrival too.
-    char buf[1536];
+    char buf[2048];
     size_t n = fread(buf, 1, sizeof(buf) - 1, f);
     fclose(f);
     p4_sd_note_read(n);
@@ -827,6 +844,11 @@ inline bool p4_sd_restore_params(
     bool b_door_hold_en = door_hold_compressor;
     // Seeded: older backup.json files pre-date the optional CT clamp toggle.
     bool b_ct_clamp_en = ct_clamp_enabled;
+    bool b_ct_run_proof_en = ct_run_proof_enabled;
+    float ct_idle = ct_idle_max_a;
+    float ct_run = ct_run_min_a;
+    float ct_delay = ct_run_proof_delay_s;
+    float ct_over = ct_overcurrent_a;
     float startup_grace = startup_grace_min;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
@@ -885,6 +907,11 @@ inline bool p4_sd_restore_params(
     parse_bool("\"door_light_enabled\"", b_door_light_en);
     parse_bool("\"door_hold_compressor\"", b_door_hold_en);
     parse_bool("\"ct_clamp_enabled\"", b_ct_clamp_en);
+    parse_bool("\"ct_run_proof_enabled\"", b_ct_run_proof_en);
+    parse_field("\"ct_idle_max_a\"", ct_idle);
+    parse_field("\"ct_run_min_a\"", ct_run);
+    parse_field("\"ct_run_proof_delay_s\"", ct_delay);
+    parse_field("\"ct_overcurrent_a\"", ct_over);
 
     // Naming the offending key matters: a bare "parse failed" gives no way to
     // tell a missing key from a malformed value from a stale file, and every
@@ -950,6 +977,11 @@ inline bool p4_sd_restore_params(
     door_light_enabled = b_door_light_en;
     door_hold_compressor = b_door_hold_en;
     ct_clamp_enabled = b_ct_clamp_en;
+    ct_run_proof_enabled = b_ct_run_proof_en;
+    ct_idle_max_a = ct_idle;
+    ct_run_min_a = ct_run;
+    ct_run_proof_delay_s = ct_delay;
+    ct_overcurrent_a = ct_over;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

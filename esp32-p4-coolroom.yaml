@@ -185,6 +185,12 @@ substitutions:
   # Keep the last N daily /sdcard/YYYY-MM-DD.csv temperature logs (7–365).
   # Pruned on mount / auto-remount and at most once per calendar day.
   default_sd_temp_log_retention_days: "60"
+  # CT run-proof (whole-plant feed @ 240 V): idle ~64 W≈0.27 A, run ~190 W≈0.79 A.
+  # Defaults sit in the gap with margin. Run-proof itself defaults OFF (opt-in).
+  default_ct_idle_max_a: "0.40"
+  default_ct_run_min_a: "0.55"
+  default_ct_run_proof_delay_s: "30"
+  default_ct_overcurrent_a: "1.50"
   # ── Phase 3: Defrost scheduling & probe health ────────────────────
   defrost_interval_h:  "8"      # hours between defrost cycles
   defrost_max_min:     "30"     # maximum defrost duration (minutes)
@@ -443,7 +449,7 @@ esp32:
       enable_idf_experimental_features: true
       # ESPHome otherwise wraps fprintf() in a 512-byte buffer that calls
       # esp_system_abort() on overflow — it assumes nothing writes real files.
-      # p4_sd_backup_params() emits ~1080 bytes of JSON in one fprintf, so
+      # p4_sd_backup_params() emits ~1200 bytes of JSON in one fprintf, so
       # pressing "Backup All Settings to SD" panicked and rebooted the
       # controller, leaving a 0-byte backup.json behind. Costs ~11 KB flash.
       enable_full_printf: true
@@ -1810,11 +1816,52 @@ switch:
           id(input_ct_clamp_enabled) = false;
           id(hw_rs485_ct_ok) = false;
           id(ctl_ct_clamp_offline_logged) = false;
+          id(ctl_ct_fail_to_start_active) = false;
+          id(ctl_ct_stuck_on_active) = false;
+          id(ctl_ct_overcurrent_active) = false;
+          id(ctl_ct_fail_since_ms) = 0;
+          id(ctl_ct_stuck_since_ms) = 0;
+          id(ctl_ct_over_since_ms) = 0;
+          id(ctl_ct_fail_to_start_logged) = false;
+          id(ctl_ct_stuck_on_logged) = false;
+          id(ctl_ct_overcurrent_logged) = false;
           id(ct_clamp).set_update_interval(86400000UL);  // 24h — effectively paused
           ESP_LOGI("config", "CT clamp DISABLED");
           p4_sd_log_event("CT_CLAMP_DISABLED", "modbus poll paused");
       - script.execute: persist_config_to_nvs
     lambda: 'return id(input_ct_clamp_enabled);'
+
+  - platform: template
+    id: sw_ct_run_proof_enabled
+    name: "CT Run-Proof Enabled"
+    icon: "mdi:shield-check"
+    restore_mode: DISABLED
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 24
+    turn_on_action:
+      - lambda: |-
+          id(input_ct_run_proof_enabled) = true;
+          ESP_LOGI("config", "CT run-proof ENABLED");
+          p4_sd_log_event("CT_RUN_PROOF_ENABLED", "opt-in plant-feed run proof");
+      - script.execute: persist_config_to_nvs
+    turn_off_action:
+      - lambda: |-
+          id(input_ct_run_proof_enabled) = false;
+          id(ctl_ct_fail_to_start_active) = false;
+          id(ctl_ct_stuck_on_active) = false;
+          id(ctl_ct_overcurrent_active) = false;
+          id(ctl_ct_fail_since_ms) = 0;
+          id(ctl_ct_stuck_since_ms) = 0;
+          id(ctl_ct_over_since_ms) = 0;
+          id(ctl_ct_fail_to_start_logged) = false;
+          id(ctl_ct_stuck_on_logged) = false;
+          id(ctl_ct_overcurrent_logged) = false;
+          ESP_LOGI("config", "CT run-proof DISABLED");
+          p4_sd_log_event("CT_RUN_PROOF_DISABLED", "run proof off");
+      - script.execute: persist_config_to_nvs
+    lambda: 'return id(input_ct_run_proof_enabled);'
 
 ##############################################################################
 # ntfy per-alert-type priority
@@ -1944,6 +1991,19 @@ select:
       sorting_weight: 36
 
   - platform: template
+    id: sel_ntfy_prio_ct
+    name: "CT Run-Proof Alarm Priority"
+    icon: "mdi:current-ac"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "high"
+    options: ["min", "low", "default", "high", "urgent"]
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 37
+
+  - platform: template
     id: sel_ntfy_prio_sd
     name: "SD Card Alert Priority"
     icon: "mdi:sd"
@@ -1954,7 +2014,7 @@ select:
     options: ["min", "low", "default", "high", "urgent"]
     web_server:
       sorting_group_id: group_alarms
-      sorting_weight: 37
+      sorting_weight: 38
 
   # Covers both "Alarm CLEARED" and "SD Card Recovered" — the recovery class.
   - platform: template
@@ -1968,7 +2028,7 @@ select:
     options: ["min", "low", "default", "high", "urgent"]
     web_server:
       sorting_group_id: group_alarms
-      sorting_weight: 38
+      sorting_weight: 39
 
 ##############################################################################
 # Sensors — all temperature probes are RS485 RTD
@@ -2737,7 +2797,7 @@ binary_sensor:
     name: "Any Alarm Active"
     device_class: problem
     entity_category: diagnostic
-    lambda: 'return p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault));'
+    lambda: 'return p4_ui_any_alarm(id(ctl_alarm_high_active), id(ctl_alarm_low_active), id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active), id(ctl_ice_alarm_active), id(ctl_probe_fault), id(ctl_ct_fail_to_start_active), id(ctl_ct_stuck_on_active), id(ctl_ct_overcurrent_active));'
     on_state:
       - lvgl.label.update:
           id: ui_alarm_icon
@@ -2770,6 +2830,33 @@ binary_sensor:
       sorting_group_id: group_alarms
       sorting_weight: 6
     lambda: 'return id(ctl_ice_alarm_active);'
+
+  - platform: template
+    id: ct_fail_to_start_alarm
+    name: "CT Fail to Start Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 7
+    lambda: 'return id(ctl_ct_fail_to_start_active);'
+
+  - platform: template
+    id: ct_stuck_on_alarm
+    name: "CT Stuck On Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 8
+    lambda: 'return id(ctl_ct_stuck_on_active);'
+
+  - platform: template
+    id: ct_overcurrent_alarm
+    name: "CT Overcurrent Alarm"
+    device_class: problem
+    web_server:
+      sorting_group_id: group_alarms
+      sorting_weight: 9
+    lambda: 'return id(ctl_ct_overcurrent_active);'
 
   - platform: template
     id: sensor_fallback_sensor
@@ -3154,6 +3241,78 @@ number:
     set_action:
       - lambda: |-
           id(ctl_ice_dwell_min) = x;
+      - script.execute: persist_config_to_nvs
+
+  - platform: template
+    id: ct_idle_max_num
+    name: "CT Idle Max Current (A)"
+    icon: "mdi:current-ac"
+    unit_of_measurement: "A"
+    min_value: 0.05
+    max_value: 5.0
+    step: 0.05
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 25
+    lambda: 'return id(ctl_ct_idle_max_a);'
+    set_action:
+      - lambda: |-
+          id(ctl_ct_idle_max_a) = x;
+      - script.execute: persist_config_to_nvs
+
+  - platform: template
+    id: ct_run_min_num
+    name: "CT Running Min Current (A)"
+    icon: "mdi:current-ac"
+    unit_of_measurement: "A"
+    min_value: 0.10
+    max_value: 10.0
+    step: 0.05
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 26
+    lambda: 'return id(ctl_ct_run_min_a);'
+    set_action:
+      - lambda: |-
+          id(ctl_ct_run_min_a) = x;
+      - script.execute: persist_config_to_nvs
+
+  - platform: template
+    id: ct_run_proof_delay_num
+    name: "CT Run-Proof Delay (s)"
+    icon: "mdi:timer-outline"
+    unit_of_measurement: "s"
+    min_value: 5
+    max_value: 300
+    step: 5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 27
+    lambda: 'return id(ctl_ct_run_proof_delay_s);'
+    set_action:
+      - lambda: |-
+          id(ctl_ct_run_proof_delay_s) = x;
+      - script.execute: persist_config_to_nvs
+
+  - platform: template
+    id: ct_overcurrent_num
+    name: "CT Overcurrent Limit (A)"
+    icon: "mdi:flash-alert"
+    unit_of_measurement: "A"
+    min_value: 0.0
+    max_value: 20.0
+    step: 0.1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_probes
+      sorting_weight: 28
+    lambda: 'return id(ctl_ct_overcurrent_a);'
+    set_action:
+      - lambda: |-
+          id(ctl_ct_overcurrent_a) = x;
       - script.execute: persist_config_to_nvs
 
   - platform: template
@@ -3883,7 +4042,9 @@ button:
           id(ctl_probe1_offset_c), id(ctl_probe2_offset_c),
           id(input_dew_point_trigger_enabled), id(ctl_startup_grace_min),
           id(input_door_light_enabled), id(input_door_hold_compressor),
-          id(input_ct_clamp_enabled));
+          id(input_ct_clamp_enabled), id(input_ct_run_proof_enabled),
+          id(ctl_ct_idle_max_a), id(ctl_ct_run_min_a),
+          id(ctl_ct_run_proof_delay_s), id(ctl_ct_overcurrent_a));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -3934,6 +4095,11 @@ button:
           bool door_light_en = id(input_door_light_enabled);
           bool door_hold_en = id(input_door_hold_compressor);
           bool ct_clamp_en = id(input_ct_clamp_enabled);
+          bool ct_run_proof_en = id(input_ct_run_proof_enabled);
+          float ct_idle = id(ctl_ct_idle_max_a);
+          float ct_run = id(ctl_ct_run_min_a);
+          float ct_delay = id(ctl_ct_run_proof_delay_s);
+          float ct_over = id(ctl_ct_overcurrent_a);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -3943,7 +4109,8 @@ button:
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en,
               p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en,
-              door_hold_en, ct_clamp_en)) {
+              door_hold_en, ct_clamp_en, ct_run_proof_en,
+              ct_idle, ct_run, ct_delay, ct_over)) {
               // Clamp to the live dial floor (backup may pre-date the clamp).
               if (sp < ${dial_min_c}) {
                 ESP_LOGW("config", "Restore: setpoint %.1f°C raised to %.0f°C",
@@ -3996,6 +4163,11 @@ button:
             id(input_door_light_enabled) = door_light_en;
             id(input_door_hold_compressor) = door_hold_en;
             id(input_ct_clamp_enabled) = ct_clamp_en;
+            id(input_ct_run_proof_enabled) = ct_run_proof_en;
+            id(ctl_ct_idle_max_a) = ct_idle;
+            id(ctl_ct_run_min_a) = ct_run;
+            id(ctl_ct_run_proof_delay_s) = ct_delay;
+            id(ctl_ct_overcurrent_a) = ct_over;
             if (ct_clamp_en) id(ct_clamp).set_update_interval(5000);
             else             id(ct_clamp).set_update_interval(86400000UL);
               if (esphome::global_preferences != nullptr)
@@ -4054,7 +4226,9 @@ interval:
           in.any_alarm = p4_ui_any_alarm(
               id(ctl_alarm_high_active), id(ctl_alarm_low_active),
               id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-              id(ctl_ice_alarm_active), id(ctl_probe_fault));
+              id(ctl_ice_alarm_active), id(ctl_probe_fault),
+              id(ctl_ct_fail_to_start_active), id(ctl_ct_stuck_on_active),
+              id(ctl_ct_overcurrent_active));
           in.alarm_silenced = id(ctl_alarm_silenced);
           in.col_blue = id(col_blue);
           in.col_red = id(col_red);
@@ -4198,6 +4372,77 @@ globals:
     restore_value: yes
     initial_value: "false"
 
+  # CT run-proof (opt-in even when CT enabled). Whole-plant-feed Amps thresholds.
+  - id: input_ct_run_proof_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+  - id: ctl_ct_idle_max_a
+    type: float
+    restore_value: yes
+    initial_value: ${default_ct_idle_max_a}
+
+  - id: ctl_ct_run_min_a
+    type: float
+    restore_value: yes
+    initial_value: ${default_ct_run_min_a}
+
+  - id: ctl_ct_run_proof_delay_s
+    type: float
+    restore_value: yes
+    initial_value: ${default_ct_run_proof_delay_s}
+
+  - id: ctl_ct_overcurrent_a
+    type: float
+    restore_value: yes
+    initial_value: ${default_ct_overcurrent_a}
+
+  - id: ctl_ct_fail_to_start_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ct_stuck_on_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ct_overcurrent_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ct_fail_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_ct_stuck_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_ct_over_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ctl_ct_fail_to_start_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ct_stuck_on_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ctl_ct_overcurrent_logged
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
   - id: hw_rs485_ct_ok
     type: bool
     restore_value: no
@@ -4295,7 +4540,7 @@ globals:
     initial_value: "false"
 
   - id: ctl_alarm_silenced_mask
-    type: uint8_t
+    type: uint16_t
     restore_value: no
     initial_value: "0"
 
@@ -4372,6 +4617,22 @@ globals:
     initial_value: "false"
 
   - id: ntfy_ice_alarm_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # CT run-proof alarms — ntfy only (no speak clips by design).
+  - id: ntfy_ct_fail_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_ct_stuck_sent
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: ntfy_ct_over_sent
     type: bool
     restore_value: no
     initial_value: "false"
@@ -5471,10 +5732,12 @@ lvgl:
                   id(ctl_alarm_silenced_mask) = p4_ctl_alarm_mask(
                       id(ctl_alarm_high_active), id(ctl_alarm_low_active),
                       id(ctl_door_alarm_active), id(ctl_no_cool_alarm_active),
-                      id(ctl_ice_alarm_active), id(ctl_probe_fault));
+                      id(ctl_ice_alarm_active), id(ctl_probe_fault),
+                      id(ctl_ct_fail_to_start_active), id(ctl_ct_stuck_on_active),
+                      id(ctl_ct_overcurrent_active));
                   if (id(relay_siren).state) id(relay_siren).turn_off();
                   p4_sd_log_event("ALARM_SILENCED", "operator muted siren/audio from home bell");
-                  ESP_LOGI("ui", "Alarm silenced from home screen (mask=0x%02X)",
+                  ESP_LOGI("ui", "Alarm silenced from home screen (mask=0x%03X)",
                            id(ctl_alarm_silenced_mask));
 
         # Center Arc Gauge — vertical snap-scroll between two horseshoe views.
@@ -8685,6 +8948,329 @@ lvgl:
                   widgets: [{label: {align: CENTER, text: "Calibrate Probes Now", text_font: font_medium, text_color: col_text}}]
                   on_click:
                     - button.press: btn_calibration_start
+              # Optional CT clamp + run-proof (gated like web requires: ct_clamp_enabled).
+              - label: {x: 0, y: 432, width: 460, text: "CT Clamp Enabled", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_ctclamp, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - switch.toggle: sw_ct_clamp_enabled
+                          - script.execute: refresh_all_settings_labels
+              - label: {id: lbl_hdr_ct_runproof, x: 500, y: 432, width: 460, text: "CT Run-Proof Enabled", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 462
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 180
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_sw_ctrunproof, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 196
+                        y: 4
+                        width: 240
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "Toggle", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - switch.toggle: sw_ct_run_proof_enabled
+                                - script.execute: refresh_all_settings_labels
+              - label: {id: lbl_hdr_ct_idle, x: 0, y: 540, width: 460, text: "CT Idle Max (A)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 570
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_ctidle, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.increment: {id: ct_idle_max_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.decrement: {id: ct_idle_max_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+              - label: {id: lbl_hdr_ct_runmin, x: 500, y: 540, width: 460, text: "CT Running Min (A)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 570
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_ctrunmin, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.increment: {id: ct_run_min_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.decrement: {id: ct_run_min_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+              - label: {id: lbl_hdr_ct_delay, x: 0, y: 648, width: 460, text: "CT Run-Proof Delay (s)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 0
+                  y: 678
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_ctdelay, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.increment: {id: ct_run_proof_delay_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.decrement: {id: ct_run_proof_delay_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+              - label: {id: lbl_hdr_ct_over, x: 500, y: 648, width: 460, text: "CT Overcurrent (A)", text_font: font_medium, text_color: col_text}
+              - obj:
+                  x: 500
+                  y: 678
+                  width: 460
+                  height: 64
+                  bg_color: col_bg
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - obj:
+                        x: 0
+                        y: 4
+                        width: 220
+                        height: 56
+                        bg_color: col_panel
+                        radius: 8
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: {id: lbl_st_ctover, align: CENTER, text: "---", text_font: font_medium, text_color: col_text}
+                    - button:
+                        x: 236
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "+", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.increment: {id: ct_overcurrent_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
+                    - button:
+                        x: 348
+                        y: 4
+                        width: 100
+                        height: 56
+                        bg_color: col_blue
+                        radius: 8
+                        border_width: 0
+                        pad_top: 0
+                        pad_bottom: 0
+                        pad_left: 0
+                        pad_right: 0
+                        widgets: [{label: {align: CENTER, text: "-", text_font: font_medium, text_color: col_text}}]
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: 'return id(input_ct_clamp_enabled);'
+                              then:
+                                - number.decrement: {id: ct_overcurrent_num, cycle: false}
+                                - script.execute: refresh_all_settings_labels
         - button:
             x: 0
             y: 552
@@ -10368,6 +10954,11 @@ script:
           input_humidity_internal_enabled->update();
           input_humidity_external_enabled->update();
           input_ct_clamp_enabled->update();
+          input_ct_run_proof_enabled->update();
+          ctl_ct_idle_max_a->update();
+          ctl_ct_run_min_a->update();
+          ctl_ct_run_proof_delay_s->update();
+          ctl_ct_overcurrent_a->update();
           ctl_pin_hash->update();
           ctl_ntfy_server->update();
           ctl_ntfy_topic->update();
@@ -10625,6 +11216,57 @@ script:
           text: !lambda |-
             return id(sel_temperature_display_unit).current_option() == "Fahrenheit"
                 ? std::string("°F") : std::string("°C");
+      - lvgl.label.update:
+          id: lbl_sw_ctclamp
+          text: !lambda 'return std::string(id(input_ct_clamp_enabled) ? "ON" : "OFF");'
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_green) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_sw_ctrunproof
+          text: !lambda |-
+            if (!id(input_ct_clamp_enabled)) return std::string("---");
+            return std::string(id(input_ct_run_proof_enabled) ? "ON" : "OFF");
+          text_color: !lambda |-
+            if (!id(input_ct_clamp_enabled)) return id(col_grey);
+            return id(input_ct_run_proof_enabled) ? id(col_green) : id(col_grey);
+      - lvgl.label.update:
+          id: lbl_st_ctidle
+          text: !lambda |-
+            if (!id(input_ct_clamp_enabled)) return std::string("---");
+            char b[16]; snprintf(b, sizeof(b), "%.2f A", id(ctl_ct_idle_max_a)); return std::string(b);
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_ctrunmin
+          text: !lambda |-
+            if (!id(input_ct_clamp_enabled)) return std::string("---");
+            char b[16]; snprintf(b, sizeof(b), "%.2f A", id(ctl_ct_run_min_a)); return std::string(b);
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_ctdelay
+          text: !lambda |-
+            if (!id(input_ct_clamp_enabled)) return std::string("---");
+            char b[16]; snprintf(b, sizeof(b), "%d s", (int) id(ctl_ct_run_proof_delay_s)); return std::string(b);
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_st_ctover
+          text: !lambda |-
+            if (!id(input_ct_clamp_enabled)) return std::string("---");
+            char b[16]; snprintf(b, sizeof(b), "%.1f A", id(ctl_ct_overcurrent_a)); return std::string(b);
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_hdr_ct_runproof
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_hdr_ct_idle
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_hdr_ct_runmin
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_hdr_ct_delay
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
+      - lvgl.label.update:
+          id: lbl_hdr_ct_over
+          text_color: !lambda 'return id(input_ct_clamp_enabled) ? id(col_text) : id(col_grey);'
 
       - lvgl.label.update:
           id: lbl_st_minrun
@@ -11054,6 +11696,61 @@ script:
             p4_fmt_time(ts, sizeof(ts));
             char buf[96];
             snprintf(buf, sizeof(buf), "[%s] Evaporator coil may be iced — check airflow.", ts);
+            return std::string(buf);
+
+  # CT run-proof — ntfy only (no speak clips). Clears use ntfy_alarm_clear_request.
+  - id: ntfy_ct_fail_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom CT FAIL TO START"
+            Priority: !lambda 'return id(sel_ntfy_prio_ct).current_option().c_str();'
+            Tags: "electric_plug,warning"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Compressor relay ON but plant current still idle (%.2f A ≤ %.2f A).",
+                     ts, id(ct_clamp_current).state, id(ctl_ct_idle_max_a));
+            return std::string(buf);
+
+  - id: ntfy_ct_stuck_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom CT STUCK ON"
+            Priority: !lambda 'return id(sel_ntfy_prio_ct).current_option().c_str();'
+            Tags: "electric_plug,rotating_light"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Compressor relay OFF but plant current still running (%.2f A ≥ %.2f A).",
+                     ts, id(ct_clamp_current).state, id(ctl_ct_run_min_a));
+            return std::string(buf);
+
+  - id: ntfy_ct_over_request
+    then:
+      - http_request.post:
+          url: !lambda |-
+            return id(ctl_ntfy_server) + "/" + id(ctl_ntfy_topic);
+          request_headers:
+            Title: "Coolroom CT OVERCURRENT"
+            Priority: !lambda 'return id(sel_ntfy_prio_ct).current_option().c_str();'
+            Tags: "zap,warning"
+          body: !lambda |-
+            char ts[24];
+            p4_fmt_time(ts, sizeof(ts));
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "[%s] Plant current %.2f A at or above overcurrent limit %.2f A.",
+                     ts, id(ct_clamp_current).state, id(ctl_ct_overcurrent_a));
             return std::string(buf);
 
   # New — SD card failure alert. Fires once when the card goes from

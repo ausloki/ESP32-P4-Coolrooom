@@ -390,6 +390,15 @@
         .adv-preview-btn:hover:not(:disabled) {
             filter: brightness(0.92);
         }
+        .adv-field.is-gated-off {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+        .adv-field.is-gated-off::after {
+            content: " (requires CT Clamp Enabled)";
+            font-size: 0.75em;
+            opacity: 0.85;
+        }
         .adv-preview-btn:disabled {
             opacity: 0.45;
             cursor: not-allowed;
@@ -1858,6 +1867,10 @@
             'binary_sensor-rs485_ct_clamp_online': 'rs485_ct_ok',
             'sensor-ct_clamp_current': 'ct_current',
             'switch-ct_clamp_enabled': 'ct_clamp_enabled',
+            'switch-ct_run-proof_enabled': 'ct_run_proof_enabled',
+            'binary_sensor-ct_fail_to_start_alarm': 'alarm_ct_fail_active',
+            'binary_sensor-ct_stuck_on_alarm': 'alarm_ct_stuck_active',
+            'binary_sensor-ct_overcurrent_alarm': 'alarm_ct_over_active',
             'binary_sensor-system_time_valid': 'system_time_ok',
             'text_sensor-status': 'controller_status',
             'binary_sensor-sht31__internal_humidity__online': 'sht31_ok',
@@ -1909,7 +1922,8 @@
         const BOOL_FIELDS = new Set([
             'compressor_on', 'fan_on', 'defrost_phase', 'alarm_high_active', 'alarm_low_active',
             'alarm_ice_active', 'alarm_door_active', 'alarm_nocool_active',
-            'rs485_relay_ok', 'rs485_rtd_ok', 'rs485_ct_ok', 'ct_clamp_enabled',
+            'rs485_relay_ok', 'rs485_rtd_ok', 'rs485_ct_ok', 'ct_clamp_enabled', 'ct_run_proof_enabled',
+            'alarm_ct_fail_active', 'alarm_ct_stuck_active', 'alarm_ct_over_active',
             'system_time_ok', 'sht31_ok', 'sht20_ok',
             'wifi_connected', 'probe_fault', 'light_on', 'sd_card_ok', 'controller_online',
             'siren_on', 'relay_en_compressor', 'relay_en_fan', 'relay_en_light', 'relay_en_siren',
@@ -2135,6 +2149,9 @@
             if (data.alarm_door_active) activeAlarms.push('Door Open');
             if (data.alarm_nocool_active) activeAlarms.push('No Cooling');
             if (data.alarm_ice_active) activeAlarms.push('Ice');
+            if (data.alarm_ct_fail_active) activeAlarms.push('CT Fail to Start');
+            if (data.alarm_ct_stuck_active) activeAlarms.push('CT Stuck On');
+            if (data.alarm_ct_over_active) activeAlarms.push('CT Overcurrent');
             if (data.probe_fault) activeAlarms.push('Probe Fault');
             setTileIconState('iconAlarms', activeAlarms.length ? 'is-alert' : null);
             const alarmsEl = document.getElementById('iconAlarms');
@@ -2173,7 +2190,11 @@
             const ctBadge = !ctEnabled
                 ? '<span class="status-badge status-idle">disabled</span>'
                 : `<span class="status-badge ${data.rs485_ct_ok ? 'status-ok' : 'status-error'}">${data.rs485_ct_ok ? '✓ online' : '✗ offline'}</span>`;
-            setHtml('ctClampStatus', `${ctBadge}<br>${ctAmps}`);
+            let ctAlarmHtml = '';
+            if (data.alarm_ct_fail_active) ctAlarmHtml += '<br><span class="status-badge status-error">Fail to Start</span>';
+            if (data.alarm_ct_stuck_active) ctAlarmHtml += '<br><span class="status-badge status-error">Stuck On</span>';
+            if (data.alarm_ct_over_active) ctAlarmHtml += '<br><span class="status-badge status-error">Overcurrent</span>';
+            setHtml('ctClampStatus', `${ctBadge}<br>${ctAmps}${ctAlarmHtml}`);
 
             const cpuTxt = formatCpuUsagePct(
                 data.cpu_usage_pct, data.cpu_usage_core0_pct, data.cpu_usage_core1_pct);
@@ -2681,6 +2702,8 @@
                       help: 'ntfy priority for the \u26a0\ufe0f PROBE FAULT push. Defaults to urgent: with the main probe out, temperature alarms cannot protect the room.' },
                     { type: 'select', entity: 'hardware_offline_priority', name: 'Hardware Offline Priority', label: 'Priority: Hardware Offline',
                       help: 'ntfy priority for RELAY BOARD / TEMP BOARD / HUMIDITY SENSOR / AMBIENT SENSOR OFFLINE pushes. Defaults to urgent — these match the rotating centre-status faults and spoken alerts.' },
+                    { type: 'select', entity: 'ct_run-proof_alarm_priority', name: 'CT Run-Proof Alarm Priority', label: 'Priority: CT Run-Proof Alarm',
+                      help: 'ntfy priority for CT FAIL TO START / CT STUCK ON / CT OVERCURRENT pushes (whole-plant feed run-proof). No spoken alert for these — push + banners + SD events only. Defaults to high.' },
                     { type: 'select', entity: 'sd_card_alert_priority', name: 'SD Card Alert Priority', label: 'Priority: SD Card Failure',
                       help: 'ntfy priority for the \u26a0\ufe0f SD CARD FAILURE push. Cooling is unaffected by a dead card \u2014 only logging and backup stop \u2014 so this is a fair one to turn down.' },
                     { type: 'select', entity: 'all-clear_message_priority', name: 'All-Clear Message Priority', label: 'Priority: All-Clear Messages',
@@ -2721,7 +2744,22 @@
                     { type: 'switch', entity: 'external_sht20_sensor_enabled', name: 'External SHT20 Sensor Enabled', label: 'External SHT20 Sensor Enabled',
                       help: 'Whether the external (ambient) SHT20 temperature/humidity sensor is read.' },
                     { type: 'switch', entity: 'ct_clamp_enabled', name: 'CT Clamp Enabled', label: 'CT Clamp Enabled',
-                      help: 'Optional RS485 CT clamp (QNDBK3) on the same Modbus bus. Default off. When on, polls slave address 110 at 9600 for current (Amps). Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay board).' },
+                      help: 'Optional RS485 CT clamp (QNDBK3) on the same Modbus bus. Default off. When on, polls slave address 110 at 9600 for current (Amps). Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay board). Whole plant feed (~64 W idle / ~190 W run @ 240 V).' },
+                    { type: 'switch', entity: 'ct_run-proof_enabled', name: 'CT Run-Proof Enabled', label: 'CT Run-Proof Enabled',
+                      requires: 'ct_clamp_enabled',
+                      help: 'Opt-in compressor run-proof using the whole-plant CT. Default off even when the clamp is enabled. When on and the clamp is online: fail-to-start if relay ON but Amps stay in the idle band; stuck-on if relay OFF but Amps stay in the run band; optional overcurrent above the limit. Unavailable while CT Clamp Enabled is off.' },
+                    { type: 'number', entity: 'ct_idle_max_current__a_', name: 'CT Idle Max Current (A)', label: 'CT Idle Max Current (A)', min: 0.05, max: 5, step: 0.05,
+                      requires: 'ct_clamp_enabled',
+                      help: 'Amps at or below this count as idle (fans+controller, compressor not drawing). Default 0.40 A (~96 W @ 240 V) — above typical ~0.27 A idle with margin. Fail-to-start trips when the compressor relay is ON but current stays ≤ this for the run-proof delay.' },
+                    { type: 'number', entity: 'ct_running_min_current__a_', name: 'CT Running Min Current (A)', label: 'CT Running Min Current (A)', min: 0.1, max: 10, step: 0.05,
+                      requires: 'ct_clamp_enabled',
+                      help: 'Amps at or above this count as compressor running. Default 0.55 A (~132 W @ 240 V) — below typical ~0.79 A run with margin. Stuck-on trips when the compressor relay is OFF (and not in defrost) but current stays ≥ this for the delay. Keep this above Idle Max.' },
+                    { type: 'number', entity: 'ct_run-proof_delay__s_', name: 'CT Run-Proof Delay (s)', label: 'CT Run-Proof Delay (s)', min: 5, max: 300, step: 5,
+                      requires: 'ct_clamp_enabled',
+                      help: 'How long a fail-to-start / stuck-on / overcurrent condition must hold before the alarm fires. Default 30 s (faster than No-Cool). CT polls every 5 s.' },
+                    { type: 'number', entity: 'ct_overcurrent_limit__a_', name: 'CT Overcurrent Limit (A)', label: 'CT Overcurrent Limit (A)', min: 0, max: 20, step: 0.1,
+                      requires: 'ct_clamp_enabled',
+                      help: 'Optional plant overcurrent trip while run-proof is enabled. Default 1.50 A (~360 W @ 240 V). Set to 0 to disable the overcurrent check only.' },
                 ],
             },
             {
@@ -2868,8 +2906,9 @@
                     const labelEsc = f.label.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                     if (f.type === 'number') {
                         const inputId = `adv_${f.entity}`;
+                        const req = f.requires ? ` data-requires="${f.requires}"` : '';
                         return `
-                            <div class="adv-field">
+                            <div class="adv-field"${req}>
                                 <div class="field-label-row">
                                     <label for="${inputId}">${f.label}</label>
                                     ${helpIcon}
@@ -2925,8 +2964,9 @@
                             return `<button type="button" class="adv-preview-btn" title="Play ${f.label}" aria-label="Play ${f.label}" onclick="pressButtonSetting('${pName}', 'Preview: ${labelEsc}')">🔊</button>`;
                           })()
                         : '';
+                    const req = f.requires ? ` data-requires="${f.requires}"` : '';
                     return `
-                        <div class="adv-field">
+                        <div class="adv-field"${req}>
                             <div class="field-label-row">
                                 <label>${f.label}</label>
                                 ${helpIcon}
@@ -3057,6 +3097,14 @@
                         btn.classList.toggle('is-on', isOn);
                     }
                 });
+            });
+            gateAdvancedSettingsByCt(data);
+        }
+
+        function gateAdvancedSettingsByCt(data) {
+            const ctOn = data && data.ct_clamp_enabled === true;
+            document.querySelectorAll('.adv-field[data-requires="ct_clamp_enabled"]').forEach((el) => {
+                el.classList.toggle('is-gated-off', !ctOn);
             });
         }
 

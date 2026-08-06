@@ -62,6 +62,9 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
   st_in.alarm_door = ctl_door_alarm_active->value();
   st_in.alarm_no_cool = ctl_no_cool_alarm_active->value();
   st_in.alarm_ice = ctl_ice_alarm_active->value();
+  st_in.alarm_ct_fail = ctl_ct_fail_to_start_active->value();
+  st_in.alarm_ct_stuck = ctl_ct_stuck_on_active->value();
+  st_in.alarm_ct_over = ctl_ct_overcurrent_active->value();
   st_in.defrost = ctl_defrost_active->value() || ctl_defrost_dripping->value();
   st_in.compressor_on = relay_compressor->state;
   st_in.lockout = remaining_s > 0.0f;
@@ -169,7 +172,9 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
     if (static_cast<bool>(!p4_ui_any_banner_alarm(
             ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
             ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-            ctl_ice_alarm_active->value()))) {
+            ctl_ice_alarm_active->value(),
+            ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(),
+            ctl_ct_overcurrent_active->value()))) {
       lv_obj_add_flag(lbl_home_alarm_banner, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_remove_flag(lbl_home_alarm_banner, LV_OBJ_FLAG_HIDDEN);
@@ -182,14 +187,14 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
       if (ctl_door_alarm_active->value()) s += "DOOR OPEN   ";
       if (ctl_no_cool_alarm_active->value()) s += "NO COOLING   ";
       if (ctl_ice_alarm_active->value()) s += "ICE DETECTED   ";
+      if (ctl_ct_fail_to_start_active->value()) s += "COMP FAIL TO START   ";
+      if (ctl_ct_stuck_on_active->value()) s += "COMP STUCK ON   ";
+      if (ctl_ct_overcurrent_active->value()) s += "CT OVERCURRENT   ";
       return s;
     }()).c_str());
     lv_obj_send_event(lbl_home_alarm_banner, lvgl::lv_update_event, nullptr);
 
-    const bool motion_suppressed = p4_ui_any_alarm(
-        ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
-        ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-        ctl_ice_alarm_active->value(), ctl_probe_fault->value());
+    const bool motion_suppressed = p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(), ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(), ctl_ice_alarm_active->value(), ctl_probe_fault->value(), ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(), ctl_ct_overcurrent_active->value());
     const bool snow_active =
         !motion_suppressed && relay_compressor->state && !ctl_defrost_active->value();
     const bool flame_active = !motion_suppressed && ctl_defrost_active->value();
@@ -206,9 +211,7 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
     lv_obj_set_style_border_opa(bg_fx_defrost_border, []() -> lv_opa_t {
       if (!p4_ui_fx_flame_visible(
               ctl_defrost_active->value(),
-              p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
-                              ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-                              ctl_ice_alarm_active->value(), ctl_probe_fault->value())))
+              p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(), ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(), ctl_ice_alarm_active->value(), ctl_probe_fault->value(), ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(), ctl_ct_overcurrent_active->value())))
         return 0;
       switch (fx_anim_tick->value() % 4U) {
         case 0: return 55;
@@ -220,9 +223,7 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
     lv_obj_set_style_border_width(bg_fx_defrost_border, []() -> int {
       if (!p4_ui_fx_flame_visible(
               ctl_defrost_active->value(),
-              p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
-                              ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-                              ctl_ice_alarm_active->value(), ctl_probe_fault->value())))
+              p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(), ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(), ctl_ice_alarm_active->value(), ctl_probe_fault->value(), ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(), ctl_ct_overcurrent_active->value())))
         return 0;
       switch (fx_anim_tick->value() % 4U) {
         case 0: return 3;
@@ -233,9 +234,7 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
     }(), LV_PART_MAIN);
     if (static_cast<bool>(!p4_ui_fx_flame_visible(
             ctl_defrost_active->value(),
-            p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
-                            ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-                            ctl_ice_alarm_active->value(), ctl_probe_fault->value())))) {
+            p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(), ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(), ctl_ice_alarm_active->value(), ctl_probe_fault->value(), ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(), ctl_ct_overcurrent_active->value())))) {
       lv_obj_add_flag(bg_fx_defrost_border, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_remove_flag(bg_fx_defrost_border, LV_OBJ_FLAG_HIDDEN);
@@ -244,9 +243,7 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
     auto snow_vis = []() -> bool {
       return p4_ui_fx_snow_visible(
           relay_compressor->state, ctl_defrost_active->value(),
-          p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(),
-                          ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(),
-                          ctl_ice_alarm_active->value(), ctl_probe_fault->value()));
+          p4_ui_any_alarm(ctl_alarm_high_active->value(), ctl_alarm_low_active->value(), ctl_door_alarm_active->value(), ctl_no_cool_alarm_active->value(), ctl_ice_alarm_active->value(), ctl_probe_fault->value(), ctl_ct_fail_to_start_active->value(), ctl_ct_stuck_on_active->value(), ctl_ct_overcurrent_active->value()));
     };
 
     lv_obj_set_style_x(bg_fx_snow_1,

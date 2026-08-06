@@ -100,6 +100,12 @@ whether settings stick.
 
 ## Closeout Addition: Dashboard Coverage & Persistence Check
 
+**Standing rule (every build):** operator settings must survive reboot. Every new
+restoring switch/number → `restore_value: yes` global + entity writes that global +
+`persist_config_to_nvs` on change **and** in the script’s `->update()` staging list +
+web dashboard entry + SD backup/restore when peer settings are there. See
+`.cursor/rules/settings-persistence.mdc`.
+
 The web settings UI is a **hand-maintained** JavaScript array
 (`ADVANCED_SETTINGS_GROUPS` in `assets/dashboard.html`) — nothing generates it from the
 ESPHome config. A setting added to `esp32-p4-coolroom.yaml` will therefore be invisible in
@@ -111,7 +117,8 @@ A third hand-maintained list matters here too: `persist_config_to_nvs` names eve
 stages. A restoring global missing from it can be lost if the controller reboots within the
 1 s poll window after the change.
 
-**At closeout, whenever an entity or restoring global is added, removed, or renamed, run:**
+**At closeout, whenever an entity or restoring global is added, removed, or renamed, run
+and fail closed on gaps:**
 
 ```bash
 .venv/bin/python tools/check_dashboard_coverage.py

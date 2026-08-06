@@ -321,24 +321,61 @@ inline bool p4_ctl_ice_alarm_dwelt(uint32_t ice_since_ms, uint32_t dwell_ms) {
 }
 
 /// Bitmask of active alarm / fault conditions for soft-mute tracking.
-/// Bit0 high, 1 low, 2 door, 3 no-cool, 4 ice, 5 probe fault.
-inline uint8_t p4_ctl_alarm_mask(bool hi, bool lo, bool door, bool no_cool, bool ice, bool probe) {
-    uint8_t m = 0;
+/// Bit0 high, 1 low, 2 door, 3 no-cool, 4 ice, 5 probe fault,
+/// 6 CT fail-to-start, 7 CT stuck-on, 8 CT overcurrent.
+inline uint16_t p4_ctl_alarm_mask(bool hi, bool lo, bool door, bool no_cool, bool ice, bool probe,
+                                  bool ct_fail = false, bool ct_stuck = false, bool ct_over = false) {
+    uint16_t m = 0;
     if (hi) m |= 1u << 0;
     if (lo) m |= 1u << 1;
     if (door) m |= 1u << 2;
     if (no_cool) m |= 1u << 3;
     if (ice) m |= 1u << 4;
     if (probe) m |= 1u << 5;
+    if (ct_fail) m |= 1u << 6;
+    if (ct_stuck) m |= 1u << 7;
+    if (ct_over) m |= 1u << 8;
     return m;
 }
 
 /// Soft-mute should end when nothing is left, or when a *new* condition bit
 /// appears that was not active at the moment the operator silenced the bell.
-inline bool p4_ctl_alarm_silence_should_clear(bool silenced, uint8_t silenced_mask, uint8_t now_mask) {
+inline bool p4_ctl_alarm_silence_should_clear(bool silenced, uint16_t silenced_mask, uint16_t now_mask) {
     if (!silenced) return false;
     if (now_mask == 0) return true;
     return (now_mask & ~silenced_mask) != 0;
+}
+
+// ─── CT clamp run-proof (whole-plant feed) ──────────────────────────────────
+// Typical WA plant @ 240 V: ~64 W idle ≈ 0.27 A, ~190 W run ≈ 0.79 A.
+// Defaults sit in the gap with margin (idle max 0.40 A / run min 0.55 A).
+
+/// True when run-proof may evaluate (CT enabled + online + opt-in enable).
+inline bool p4_ctl_ct_run_proof_armed(bool ct_enabled, bool ct_online, bool run_proof_enabled) {
+    return ct_enabled && ct_online && run_proof_enabled;
+}
+
+/// Fail-to-start condition: compressor relay ON, amps still in the idle band.
+/// Defrost forces the compressor off — that path never reaches here as ON.
+inline bool p4_ctl_ct_fail_to_start_condition(bool armed, bool comp_relay_on, float amps,
+                                             float idle_max_a) {
+    if (!armed || !comp_relay_on || !std::isfinite(amps) || idle_max_a <= 0.0f) return false;
+    return amps <= idle_max_a;
+}
+
+/// Stuck-ON condition: compressor relay OFF but amps in the run band.
+/// Skip while defrost/drip — plant feed may include heaters / atypical load.
+inline bool p4_ctl_ct_stuck_on_condition(bool armed, bool comp_relay_on, bool defrost_or_drip,
+                                        float amps, float run_min_a) {
+    if (!armed || comp_relay_on || defrost_or_drip || !std::isfinite(amps) || run_min_a <= 0.0f)
+        return false;
+    return amps >= run_min_a;
+}
+
+/// Overcurrent: amps at/above limit. over_a ≤ 0 disables this check.
+inline bool p4_ctl_ct_overcurrent_condition(bool armed, float amps, float over_a) {
+    if (!armed || !std::isfinite(amps) || over_a <= 0.0f) return false;
+    return amps >= over_a;
 }
 
 /// Legacy name → condition only (no dwell). Prefer p4_ctl_ice_condition + dwell.
