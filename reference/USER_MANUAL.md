@@ -222,7 +222,7 @@ the compressor.
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
 | **Setpoint** | The temperature you want the coolroom to hold. | −10 – 15 °C | 2.0 °C | Floor matches the home-gauge dial (`dial_min_c`). Set to whatever your stored product needs. |
-| **Compressor Differential** | The "dead band" around the setpoint. Compressor switches ON at setpoint + half the differential, OFF at setpoint − half. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but more temperature swing. Narrower = tighter temperature control but more frequent cycling. |
+| **Compressor Differential** | Cut-in offset above setpoint (asymmetric / Carel-style). Compressor switches **ON** at setpoint + differential, **OFF** at exactly the setpoint. | 0.5 – 10.0 °C | 1.0 °C | Wider = fewer compressor starts (longer compressor life) but the room runs warmer on average before cut-in. Narrower = tighter control but more frequent cycling. |
 | **Compressor Off-Delay (Lockout)** | Minimum time the compressor must stay off before it's allowed to restart, even if the temperature calls for cooling. | 0 – 10 min | 3 min | Protects the compressor motor from rapid restart. Only lower this if your compressor's manufacturer explicitly allows shorter cycling. |
 | **Compressor Min Run Time** | Minimum time the compressor must stay ON once started, even if the room has already reached the cut-out temperature. | 0 – 30 min | 2 min | Complements Off-Delay on the ON side. Set 0 to disable. |
 | **Fan Relay Enabled** | Whether Modbus coil 0 may energise an evaporator fan under controller control. When on, the fan follows the compressor and is forced off during defrost + drip. | On/Off | **Off** | **Keep off** while plant fans are hardwired continuous. Turn on only after rewiring fans through coil 0 for controller-managed cycling. Same control as §4.13. Also on touchscreen Settings 1/8. |
@@ -243,9 +243,9 @@ the compressor.
 │  (safety — see §4.7 Probe Fault)│ ┌───────────────┬─────────────────┐│
 │                                 │ │ YES            │ NO              ││
 │                                 │ │ Temp above     │ Temp below      ││
-│                                 │ │ setpoint +      │ setpoint −      ││
-│                                 │ │ half the diff?  │ half the diff?  ││
-│                                 │ │  → turn ON      │  → turn OFF     ││
+│                                 │ │ setpoint +      │ setpoint?       ││
+│                                 │ │ differential?   │  → turn OFF     ││
+│                                 │ │  → turn ON      │                 ││
 │                                 │ └───────────────┴─────────────────┘│
 ├─────────────────────────────────┴────────────────────────────────────┤
 │ Before turning ON: has it been at least "Compressor Off-Delay"       │
@@ -395,8 +395,8 @@ Less commonly touched, but important for tuning out false alarms.
 | **Ice Alarm Dwell Time** | How long the ice condition must hold continuously before the alarm fires. | 1 – 60 min | 10 min | Any break resets the dwell. Raise to ignore brief spikes. |
 | **No-Cool Alarm Timeout** | If the compressor has been running this long without the room actually cooling, something's wrong (stuck compressor, refrigerant leak, blocked airflow) — alarm fires. | 15 – 240 min | 60 min | Tighten for high-value product where a refrigeration failure needs fast attention; loosen for rooms with a naturally slow pulldown. |
 | **Startup Alarm Grace Floor** | No alarms fire for this long after the controller boots, giving the room time to reach setpoint from a cold start without nuisance alarms. | 0 – 60 min | 15 min | Raise if your room routinely takes longer than 15 minutes to pull down after a power cycle. |
-| **Post-Defrost Alarm Grace** | No alarms fire for this long after a defrost cycle ends, while the room recovers from the temporary warm-up defrost causes. | 0 – 60 min | 20 min | Raise if alarms are triggering right after routine defrosts. |
-| **Alarm Recovery Hysteresis** | Once an alarm has fired, the temperature must come back this far *past* the original threshold (not just to it) before the alarm is considered cleared. | 0.1 – 5.0 °C | 0.5 °C | Prevents the alarm flapping on/off right at the threshold. Raise if you're seeing repeated clear/re-alarm cycles. |
+| **Post-Defrost Alarm Grace** | No alarms fire for this long after a defrost cycle ends, while the room recovers from the temporary warm-up defrost causes. The same window also **locks out** Smart / Dew-Point / Frost-Rate early defrost triggers so a just-finished cycle cannot immediately re-trigger another passive stop. Scheduled interval, Force-Max, and Manual Start are unaffected. | 0 – 60 min | 20 min | Raise if alarms (or early defrosts) are triggering right after routine defrosts. |
+| **Alarm Recovery Hysteresis** | Once a high/low temp alarm has latched (after Persist Time), the temperature must recover this far *past* the original threshold before the alarm clears. Prevents siren/ntfy chatter around the band. | 0.1 – 5.0 °C | 0.5 °C | Raise if you're seeing repeated clear/re-alarm cycles. |
 
 > 📷 **Screenshot placeholder — Web Dashboard: Alarms (advanced) fields**
 > 📷 **Screenshot placeholder — Touchscreen: Settings 5/8**

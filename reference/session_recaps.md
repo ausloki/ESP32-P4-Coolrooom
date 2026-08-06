@@ -4,6 +4,23 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-06 — Control: asymmetric hysteresis + alarm clear + smart lockout
+
+- **Asymmetric hysteresis:** `p4_ctl_compressor_eval` ON at `SP + diff`, OFF at `SP`
+  (was ±diff/2). `p4_ctl_no_cool_alarm` cut-in margin updated to match.
+- **Min-run:** already present; cut-out check now uses OFF-at-SP (`t < SP`).
+- **Skip-if-cold / Force-max:** already wired in `p4_ctl_tick.h` — verified, no change.
+- **Alarm clear hysteresis:** wired `p4_ctl_alarm_hysteresis_clear` — hi/lo latch after
+  persist; clear only after recovery band (`ctl_alarm_hysteresis_c`, default 0.5 °C).
+- **Smart lockout after cycle:** `lockout_active` was hardcoded `false`; now
+  `p4_ctl_defrost_grace(last_end, ctl_defrost_grace_min)` (default **20 min**) gates
+  smart / dew-point / frost-rate. Interval / force-max / manual unchanged. No new entity.
+- Docs: USER_MANUAL §4.1/§4.5, QUICK_START compressor diagram, CAREL item A → asymmetric,
+  NS band diagram. Coverage OK (no new entities). Compile OK; OTA → `192.168.37.237`
+  (~8.5 s). Leave ntfy alone. Not committed.
+
+---
+
 ## 2026-08-03 — Fix: Settings lag + quiet speaker @ 100%
 
 - **Settings lag root cause:** Info LVGL labels refreshed every 1 s even off-Info;

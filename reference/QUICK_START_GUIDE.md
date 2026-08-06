@@ -185,10 +185,9 @@ setpoint; keep Smart / Dew-Point / Frost-Rate on when humidity sensors are onlin
 ┌──────────────────────────────────────────────────────────────────────┐
 │           Probe reading missing/stale/out of range?                  │
 ├─────────────────────────────────┬────────────────────────────────────┤
-│ YES → compressor OFF (safety)    │ NO → compare to setpoint ± half    │
-│                                   │      the differential:            │
-│                                   │  above upper band → ON            │
-│                                   │  below lower band → OFF           │
+│ YES → compressor OFF (safety)    │ NO → asymmetric band:              │
+│                                   │  above setpoint + differential → ON │
+│                                   │  below setpoint → OFF              │
 │                                   │  in between → hold current state  │
 ├─────────────────────────────────┴────────────────────────────────────┤
 │ Off-Delay lockout still active? → wait, don't restart yet            │

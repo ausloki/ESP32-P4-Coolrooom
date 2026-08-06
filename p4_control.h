@@ -20,24 +20,25 @@
 
 // ─── Compressor hysteresis band control ────────────────────────────────────
 //
-// Symmetric band of ±(diff/2) around setpoint:
-//   ON  threshold = setpoint + diff/2   (if compressor currently OFF)
-//   OFF threshold = setpoint - diff/2   (if compressor currently ON)
+// Asymmetric Carel-style band (differential = full cut-in offset):
+//   ON  threshold = setpoint + diff   (if compressor currently OFF)
+//   OFF threshold = setpoint          (if compressor currently ON)
 //
-// This prevents rapid cycling while tracking the setpoint accurately.
+// Room therefore runs at/above setpoint on average; min-run + off-delay
+// still protect against short cycling.
 
 /// Evaluate whether the compressor relay state should change.
 ///
 /// Returns:
-///   +1 = command ON   (temp above upper threshold, compressor was OFF)
-///   -1 = command OFF  (temp below lower threshold, OR probe fault)
+///   +1 = command ON   (temp above cut-in, compressor was OFF)
+///   -1 = command OFF  (temp below cut-out / setpoint, OR probe fault)
 ///    0 = hold current state
 ///
 /// Safety: returns -1 immediately if probe is stale or reading is invalid.
 inline int p4_ctl_compressor_eval(
     float    coolroom_c,        ///< current probe 1 reading (°C)
     float    setpoint_c,        ///< target temperature (°C)
-    float    diff_c,            ///< hysteresis band full-width (°C)
+    float    diff_c,            ///< cut-in offset above setpoint (°C)
     bool     compressor_on,     ///< current relay_compressor state
     uint32_t probe_last_ms,     ///< millis() timestamp of last valid probe 1 sample
     uint32_t probe_max_age_ms   ///< max acceptable age before declaring fault
@@ -50,15 +51,14 @@ inline int p4_ctl_compressor_eval(
         return -1;
     }
 
-    const float half = diff_c / 2.0f;
-    if (!compressor_on && coolroom_c > (setpoint_c + half)) {
+    if (!compressor_on && coolroom_c > (setpoint_c + diff_c)) {
         ESP_LOGI("ctl", "Coolroom %.1f°C > ON-threshold %.1f°C — compressor ON",
-                 coolroom_c, setpoint_c + half);
+                 coolroom_c, setpoint_c + diff_c);
         return +1;
     }
-    if (compressor_on && coolroom_c < (setpoint_c - half)) {
+    if (compressor_on && coolroom_c < setpoint_c) {
         ESP_LOGI("ctl", "Coolroom %.1f°C < OFF-threshold %.1f°C — compressor OFF",
-                 coolroom_c, setpoint_c - half);
+                 coolroom_c, setpoint_c);
         return -1;
     }
     return 0;
@@ -285,7 +285,7 @@ inline bool p4_ctl_defrost_term_by_temp(float evap_c, float term_c, bool evap_ok
 // ─── No-cool alarm ──────────────────────────────────────────────────────────
 
 /// True when the compressor has been running for no_cool_ms but the room
-/// has not cooled below the compressor-on threshold (suggests refrigeration failure).
+/// has not cooled below the compressor cut-in (suggests refrigeration failure).
 inline bool p4_ctl_no_cool_alarm(
     float    coolroom_c,
     float    setpoint_c,
@@ -296,7 +296,8 @@ inline bool p4_ctl_no_cool_alarm(
 ) {
     if (!p4_rtd_valid(coolroom_c) || !comp_on || comp_on_since_ms == 0U) return false;
     if ((millis() - comp_on_since_ms) < no_cool_ms) return false;
-    return coolroom_c > (setpoint_c + diff_c / 2.0f + 0.5f);
+    // Still above cut-in + small margin → never pulled into the hysteresis band.
+    return coolroom_c > (setpoint_c + diff_c + 0.5f);
 }
 
 // ─── Ice detection alarm ────────────────────────────────────────────────────

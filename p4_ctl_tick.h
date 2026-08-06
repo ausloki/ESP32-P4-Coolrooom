@@ -200,6 +200,11 @@ if (!fault || ctl_defrost_active->value() || ctl_defrost_dripping->value() ||
                 ctl_defrost_delta_since_ms->value() = 0;
             }
         }
+        // After a defrost ends, reuse Post-Defrost Alarm Grace as the
+        // smart/dew/frost-rate lockout so early triggers cannot fire
+        // back-to-back. Manual / interval / force-max are unaffected.
+        const bool smart_lockout = p4_ctl_defrost_grace(
+            ctl_defrost_last_end_ms->value(), defrost_grace_ms);
         bool smart_start = !fault && input_defrost_enabled->value() &&
             input_smart_defrost_enabled->value() &&
             p4_ctl_smart_defrost_ready(t, evap,
@@ -207,8 +212,8 @@ if (!fault || ctl_defrost_active->value() || ctl_defrost_dripping->value() ||
                 ctl_defrost_delta_since_ms->value(),
                 (uint32_t)(ctl_smart_dwell_min->value() * 60000.0f),
                 ctl_comp_on_since_ms->value(),
-                (uint32_t)(15UL * 60000UL),   
-                false);
+                (uint32_t)(15UL * 60000UL),
+                smart_lockout);
         bool interval_elapsed = !fault && input_defrost_enabled->value() &&
             p4_ctl_defrost_due(ctl_defrost_last_end_ms->value(), def_interval_ms);
 
@@ -233,7 +238,7 @@ if (!fault || ctl_defrost_active->value() || ctl_defrost_dripping->value() ||
 
          
         bool dew_point_start = false;
-        if (!fault && input_defrost_enabled->value() &&
+        if (!fault && !smart_lockout && input_defrost_enabled->value() &&
             input_dew_point_trigger_enabled->value() &&
             input_humidity_internal_enabled->value()) {
             float internal_t = probe_internal_temp->state;
@@ -246,7 +251,7 @@ if (!fault || ctl_defrost_active->value() || ctl_defrost_dripping->value() ||
 
          
         bool frost_rate_start = false;
-        if (!fault && input_defrost_enabled->value() &&
+        if (!fault && !smart_lockout && input_defrost_enabled->value() &&
             input_frost_rate_monitoring_enabled->value() &&
             input_humidity_internal_enabled->value()) {
             float rh = probe_internal_humidity->state;
@@ -318,9 +323,9 @@ if (!fault || ctl_defrost_active->value() || ctl_defrost_dripping->value() ||
                 rtd1_ch1_last_ms->value(),
                 probe_stale_ms);
              
+            // Min-run holds ON while room is already at/below cut-out (SP).
             if (cmd == -1 && relay_compressor->state && p4_rtd_valid(t)) {
-                const float half = ctl_comp_diff->value() / 2.0f;
-                bool at_cutout = t < (ctl_setpoint->value() - half);
+                bool at_cutout = t < ctl_setpoint->value();
                 if (p4_ctl_comp_min_run_hold(
                         at_cutout, true, ctl_comp_on_since_ms->value(),
                         (uint32_t)(ctl_comp_min_run_min->value() * 60000.0f))) {
@@ -360,17 +365,44 @@ if (input_door_sensor_enabled->value() && ctl_door_open_since_ms->value() > 0) {
 
  
 if (!fault && !in_grace) {
-    bool raw_hi = p4_ctl_alarm_high(t, ctl_setpoint->value(), ctl_alarm_high_delta->value());
-    bool raw_lo = p4_ctl_alarm_low(t, ctl_setpoint->value(), ctl_alarm_low_delta->value());
-     
-    if (raw_hi && ctl_high_alarm_since_ms->value() == 0) ctl_high_alarm_since_ms->value() = now_ms;
-    if (!raw_hi) ctl_high_alarm_since_ms->value() = 0;
-    if (raw_lo && ctl_low_alarm_since_ms->value() == 0) ctl_low_alarm_since_ms->value() = now_ms;
-    if (!raw_lo) ctl_low_alarm_since_ms->value() = 0;
-    bool hi = raw_hi && p4_ctl_alarm_persisted(ctl_high_alarm_since_ms->value(), alarm_persist_ms);
-    bool lo = raw_lo && p4_ctl_alarm_persisted(ctl_low_alarm_since_ms->value(), alarm_persist_ms);
-    ctl_alarm_high_active->value() = hi;
-    ctl_alarm_low_active->value()  = lo;
+    const float sp = ctl_setpoint->value();
+    const float hi_delta = ctl_alarm_high_delta->value();
+    const float lo_delta = ctl_alarm_low_delta->value();
+    const float alarm_hyst = ctl_alarm_hysteresis_c->value();
+    bool raw_hi = p4_ctl_alarm_high(t, sp, hi_delta);
+    bool raw_lo = p4_ctl_alarm_low(t, sp, lo_delta);
+
+    // Latch hi/lo after persist; clear only after recovery hysteresis band
+    // (p4_ctl_alarm_hysteresis_clear) so the siren does not chatter at the
+    // threshold.
+    if (ctl_alarm_high_active->value()) {
+        if (p4_ctl_alarm_hysteresis_clear(t, sp, hi_delta, alarm_hyst, true)) {
+            ctl_alarm_high_active->value() = false;
+            ctl_high_alarm_since_ms->value() = 0;
+        }
+    } else if (raw_hi) {
+        if (ctl_high_alarm_since_ms->value() == 0) ctl_high_alarm_since_ms->value() = now_ms;
+        if (p4_ctl_alarm_persisted(ctl_high_alarm_since_ms->value(), alarm_persist_ms))
+            ctl_alarm_high_active->value() = true;
+    } else {
+        ctl_high_alarm_since_ms->value() = 0;
+    }
+
+    if (ctl_alarm_low_active->value()) {
+        if (p4_ctl_alarm_hysteresis_clear(t, sp, lo_delta, alarm_hyst, false)) {
+            ctl_alarm_low_active->value() = false;
+            ctl_low_alarm_since_ms->value() = 0;
+        }
+    } else if (raw_lo) {
+        if (ctl_low_alarm_since_ms->value() == 0) ctl_low_alarm_since_ms->value() = now_ms;
+        if (p4_ctl_alarm_persisted(ctl_low_alarm_since_ms->value(), alarm_persist_ms))
+            ctl_alarm_low_active->value() = true;
+    } else {
+        ctl_low_alarm_since_ms->value() = 0;
+    }
+
+    bool hi = ctl_alarm_high_active->value();
+    bool lo = ctl_alarm_low_active->value();
      
     bool nc = p4_ctl_no_cool_alarm(t, ctl_setpoint->value(), ctl_comp_diff->value(),
                                     relay_compressor->state, ctl_comp_on_since_ms->value(),
