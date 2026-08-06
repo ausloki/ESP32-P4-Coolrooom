@@ -1466,3 +1466,16 @@ cp assets/dashboard.html /var/www/html/
 **Last Updated**: 2026-07-23  
 **By**: Copilot  
 **Next Review**: After the next compile-validated Phase 5 change
+
+---
+
+## 2026-08-06 — Port from ESP32-Coolroom-Prescision (passive-defrost P4)
+
+Four control behaviors ported for Carel-like / safer passive operation:
+
+1. **Asymmetric compressor hysteresis** — ON at `SP + diff`, OFF at `SP` (was ±diff/2).
+2. **Compressor min-run** — `ctl_comp_min_run_min` (default 2 min) holds OFF until min ON time.
+3. **Skip-if-cold + force-max** — scheduled passive defrost can skip when evap ≤ threshold; force-max (default 720 min) still starts.
+4. **Alarm clear hysteresis** — high/low alarms latch with persist and clear only after `ctl_alarm_hysteresis_c` recovery (helper was unused).
+
+Files: `p4_control.h`, `esp32-p4-coolroom.yaml`, `p4_logging.h` (backup/restore fields appended, old backups still restore).

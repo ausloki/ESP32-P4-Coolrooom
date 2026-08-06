@@ -292,7 +292,11 @@ inline bool p4_sd_backup_params(
     float probe2_offset_c,
     bool  dew_point_trigger_enabled,
     float startup_grace_min,
-    bool  door_light_enabled
+    bool  door_light_enabled,
+    float comp_min_run_min,
+    float defrost_skip_below_c,
+    float defrost_force_max_min,
+    bool  defrost_skip_cold_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -342,7 +346,11 @@ inline bool p4_sd_backup_params(
         "  \"probe2_offset_c\": %.2f,\n"
         "  \"dew_point_trigger_enabled\": %s,\n"
         "  \"startup_grace_min\": %.1f,\n"
-        "  \"door_light_enabled\": %s\n"
+        "  \"door_light_enabled\": %s,\n"
+        "  \"comp_min_run_min\": %.1f,\n"
+        "  \"defrost_skip_below_c\": %.1f,\n"
+        "  \"defrost_force_max_min\": %.1f,\n"
+        "  \"defrost_skip_cold_enabled\": %s\n"
         "}\n",
         ts,
         setpoint, comp_diff, alarm_high, alarm_low,
@@ -365,7 +373,9 @@ inline bool p4_sd_backup_params(
         probe1_offset_c, probe2_offset_c,
         dew_point_trigger_enabled ? "true" : "false",
         startup_grace_min,
-        door_light_enabled ? "true" : "false");
+        door_light_enabled ? "true" : "false",
+        comp_min_run_min, defrost_skip_below_c, defrost_force_max_min,
+        defrost_skip_cold_enabled ? "true" : "false");
     fclose(f);
     ESP_LOGI(TAG_SD, "Params backed up: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              setpoint, comp_diff, alarm_high, alarm_low);
@@ -410,7 +420,11 @@ inline bool p4_sd_restore_params(
     float& probe2_offset_c,
     bool&  dew_point_trigger_enabled,
     float& startup_grace_min,
-    bool&  door_light_enabled
+    bool&  door_light_enabled,
+    float& comp_min_run_min,
+    float& defrost_skip_below_c,
+    float& defrost_force_max_min,
+    bool&  defrost_skip_cold_enabled
 ) {
     if (!p4_sd_ready) return false;
 
@@ -464,6 +478,10 @@ inline bool p4_sd_restore_params(
     // door_light_enabled: brand new setting, same seeding rationale.
     bool b_door_light_en = door_light_enabled;
     float startup_grace = startup_grace_min;
+    float min_run = comp_min_run_min;
+    float skip_below = defrost_skip_below_c;
+    float force_max = defrost_force_max_min;
+    bool b_skip_cold = defrost_skip_cold_enabled;
     // Match each key explicitly
     auto parse_field = [&](const char* key, float& out) {
         const char* p = strstr(buf, key);
@@ -519,6 +537,10 @@ inline bool p4_sd_restore_params(
     parse_bool("\"dew_point_trigger_enabled\"", b_dew_trigger);
     parse_field("\"startup_grace_min\"", startup_grace);
     parse_bool("\"door_light_enabled\"", b_door_light_en);
+    parse_field("\"comp_min_run_min\"", min_run);
+    parse_field("\"defrost_skip_below_c\"", skip_below);
+    parse_field("\"defrost_force_max_min\"", force_max);
+    parse_bool("\"defrost_skip_cold_enabled\"", b_skip_cold);
 
     if (!std::isfinite(sp) || !std::isfinite(cd) ||
         !std::isfinite(ah) || !std::isfinite(al) ||
@@ -569,6 +591,10 @@ inline bool p4_sd_restore_params(
     dew_point_trigger_enabled = b_dew_trigger;
     startup_grace_min = startup_grace;
     door_light_enabled = b_door_light_en;
+    if (std::isfinite(min_run)) comp_min_run_min = min_run;
+    if (std::isfinite(skip_below)) defrost_skip_below_c = skip_below;
+    if (std::isfinite(force_max)) defrost_force_max_min = force_max;
+    defrost_skip_cold_enabled = b_skip_cold;
     ESP_LOGI(TAG_SD, "Params restored: SP=%.1f diff=%.1f hi=%.1f lo=%.1f",
              sp, cd, ah, al);
     return true;

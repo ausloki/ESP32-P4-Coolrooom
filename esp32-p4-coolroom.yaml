@@ -104,6 +104,7 @@ substitutions:
 
   # ── Phase 6: Extended control parameter defaults ──────────────────────────
   default_comp_lockout_min:    "3"    # compressor off-delay (minutes)
+  default_comp_min_run_min:    "2"    # compressor min ON time before allowing OFF (min)
   default_startup_grace_min:   "15"   # no alarms for N min after boot
   default_defrost_grace_min:   "20"   # no alarms for N min after defrost
   default_alarm_persist_min:   "5"    # alarm must hold N min before siren
@@ -114,6 +115,8 @@ substitutions:
   default_defrost_duration_min: "30"   # max defrost on-time (min)
   default_defrost_drip_min:    "5"    # drip time after defrost (min)
   default_defrost_end_c:       "5.0"  # evap temp to terminate defrost (°C)
+  default_defrost_skip_below_c: "-10.0"  # skip scheduled defrost if evap <= this (°C)
+  default_defrost_force_max_min: "720"   # force defrost if none for N min (12h)
   default_ice_delta_c:         "2.0"  # coolroom-evap min delta; below = ice alarm
   default_fallback_on_min:     "3"    # sensor fallback compressor on-time (min)
   default_fallback_off_min:    "27"   # sensor fallback compressor off-time (min)
@@ -214,6 +217,10 @@ esphome:
               bool dew_trigger_en = id(input_dew_point_trigger_enabled);
               float startup_grace = id(ctl_startup_grace_min);
               bool door_light_en = id(input_door_light_enabled);
+              float min_run = id(ctl_comp_min_run_min);
+              float skip_below = id(ctl_defrost_skip_below_c);
+              float force_max = id(ctl_defrost_force_max_min);
+              bool skip_cold_en = id(input_defrost_skip_cold_enabled);
               if (p4_sd_restore_params(
                   sp, cd, ah, al,
                   lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -222,7 +229,8 @@ esphome:
                   probe2_en, door_mode_nc, door_en, siren_en,
                   defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
                   hum_int_en, hum_ext_en,
-                  p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en)) {
+                  p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en,
+              min_run, skip_below, force_max, skip_cold_en)) {
                     id(ctl_setpoint)         = sp;
                     id(ctl_comp_diff)        = cd;
                     id(ctl_alarm_high_delta) = ah;
@@ -258,6 +266,10 @@ esphome:
                 id(input_dew_point_trigger_enabled) = dew_trigger_en;
                 id(ctl_startup_grace_min) = startup_grace;
                 id(input_door_light_enabled) = door_light_en;
+                id(ctl_comp_min_run_min) = min_run;
+                id(ctl_defrost_skip_below_c) = skip_below;
+                id(ctl_defrost_force_max_min) = force_max;
+                id(input_defrost_skip_cold_enabled) = skip_cold_en;
                 if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
                 ESP_LOGI("sd", "All control settings restored from SD backup");
@@ -771,6 +783,26 @@ switch:
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
           ESP_LOGI("config", "Smart (delta-triggered) defrost DISABLED");
     lambda: 'return id(input_smart_defrost_enabled);'
+
+  - platform: template
+    id: sw_defrost_skip_cold
+    name: "Defrost Skip-If-Cold"
+    icon: "mdi:snowflake-off"
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 7.5
+    turn_on_action:
+      - lambda: |-
+          id(input_defrost_skip_cold_enabled) = true;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Defrost skip-if-cold ENABLED");
+    turn_off_action:
+      - lambda: |-
+          id(input_defrost_skip_cold_enabled) = false;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+          ESP_LOGI("config", "Defrost skip-if-cold DISABLED");
+    lambda: 'return id(input_defrost_skip_cold_enabled);'
 
   - platform: template
     id: sw_defrost_drip
@@ -1820,6 +1852,25 @@ number:
       - script.execute: refresh_all_settings_labels
 
   - platform: template
+    id: comp_min_run_min
+    name: "Compressor Min Run (min)"
+    icon: "mdi:timer-play"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 30
+    step: 1
+    entity_category: config
+    web_server:
+      sorting_group_id: group_compressor
+      sorting_weight: 11
+    lambda: 'return id(ctl_comp_min_run_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_comp_min_run_min) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+      - script.execute: refresh_all_settings_labels
+
+  - platform: template
     id: defrost_interval_num
     name: "Defrost Interval (min)"
     icon: "mdi:snowflake-melt"
@@ -1891,6 +1942,42 @@ number:
     set_action:
       - lambda: |-
           id(ctl_defrost_end_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_skip_below_num
+    name: "Defrost Skip-If-Cold Below (°C)"
+    icon: "mdi:snowflake-off"
+    unit_of_measurement: "°C"
+    min_value: -30.0
+    max_value: 5.0
+    step: 0.5
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 14
+    lambda: 'return id(ctl_defrost_skip_below_c);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_skip_below_c) = x;
+          if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
+
+  - platform: template
+    id: defrost_force_max_num
+    name: "Defrost Force-Max Interval (min)"
+    icon: "mdi:timer-alert-outline"
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 2880
+    step: 30
+    entity_category: config
+    web_server:
+      sorting_group_id: group_defrost
+      sorting_weight: 15
+    lambda: 'return id(ctl_defrost_force_max_min);'
+    set_action:
+      - lambda: |-
+          id(ctl_defrost_force_max_min) = x;
           if (esphome::global_preferences != nullptr) esphome::global_preferences->sync();
 
   - platform: template
@@ -2334,7 +2421,9 @@ button:
           id(input_humidity_internal_enabled), id(input_humidity_external_enabled),
           id(ctl_probe1_offset_c), id(ctl_probe2_offset_c),
           id(input_dew_point_trigger_enabled), id(ctl_startup_grace_min),
-          id(input_door_light_enabled));
+          id(input_door_light_enabled),
+          id(ctl_comp_min_run_min), id(ctl_defrost_skip_below_c),
+          id(ctl_defrost_force_max_min), id(input_defrost_skip_cold_enabled));
           ESP_LOGI("sd", "Backup %s", ok ? "OK" : "FAILED");
           if (ok) p4_sd_log_event("BACKUP", "manual");
 
@@ -2383,6 +2472,10 @@ button:
           bool dew_trigger_en = id(input_dew_point_trigger_enabled);
           float startup_grace = id(ctl_startup_grace_min);
           bool door_light_en = id(input_door_light_enabled);
+          float min_run = id(ctl_comp_min_run_min);
+          float skip_below = id(ctl_defrost_skip_below_c);
+          float force_max = id(ctl_defrost_force_max_min);
+          bool skip_cold_en = id(input_defrost_skip_cold_enabled);
           if (p4_sd_restore_params(
               sp, cd, ah, al,
               lockout, def_grace, def_int, def_dur, def_drip, def_end,
@@ -2391,7 +2484,8 @@ button:
               probe2_en, door_mode_nc, door_en, siren_en,
               defrost_en, fallback_en, def_term_en, def_drip_en, smart_def_en,
               hum_int_en, hum_ext_en,
-              p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en)) {
+              p1_off, p2_off, dew_trigger_en, startup_grace, door_light_en,
+              min_run, skip_below, force_max, skip_cold_en)) {
               id(ctl_setpoint)         = sp;
               id(ctl_comp_diff)        = cd;
               id(ctl_alarm_high_delta) = ah;
@@ -2427,6 +2521,10 @@ button:
             id(input_dew_point_trigger_enabled) = dew_trigger_en;
             id(ctl_startup_grace_min) = startup_grace;
             id(input_door_light_enabled) = door_light_en;
+            id(ctl_comp_min_run_min) = min_run;
+            id(ctl_defrost_skip_below_c) = skip_below;
+            id(ctl_defrost_force_max_min) = force_max;
+            id(input_defrost_skip_cold_enabled) = skip_cold_en;
               if (esphome::global_preferences != nullptr)
                   esphome::global_preferences->sync();
               p4_sd_log_event("RESTORE", "manual");
@@ -2580,6 +2678,25 @@ interval:
                           (uint32_t)(15UL * 60000UL),  // 15 min min comp run
                           false);
                   bool time_start = p4_ctl_defrost_due(id(ctl_defrost_last_end_ms), def_interval_ms);
+                  bool force_max_start = p4_ctl_defrost_force_max_due(
+                      id(ctl_defrost_last_end_ms),
+                      (uint32_t)(id(ctl_defrost_force_max_min) * 60000.0f));
+                  bool skip_scheduled = !manual_start && !force_max_start && time_start &&
+                      p4_ctl_defrost_skip_cold(
+                          id(input_defrost_skip_cold_enabled), evap_ok, evap,
+                          id(ctl_defrost_skip_below_c));
+                  if (skip_scheduled) {
+                      // Reschedule from now without starting a passive cycle.
+                      id(ctl_defrost_last_end_ms) = now_ms;
+                      ESP_LOGI("ctl", "Scheduled defrost skipped: evap already cold (%.1f C <= %.1f C)",
+                               evap, id(ctl_defrost_skip_below_c));
+                      {
+                          char detail[96];
+                          snprintf(detail, sizeof(detail), "evap=%.1f skip_below=%.1f",
+                                   evap, id(ctl_defrost_skip_below_c));
+                          p4_sd_log_event("DEFROST_SKIP_COLD", detail);
+                      }
+                  }
 
                   // ── Dew-point-triggered early defrost ─────────────────────
                   // Uses the internal SHT31 (temp+humidity) as the reference
@@ -2596,7 +2713,8 @@ interval:
                       if (dew_point_start) id(ctl_dew_point_defrost_triggered) = true;
                   }
 
-                  if (manual_start || smart_start || time_start || dew_point_start) {
+                  if (manual_start || smart_start || dew_point_start || force_max_start ||
+                      (time_start && !skip_scheduled)) {
                       id(ctl_manual_defrost_req) = false;
                       id(ctl_defrost_delta_since_ms) = 0;
                       if (id(relay_compressor).state) {
@@ -2607,8 +2725,9 @@ interval:
                       id(relay_defrost).turn_on();
                       id(ctl_defrost_on_since_ms) = now_ms;
                       const char* reason = manual_start ? "manual" :
+                                           (force_max_start ? "force_max" :
                                            (smart_start ? "smart_delta" :
-                                           (dew_point_start ? "dew_point" : "interval"));
+                                           (dew_point_start ? "dew_point" : "interval")));
                       ESP_LOGI("ctl", "Defrost started: %s", reason);
                       {
                           char detail[112];
@@ -2623,7 +2742,9 @@ interval:
                       int cmd = p4_ctl_compressor_eval(
                           t, id(ctl_setpoint), id(ctl_comp_diff),
                           id(relay_compressor).state,
-                          id(rtd1_ch1_last_ms), ${probe_stale_ms});
+                          id(rtd1_ch1_last_ms), ${probe_stale_ms},
+                          id(ctl_comp_on_since_ms),
+                          (uint32_t)(id(ctl_comp_min_run_min) * 60000.0f));
                       if (cmd == 1) {
                           id(relay_compressor).turn_on();
                           if (id(ctl_comp_on_since_ms) == 0) id(ctl_comp_on_since_ms) = now_ms;
@@ -2639,19 +2760,40 @@ interval:
               }
           }
 
-          // ── 7. Alarm evaluation (with grace + persist + hysteresis) ──────
+          // ── 7. Alarm evaluation (with grace + persist + clear hysteresis) ──
           if (!fault && !in_grace) {
               bool raw_hi = p4_ctl_alarm_high(t, id(ctl_setpoint), id(ctl_alarm_high_delta));
               bool raw_lo = p4_ctl_alarm_low(t, id(ctl_setpoint), id(ctl_alarm_low_delta));
-              // Persist tracking
-              if (raw_hi && id(ctl_high_alarm_since_ms) == 0) id(ctl_high_alarm_since_ms) = now_ms;
-              if (!raw_hi) id(ctl_high_alarm_since_ms) = 0;
-              if (raw_lo && id(ctl_low_alarm_since_ms) == 0) id(ctl_low_alarm_since_ms) = now_ms;
-              if (!raw_lo) id(ctl_low_alarm_since_ms) = 0;
-              bool hi = raw_hi && p4_ctl_alarm_persisted(id(ctl_high_alarm_since_ms), alarm_persist_ms);
-              bool lo = raw_lo && p4_ctl_alarm_persisted(id(ctl_low_alarm_since_ms), alarm_persist_ms);
-              id(ctl_alarm_high_active) = hi;
-              id(ctl_alarm_low_active)  = lo;
+              // High: latch with persist; clear only after hysteresis recovery.
+              if (id(ctl_alarm_high_active)) {
+                  if (p4_ctl_alarm_hysteresis_clear(t, id(ctl_setpoint),
+                          id(ctl_alarm_high_delta), id(ctl_alarm_hysteresis_c), true)) {
+                      id(ctl_alarm_high_active) = false;
+                      id(ctl_high_alarm_since_ms) = 0;
+                  }
+              } else if (raw_hi) {
+                  if (id(ctl_high_alarm_since_ms) == 0) id(ctl_high_alarm_since_ms) = now_ms;
+                  if (p4_ctl_alarm_persisted(id(ctl_high_alarm_since_ms), alarm_persist_ms))
+                      id(ctl_alarm_high_active) = true;
+              } else {
+                  id(ctl_high_alarm_since_ms) = 0;
+              }
+              // Low: same latch / clear-hysteresis pattern.
+              if (id(ctl_alarm_low_active)) {
+                  if (p4_ctl_alarm_hysteresis_clear(t, id(ctl_setpoint),
+                          id(ctl_alarm_low_delta), id(ctl_alarm_hysteresis_c), false)) {
+                      id(ctl_alarm_low_active) = false;
+                      id(ctl_low_alarm_since_ms) = 0;
+                  }
+              } else if (raw_lo) {
+                  if (id(ctl_low_alarm_since_ms) == 0) id(ctl_low_alarm_since_ms) = now_ms;
+                  if (p4_ctl_alarm_persisted(id(ctl_low_alarm_since_ms), alarm_persist_ms))
+                      id(ctl_alarm_low_active) = true;
+              } else {
+                  id(ctl_low_alarm_since_ms) = 0;
+              }
+              bool hi = id(ctl_alarm_high_active);
+              bool lo = id(ctl_alarm_low_active);
               // No-cool alarm
               bool nc = p4_ctl_no_cool_alarm(t, id(ctl_setpoint), id(ctl_comp_diff),
                                               id(relay_compressor).state, id(ctl_comp_on_since_ms),
@@ -3409,6 +3551,11 @@ globals:
     restore_value: yes
     initial_value: ${default_comp_lockout_min}
 
+  - id: ctl_comp_min_run_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_comp_min_run_min}
+
   - id: ctl_startup_grace_min
     type: float
     restore_value: yes
@@ -3438,6 +3585,16 @@ globals:
     type: float
     restore_value: yes
     initial_value: ${default_defrost_end_c}
+
+  - id: ctl_defrost_skip_below_c
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_skip_below_c}
+
+  - id: ctl_defrost_force_max_min
+    type: float
+    restore_value: yes
+    initial_value: ${default_defrost_force_max_min}
 
   - id: ctl_alarm_persist_min
     type: float
@@ -3625,6 +3782,11 @@ globals:
     initial_value: "true"
 
   - id: input_smart_defrost_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+  - id: input_defrost_skip_cold_enabled
     type: bool
     restore_value: yes
     initial_value: "false"

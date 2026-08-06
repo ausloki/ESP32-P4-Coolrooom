@@ -6,9 +6,10 @@
 // YAML interval lambdas call these; they never contain business logic.
 //
 // Control Architecture:
-//   - Compressor : hysteresis band control around setpoint
-//   - Alarms     : high/low delta thresholds relative to setpoint
-//   - Defrost    : time-based scheduling, mutual exclusion with compressor
+//   - Compressor : asymmetric Carel-style hysteresis (ON at SP+diff, OFF at SP)
+//                  with min-off lockout + min-run hold
+//   - Alarms     : high/low delta thresholds with persist + clear hysteresis
+//   - Defrost    : schedule / smart / dew-point / force-max; skip-if-cold on schedule
 //   - Safety     : stale probe detection forces compressor OFF immediately
 //
 // Board: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
@@ -20,27 +21,30 @@
 
 // ─── Compressor hysteresis band control ────────────────────────────────────
 //
-// Symmetric band of ±(diff/2) around setpoint:
-//   ON  threshold = setpoint + diff/2   (if compressor currently OFF)
-//   OFF threshold = setpoint - diff/2   (if compressor currently ON)
+// Asymmetric Carel-style band (ported from ESP32-Coolroom-Prescision):
+//   ON  threshold = setpoint + diff   (if compressor currently OFF)
+//   OFF threshold = setpoint          (if compressor currently ON)
 //
-// This prevents rapid cycling while tracking the setpoint accurately.
+// Optional min-run holds OFF requests until the compressor has been on long
+// enough (prevents short-cycling near the OFF point).
 
 /// Evaluate whether the compressor relay state should change.
 ///
 /// Returns:
-///   +1 = command ON   (temp above upper threshold, compressor was OFF)
-///   -1 = command OFF  (temp below lower threshold, OR probe fault)
+///   +1 = command ON   (temp at/above ON threshold, compressor was OFF)
+///   -1 = command OFF  (temp at/below OFF threshold after min-run, OR probe fault)
 ///    0 = hold current state
 ///
 /// Safety: returns -1 immediately if probe is stale or reading is invalid.
 inline int p4_ctl_compressor_eval(
     float    coolroom_c,        ///< current probe 1 reading (°C)
     float    setpoint_c,        ///< target temperature (°C)
-    float    diff_c,            ///< hysteresis band full-width (°C)
+    float    diff_c,            ///< compressor differential (°C)
     bool     compressor_on,     ///< current relay_compressor state
     uint32_t probe_last_ms,     ///< millis() timestamp of last valid probe 1 sample
-    uint32_t probe_max_age_ms   ///< max acceptable age before declaring fault
+    uint32_t probe_max_age_ms,  ///< max acceptable age before declaring fault
+    uint32_t comp_on_since_ms = 0,  ///< millis() when compressor turned ON (0 = unknown)
+    uint32_t min_run_ms = 0         ///< minimum ON time before allowing OFF
 ) {
     // Safety lockout — stale or out-of-range reading
     if (!p4_rtd_valid(coolroom_c) || !p4_sample_fresh(probe_last_ms, probe_max_age_ms)) {
@@ -50,15 +54,20 @@ inline int p4_ctl_compressor_eval(
         return -1;
     }
 
-    const float half = diff_c / 2.0f;
-    if (!compressor_on && coolroom_c > (setpoint_c + half)) {
-        ESP_LOGI("ctl", "Coolroom %.1f°C > ON-threshold %.1f°C — compressor ON",
-                 coolroom_c, setpoint_c + half);
+    const float on_threshold = setpoint_c + diff_c;
+    const float off_threshold = setpoint_c;
+    if (!compressor_on && coolroom_c >= on_threshold) {
+        ESP_LOGI("ctl", "Coolroom %.1f°C >= ON-threshold %.1f°C — compressor ON",
+                 coolroom_c, on_threshold);
         return +1;
     }
-    if (compressor_on && coolroom_c < (setpoint_c - half)) {
-        ESP_LOGI("ctl", "Coolroom %.1f°C < OFF-threshold %.1f°C — compressor OFF",
-                 coolroom_c, setpoint_c - half);
+    if (compressor_on && coolroom_c <= off_threshold) {
+        if (min_run_ms > 0U && comp_on_since_ms != 0U &&
+            (millis() - comp_on_since_ms) < min_run_ms) {
+            return 0;  // hold ON until min-run elapses
+        }
+        ESP_LOGI("ctl", "Coolroom %.1f°C <= OFF-threshold %.1f°C — compressor OFF",
+                 coolroom_c, off_threshold);
         return -1;
     }
     return 0;
@@ -104,6 +113,27 @@ inline bool p4_ctl_defrost_due(
 /// True when a running defrost cycle has exceeded its maximum duration.
 inline bool p4_ctl_defrost_timeout(uint32_t defrost_start_ms, uint32_t max_duration_ms) {
     return (millis() - defrost_start_ms) >= max_duration_ms;
+}
+
+/// True when a *scheduled* defrost should be skipped because the evaporator
+/// is already at/below the skip-if-cold threshold (passive cycles only burn
+/// product temperature when frost burden is low).
+inline bool p4_ctl_defrost_skip_cold(
+    bool  enabled,
+    bool  evap_ok,
+    float evap_c,
+    float skip_below_c
+) {
+    if (!enabled || !evap_ok || !p4_rtd_valid(evap_c)) return false;
+    return evap_c <= skip_below_c;
+}
+
+/// True when force-max interval has elapsed since last defrost end.
+/// Safety net so skip/smart logic cannot postpone passive defrost forever.
+/// force_max_ms == 0 disables the override.
+inline bool p4_ctl_defrost_force_max_due(uint32_t defrost_last_end_ms, uint32_t force_max_ms) {
+    if (force_max_ms == 0U || defrost_last_end_ms == 0U) return false;
+    return (millis() - defrost_last_end_ms) >= force_max_ms;
 }
 
 /// True when the compressor is within the off-delay lockout window.
@@ -217,7 +247,8 @@ inline bool p4_ctl_defrost_term_by_temp(float evap_c, float term_c, bool evap_ok
 // ─── No-cool alarm ──────────────────────────────────────────────────────────
 
 /// True when the compressor has been running for no_cool_ms but the room
-/// has not cooled below the compressor-on threshold (suggests refrigeration failure).
+/// has not reached setpoint (suggests refrigeration failure).
+/// Matches asymmetric OFF-at-setpoint control: still at/above SP after long run.
 inline bool p4_ctl_no_cool_alarm(
     float    coolroom_c,
     float    setpoint_c,
@@ -226,9 +257,10 @@ inline bool p4_ctl_no_cool_alarm(
     uint32_t comp_on_since_ms,
     uint32_t no_cool_ms
 ) {
+    (void) diff_c;  // retained in signature for call-site compatibility
     if (!p4_rtd_valid(coolroom_c) || !comp_on || comp_on_since_ms == 0U) return false;
     if ((millis() - comp_on_since_ms) < no_cool_ms) return false;
-    return coolroom_c > (setpoint_c + diff_c / 2.0f + 0.5f);
+    return coolroom_c >= setpoint_c;
 }
 
 // ─── Ice detection alarm ────────────────────────────────────────────────────
