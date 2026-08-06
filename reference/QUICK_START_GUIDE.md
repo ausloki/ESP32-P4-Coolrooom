@@ -130,7 +130,7 @@ continuous** (leave **Fan Relay Enabled** off). Humidity is monitored, not contr
 | Setting | Recommended | Why |
 |---|---|---|
 | **Setpoint** | `2.0 °C` | Target hold for a general food chiller (matches firmware factory default). |
-| **Compressor Differential** | `1.0 °C` (default) | Band ≈ 1.5–2.5 °C — tight control without excessive cycling. |
+| **Compressor Differential** | `1.0 °C` (default) | Asymmetric: ON at SP+1 °C (3.0), OFF at SP (2.0) — tight control without excessive cycling. |
 | **Compressor Off-Delay** | `3 min` (default) | Compressor protection; do not shorten without OEM approval. |
 | **Compressor Min Run Time** | `2 min` (default) | Pairs with Off-Delay against short-cycling. |
 | **Fan Relay Enabled** | Leave `Off` | Fans currently run constantly (hardwired). Enable only after rewiring fans onto coil 0. |

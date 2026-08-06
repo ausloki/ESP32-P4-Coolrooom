@@ -19,7 +19,7 @@ flowchart TD
     PFERR --> WAIT10[Wait 10s]
     WAIT10 --> LOOP
 
-    FAULT -->|No| COMP[p4_ctl_compressor_eval\nt vs setpoint ± diff/2]
+    FAULT -->|No| COMP[p4_ctl_compressor_eval\nON at SP+diff / OFF at SP]
 
     COMP --> C1{result?}
     C1 -->|+1 turn ON| CON[relay_compressor ON\n(fan follows if enabled)]
