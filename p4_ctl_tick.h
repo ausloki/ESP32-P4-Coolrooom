@@ -936,57 +936,6 @@ if (!ctl_relay_siren_enabled->value() && relay_siren->state)
     }
 }
 
- 
-if (ctl_calibration_state->value() == 2) {
-    float sht = sht31_internal_temp_raw->state;
-    float r1 = probe1_temp->state;
-    float r2 = probe2_temp->state;
-    if (p4_rtd_valid(r1)) {
-        ctl_calibration_probe1_sum->value() += r1;
-        ctl_calibration_probe1_count->value()++;
-    }
-    if (input_probe2_enabled->value() && p4_rtd_valid(r2)) {
-        ctl_calibration_probe2_sum->value() += r2;
-        ctl_calibration_probe2_count->value()++;
-    }
-    ctl_calibration_sample_count->value()++;
-    if (ctl_calibration_sample_count->value() >= ctl_calibration_samples_max->value()) {
-        ctl_calibration_state->value() = 3;
-    }
-    (void) sht;
-}
-if (ctl_calibration_state->value() == 3) {
-    float sht = sht31_internal_temp_raw->state;
-    if (ctl_calibration_sample_count->value() < ctl_calibration_samples_min->value() ||
-        isnan(sht)) {
-        ESP_LOGW("calibration", "Aborted — not enough samples or SHT31 lost");
-        ctl_calibration_state->value() = 0;
-    } else {
-        if (ctl_calibration_probe1_count->value() > 0) {
-            float avg = ctl_calibration_probe1_sum->value() /
-                        (float) ctl_calibration_probe1_count->value();
-            float off = p4_ctl_calibration_offset(sht, avg);
-            if (!isnan(off)) {
-                ctl_probe1_offset_c->value() = off;
-                ESP_LOGI("calibration", "Probe1 offset -> %.2f (avg %.2f, sht %.2f)",
-                         off, avg, sht);
-            }
-        }
-        if (input_probe2_enabled->value() && ctl_calibration_probe2_count->value() > 0) {
-            float avg = ctl_calibration_probe2_sum->value() /
-                        (float) ctl_calibration_probe2_count->value();
-            float off = p4_ctl_calibration_offset(sht, avg);
-            if (!isnan(off)) {
-                ctl_probe2_offset_c->value() = off;
-                ESP_LOGI("calibration", "Probe2 offset -> %.2f (avg %.2f, sht %.2f)",
-                         off, avg, sht);
-            }
-        }
-        ctl_calibration_state->value() = 0;
-        p4_sd_log_event("CALIBRATION", "complete");
-    }
-}
-  
 }
 
 // ─── CPU 0 worker ───────────────────────────────────────────────────────────

@@ -552,9 +552,8 @@ Probe 2, and the internal SHT31 (SHT31 has no offset — raw and corrected match
 | **Temperature Display Unit** | Chooses Celsius or Fahrenheit for LVGL and web dashboard temperature readouts. Published to Home Assistant as a select. | Celsius / Fahrenheit | **Celsius** | Change for operator preference. This does not alter control math or stored values; HA temperature sensors follow HA's own unit system. |
 | **Probe 1 (Coolroom) Calibration Offset** | Adds a fixed correction to the main coolroom-air RTD reading (CH1). | -10 – 10 °C | 0.0 °C | Only set this after comparing the probe against a trusted reference thermometer — enter the difference so the displayed reading matches reality. |
 | **Probe 2 (Evaporator) Calibration Offset** | Same idea, for the evaporator RTD (CH2). | -10 – 10 °C | 0.0 °C | Same approach — compare against a reference thermometer first. |
-| **Calibrate Probes Now** *(button)* | Auto-calibrate RTD offsets against the internal SHT31 reference (averages samples, writes offsets). | — | — | Needs SHT31 + at least one RTD online. Refuses until RS485 boards are connected on the bench. |
 | **Evaporator Probe (Probe 2) Enabled** | Master switch for the evaporator RTD. | On/Off | On | Smart Defrost (§4.3) and the Ice Alarm (§4.5) both need Probe 2 — disabling it disables those features too, even if their own switches are on. Does **not** reassign which physical sensor is Probe 1 or Probe 2. |
-| **Internal SHT31 Sensor Enabled** | Cabinet humidity/temperature sensor. | On/Off | On | Informational + dew-point / frost-rate / auto-cal — see note below. Not a substitute for Probe 1. |
+| **Internal SHT31 Sensor Enabled** | Cabinet humidity/temperature sensor. | On/Off | On | Informational + dew-point / frost-rate — see note below. Not a substitute for Probe 1. |
 | **External SHT20 Sensor Enabled** | Room/ambient humidity/temperature sensor. | On/Off | On | Informational only — see note below. |
 | **CT Clamp Enabled** | Optional RS485 CT clamp (Qineng QNDBK3) on the same Modbus bus. | On/Off | **Off** | Default off. When on, polls slave **110** @ **9600** for current (Amps). Not on the home gauge — see System Health / Hardware / HA `CT Clamp Current`. Configure the clamp to address 110 before joining the bus (factory examples often use 1, which collides with the relay). Clamp the **whole plant feed** (compressor + fans + controller), not compressor-only. |
 | **CT Run-Proof Enabled** | Opt-in plant-feed run-proof using the CT. | On/Off | **Off** | Still off by default even when the clamp is enabled. Web and touchscreen run-proof thresholds/delay are gated until **CT Clamp Enabled** is on. Evaluation requires clamp **online**. |
@@ -570,7 +569,7 @@ Probe 2, and the internal SHT31 (SHT31 has no offset — raw and corrected match
 
 ### CT run-proof (optional)
 
-*Touchscreen: Settings 7/8 — scroll below Auto Calibrate (run-proof rows grey /
+*Touchscreen: Settings 7/8 — scroll to CT Clamp rows (run-proof rows grey /
 inactive until CT Clamp Enabled). Web: **Probes** section (same gate). HA: binary
 sensors + config entities. Home centre status / banner show the alarms when active.*
 

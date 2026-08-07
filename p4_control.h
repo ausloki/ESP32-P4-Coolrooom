@@ -402,16 +402,6 @@ inline float p4_ctl_resolve_evap_c(bool probe2_enabled, float rtd_c) {
     return p4_rtd_valid(rtd_c) ? rtd_c : NAN;
 }
 
-/// Auto-calibrate offset against an SHT31 reference: offset = ref − probe_avg.
-/// Clamped to ±10 °C. Returns NAN if either input is invalid.
-inline float p4_ctl_calibration_offset(float sht31_ref_c, float probe_avg_c) {
-    if (!p4_rtd_valid(sht31_ref_c) || !p4_rtd_valid(probe_avg_c)) return NAN;
-    float off = sht31_ref_c - probe_avg_c;
-    if (off > 10.0f) off = 10.0f;
-    if (off < -10.0f) off = -10.0f;
-    return off;
-}
-
 // ─── Sensor fallback duty cycle ─────────────────────────────────────────────
 
 /// When the primary probe is faulted and fallback is enabled, run the compressor

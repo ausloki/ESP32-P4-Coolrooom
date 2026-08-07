@@ -177,8 +177,6 @@ substitutions:
   default_fallback_off_min:    "27"   # sensor fallback compressor off-time (min)
   default_smart_delta_c:       "8.0"  # delta threshold for smart defrost trigger
   default_smart_dwell_min:     "30"   # delta must hold N min before smart defrost
-  default_cal_samples_min:     "10"
-  default_cal_samples_max:     "20"
   # Speaker volume UI % (20–100). Mapped to ES8311 via p4_audio_ui_to_codec
   # (linear 0.35–0.82; 100% → mild boost above unity — never raw 0.90+).
   default_audio_volume_pct:    "85"
@@ -3406,8 +3404,7 @@ number:
       - script.execute: refresh_all_settings_labels
 
   # ── Manual per-probe calibration offset — fine-tuning against a reference
-  # thermometer. Auto-calibrate (SHT31 reference) is also available via the
-  # Calibrate Probes Now button when both RTD and SHT31 are online.
+  # thermometer (direct entry only; no auto-calibrate routine).
   - platform: template
     id: probe1_offset_c
     name: "Probe 1 (Coolroom) Calibration Offset (°C)"
@@ -3794,42 +3791,6 @@ button:
     web_server:
       sorting_group_id: group_system_info
       sorting_weight: 11
-
-  - platform: template
-    id: btn_calibration_start
-    name: "Calibrate Probes Now"
-    icon: "mdi:target"
-    entity_category: config
-    web_server:
-      sorting_group_id: group_probes
-      sorting_weight: 30
-    on_press:
-      - lambda: |-
-          // Needs SHT31 reference + at least one RTD online. Bench without
-          // RS485 will refuse until the Modbus boards are connected.
-          if (id(ctl_calibration_state) != 0) {
-            ESP_LOGW("calibration", "Already in progress (state %d)", id(ctl_calibration_state));
-            return;
-          }
-          float sht = id(sht31_internal_temp_raw).state;
-          float rtd1 = id(probe1_temp).state;
-          float rtd2 = id(probe2_temp).state;
-          int sources = 0;
-          if (!isnan(sht)) sources++;
-          if (p4_rtd_valid(rtd1)) sources++;
-          if (id(input_probe2_enabled) && p4_rtd_valid(rtd2)) sources++;
-          if (isnan(sht) || sources < 2) {
-            ESP_LOGW("calibration", "Need SHT31 + ≥1 RTD online (have %d usable sources)", sources);
-            return;
-          }
-          id(ctl_calibration_state) = 2;  // collecting (skip wait — immediate)
-          id(ctl_calibration_start_ms) = millis();
-          id(ctl_calibration_sample_count) = 0;
-          id(ctl_calibration_probe1_sum) = 0.0f;
-          id(ctl_calibration_probe2_sum) = 0.0f;
-          id(ctl_calibration_probe1_count) = 0;
-          id(ctl_calibration_probe2_count) = 0;
-          ESP_LOGI("calibration", "Started — sampling against SHT31 reference");
 
   - platform: template
     id: btn_ntfy_test
@@ -5008,52 +4969,6 @@ globals:
 
   - id: ctl_defrost_last_start_ms
     type: uint32_t
-    restore_value: no
-    initial_value: "0"
-
-  # Auto-calibrate FSM: 0=idle, 2=collecting, 3=apply
-  - id: ctl_calibration_state
-    type: int
-    restore_value: no
-    initial_value: "0"
-
-  - id: ctl_calibration_start_ms
-    type: uint32_t
-    restore_value: no
-    initial_value: "0"
-
-  - id: ctl_calibration_sample_count
-    type: int
-    restore_value: no
-    initial_value: "0"
-
-  - id: ctl_calibration_samples_min
-    type: int
-    restore_value: yes
-    initial_value: ${default_cal_samples_min}
-
-  - id: ctl_calibration_samples_max
-    type: int
-    restore_value: yes
-    initial_value: ${default_cal_samples_max}
-
-  - id: ctl_calibration_probe1_sum
-    type: float
-    restore_value: no
-    initial_value: "0.0"
-
-  - id: ctl_calibration_probe2_sum
-    type: float
-    restore_value: no
-    initial_value: "0.0"
-
-  - id: ctl_calibration_probe1_count
-    type: int
-    restore_value: no
-    initial_value: "0"
-
-  - id: ctl_calibration_probe2_count
-    type: int
     restore_value: no
     initial_value: "0"
 
@@ -8935,24 +8850,11 @@ lvgl:
                               cycle: true
                           - script.execute: refresh_temperature_display
                           - script.execute: refresh_all_settings_labels
-              - label: {x: 0, y: 324, width: 460, text: "Auto Calibrate", text_font: font_medium, text_color: col_text}
-              - button:
-                  x: 0
-                  y: 354
-                  width: 460
-                  height: 56
-                  bg_color: col_blue
-                  radius: 8
-                  border_width: 0
-                  pad_all: 0
-                  widgets: [{label: {align: CENTER, text: "Calibrate Probes Now", text_font: font_medium, text_color: col_text}}]
-                  on_click:
-                    - button.press: btn_calibration_start
               # Optional CT clamp + run-proof (gated like web requires: ct_clamp_enabled).
-              - label: {x: 0, y: 432, width: 460, text: "CT Clamp Enabled", text_font: font_medium, text_color: col_text}
+              - label: {x: 0, y: 324, width: 460, text: "CT Clamp Enabled", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
-                  y: 462
+                  y: 354
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -8986,10 +8888,10 @@ lvgl:
                         on_click:
                           - switch.toggle: sw_ct_clamp_enabled
                           - script.execute: refresh_all_settings_labels
-              - label: {id: lbl_hdr_ct_runproof, x: 500, y: 432, width: 460, text: "CT Run-Proof Enabled", text_font: font_medium, text_color: col_text}
+              - label: {id: lbl_hdr_ct_runproof, x: 500, y: 324, width: 460, text: "CT Run-Proof Enabled", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
-                  y: 462
+                  y: 354
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -9027,10 +8929,10 @@ lvgl:
                               then:
                                 - switch.toggle: sw_ct_run_proof_enabled
                                 - script.execute: refresh_all_settings_labels
-              - label: {id: lbl_hdr_ct_idle, x: 0, y: 540, width: 460, text: "CT Idle Max (A)", text_font: font_medium, text_color: col_text}
+              - label: {id: lbl_hdr_ct_idle, x: 0, y: 432, width: 460, text: "CT Idle Max (A)", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
-                  y: 570
+                  y: 462
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -9088,10 +8990,10 @@ lvgl:
                               then:
                                 - number.decrement: {id: ct_idle_max_num, cycle: false}
                                 - script.execute: refresh_all_settings_labels
-              - label: {id: lbl_hdr_ct_runmin, x: 500, y: 540, width: 460, text: "CT Running Min (A)", text_font: font_medium, text_color: col_text}
+              - label: {id: lbl_hdr_ct_runmin, x: 500, y: 432, width: 460, text: "CT Running Min (A)", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
-                  y: 570
+                  y: 462
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -9149,10 +9051,10 @@ lvgl:
                               then:
                                 - number.decrement: {id: ct_run_min_num, cycle: false}
                                 - script.execute: refresh_all_settings_labels
-              - label: {id: lbl_hdr_ct_delay, x: 0, y: 648, width: 460, text: "CT Run-Proof Delay (s)", text_font: font_medium, text_color: col_text}
+              - label: {id: lbl_hdr_ct_delay, x: 0, y: 540, width: 460, text: "CT Run-Proof Delay (s)", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 0
-                  y: 678
+                  y: 570
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -9210,10 +9112,10 @@ lvgl:
                               then:
                                 - number.decrement: {id: ct_run_proof_delay_num, cycle: false}
                                 - script.execute: refresh_all_settings_labels
-              - label: {id: lbl_hdr_ct_over, x: 500, y: 648, width: 460, text: "CT Overcurrent (A)", text_font: font_medium, text_color: col_text}
+              - label: {id: lbl_hdr_ct_over, x: 500, y: 540, width: 460, text: "CT Overcurrent (A)", text_font: font_medium, text_color: col_text}
               - obj:
                   x: 500
-                  y: 678
+                  y: 570
                   width: 460
                   height: 64
                   bg_color: col_bg
@@ -10995,8 +10897,6 @@ script:
           input_defrost_skip_cold_enabled->update();
           input_frost_rate_monitoring_enabled->update();
           input_ice_detect_enabled->update();
-          ctl_calibration_samples_min->update();
-          ctl_calibration_samples_max->update();
           input_door_sensor_enabled->update();
           input_door_light_enabled->update();
           input_door_hold_compressor->update();

@@ -357,7 +357,7 @@ to the correct channel terminals.
   fit one RTD — that disables ice / smart-defrost features that need coil temp; it does
   **not** remake CH2 into the room sensor.
 - SHT31 (I2C) remains the **cabinet humidity / auxiliary temp** sensor (dew-point /
-  frost-rate / auto-cal reference). SHT20 is **ambient** outside the room. Neither
+  frost-rate). SHT20 is **ambient** outside the room. Neither
   replaces Probe 1 or Probe 2.
 
 ### Modbus relay coil roles (firmware)
