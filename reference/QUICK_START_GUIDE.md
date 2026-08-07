@@ -52,7 +52,8 @@ on any browser on your network.
       (and server if not using ntfy.sh) → optionally tune each alert's priority →
       **Send Test Notification**. Install the free ntfy app and subscribe to that same
       topic. See User Manual §4.8.
-- [ ] **Set your target temperature and alarm thresholds** — see the worked example below,
+- [ ] **Set your target temperature and alarm thresholds** — see the worked examples below
+      (§4 general 2 °C food coolroom, or §4b Black Amber / Amber Jewel / Tegan Blue plums),
       or your own product's requirements.
 - [ ] **Do one manual backup** (System section → "Backup All Settings to SD") once you're
       happy with your configuration, so you can restore it after a factory reset if needed.
@@ -165,17 +166,140 @@ continuous** (leave **Fan Relay Enabled** off). Humidity is monitored, not contr
 > on this controller — not a substitute for your own quality/food-safety procedures. Always
 > verify against the product, local rules, and how the loaded room actually performs.
 
+---
+
+## 4b. Worked Example — Dessert Plums (Black Amber · Amber Jewel · Tegan Blue)
+
+End-to-end **plums profile** for short-to-medium-term cold storage of this site’s three
+Japanese dessert plums (starting assumption ~15° Brix; Amber Jewel often packs sweeter).
+Apply every group below (or leave consciously at the stated default).
+Printable tables: `reference/recommended_settings_plums.html`. Cross-check names against
+User Manual §4.1–§4.9 / §4.13.
+
+**Site crop set (this coolroom):** three Japanese dessert plums grown/stored together —
+
+| Cultivar (use this spelling) | Also seen as | Typical published chill hold |
+|---|---|---|
+| **Black Amber** | ‘Blackamber’ (UC Davis literature) | Prefer **~0 °C**; avoid the **~2–8 °C** “killing zone” (chilling injury / internal breakdown worse than at 0 °C). |
+| **Amber Jewel** | Informal “Amber Jewels”; industry/nursery catalogues use **Amber Jewel** (singular) | WA / Curtin trials store at **0 °C**; **5 °C** raises ethylene and CI vs 0 °C. ANFIC notes excellent storage; fruit often packed **very sweet** (~20° Brix when fully ripe). |
+| **Tegan Blue** | User spelling “Teagan Blue” — published / nursery name is **Tegan Blue** | WA research stores at **0 ± 1 °C**, **~90 ± 5% RH** (1-MCP/MAP studies). |
+
+Sources are postharvest papers and extension sheets (UC Davis / Crisosto for Black Amber; Curtin–WA / Singh group for Amber Jewel and Tegan Blue; UC plum fact sheet for generic Japanese-plum optima). They are **storage-temperature** guidance, not certified freeze-point tables for your packout.
+
+**Shared room (recommended):** keep **one setpoint for all three**. Published air targets for these cultivars **do not diverge** enough to justify separate rooms — all want near **0 °C**, not a warmer intermediate band. Use:
+
+- **Setpoint `0.5 °C`** — shared hold slightly above expected freeze, until you confirm freeze point for **your** Brix / maturity.
+- **Low Temp Alarm Delta `1.5 °C`** → trip about **−1.0 °C** — **freeze guard** for a mixed load.
+
+**What drives the shared numbers?** Literature does **not** publish distinct flesh freeze points for these three by name. Freeze risk tracks **soluble solids (Brix) and maturity** more than cultivar label: lower SSC → warmer (higher) freeze point → freeze first. Size the Low Δ for the **lowest-Brix / least-ripe pack** in the room (refractometer on each cultivar at packout). High-SSC Amber Jewel packs are usually *more* freeze-tolerant, not less. Black Amber’s well-documented risk is **chilling injury when held too warm** (~5 °C), not a uniquely high freeze point — that is why High Temp Alarm stays tight as well.
+
+**Why not just use §4 (2 °C food)?** Plums want air **near 0 °C** (often about
+**−0.5…+1 °C** by cultivar — **confirm freeze point for your packout / Brix** before going colder).
+They need a tighter **freeze-guard** low alarm, and humid stone-fruit rooms frost the coil
+harder. There is **no humidity setpoint** on this controller — SHT31 only reports RH and
+feeds dew-point / frost-rate defrost; provide separate humidification for ~90–95% RH.
+
+**Plant assumptions:** single compressor; **passive** defrost; evaporator fans **hardwired
+continuous** (**Fan Relay Enabled** off). Probe 1 = coolroom air, Probe 2 = evaporator
+(fixed). Bench: RS485 / expansion I2C often disconnected — enable what is fitted; offline
+is expected until wired.
+
+### 4b.1 Temperature control & compressor (§4.1)
+
+| Setting | Recommended | Why |
+|---|---|---|
+| **Setpoint** | `0.5 °C` | Shared hold for Black Amber / Amber Jewel / Tegan Blue — near 0 °C with margin above freeze until packout freeze point is known. (§4 uses 2.0.) |
+| **Compressor Differential** | `1.0 °C` (default) | Asymmetric: **ON at 1.5 °C**, **OFF at 0.5 °C**. |
+| **Compressor Off-Delay (Lockout)** | `3 min` (default) | Min-off / motor protection — do not shorten without OEM approval. |
+| **Compressor Min Run Time** | `2 min` (default) | Min-on pairs with Off-Delay against short-cycling. |
+| **Fan Relay Enabled** | Leave `Off` | Continuous hardwired fans. |
+| **Sensor Fallback Duty-Cycle** | `On`, `3` / `27` min (default) | ~10% duty if Probe 1 fails. |
+
+### 4b.2 Defrost schedule + smart / drip (§4.2–§4.3)
+
+| Setting | Recommended | Why |
+|---|---|---|
+| **Defrost System Enabled** | `On` | Near-0 °C + humidity → steady frost. |
+| **Defrost Interval** | `360 min` (6 h; factory 480) | Humid produce / door traffic — same idea as §4. |
+| **Defrost Max Duration** | `30 min` (default) | Safety cap if the coil is slow to clear. |
+| **Defrost Early Termination by Temperature** | `On` @ **Defrost Termination Temp** `5.0 °C` | Ends when Probe 2 shows coil clear — less room warm-up. |
+| **Defrost Drip-Drain Phase** | `On`, **Defrost Drip Time** `5 min` | Meltwater drain before cooling resumes. |
+| **Smart Defrost (Delta-Triggered)** | **On** (factory Off) | Variable inbound fruit loads; needs Probe 2. |
+| **Smart Defrost Delta / Dwell** | `8.0 °C` / `30 min` (defaults) | Tighten later only if ice appears between smart starts. |
+| **Dew Point Early Defrost Trigger** | **On if Internal SHT31 fitted**, else `Off` | Best humidity-aware trigger for stone fruit. |
+| **Frost Rate Monitoring** | **On if SHT31 fitted** (`5%` / `300 s`), else `Off` | Complements dew-point. |
+| **Defrost Skip-If-Cold** | Leave `Off` (−10 °C threshold unused while off) | Commission on schedule first. |
+| **Defrost Max Interval Override (Force-Max)** | `720 min` (12 h, default) | Safety net if you later enable Skip-If-Cold. |
+
+### 4b.3 Alarms + post-defrost smart lockout (§4.4–§4.5)
+
+| Setting | Recommended | Why |
+|---|---|---|
+| **High Temp Alarm Delta** | `2.0 °C` → ~**2.5 °C** | Tighter than §4 (2.5) / factory (3.0) — catch drift toward the CI “killing zone” (~2–8 °C) before ripening / breakdown risk rises (esp. Black Amber). |
+| **Low Temp Alarm Delta** | `1.5 °C` → ~**−1.0 °C** | **Freeze guard** for the mixed room — tighter than §4 (2.0) / factory (3.0). Sized for the **lowest-Brix pack** among the three; confirm freeze point for your packout / Brix before tightening further. |
+| **Alarm Persist Time** | `5 min` (default) | Ignores brief door / load spikes. |
+| **Alarm Siren Enabled** | `On` | Local audible alarm. |
+| **Alarm Recovery Hysteresis** | `0.5 °C` (default) | Stops clear/re-alarm flap. |
+| **Ice Detection Enabled** | `On` | Needs Probe 2. |
+| **Ice Alarm Delta / Dwell** | `15 °C` / `10 min` (defaults) | Precision polarity (large coolroom−evap gap). Do **not** use older “small gap” ice numbers. |
+| **No-Cool Alarm Timeout** | `45 min` (factory 60) | Faster refrigeration-failure notice for high-value fruit. |
+| **Startup Alarm Grace Floor** | `15 min` (default) | Suppresses nuisance alarms during boot pulldown. |
+| **Post-Defrost Alarm Grace** | `20 min` (default) | Alarm quiet + **smart lockout**: blocks Smart / Dew-Point / Frost-Rate re-triggers right after a cycle (scheduled / Force-Max / Manual still allowed). Raise if early defrosts or alarms fire immediately after drip. |
+
+### 4b.4 Door & light (§4.6)
+
+| Setting | Recommended | Why |
+|---|---|---|
+| **Door Sensor Enabled** | `On` if reed fitted | Prerequisite for door alarm / light / hold. |
+| **Door Sensor Mode (NC or NO)** | Match wiring (leave NC if that is how it is wired) | Wrong polarity inverts open/closed. |
+| **Door-Triggered Light Enabled** | `On` | Staff load/unload convenience (needs Light Relay Enabled). |
+| **Hold Compressor While Door Open** | Leave `Off` | Stuck-reed would starve cooling. |
+| **Door Alarm Delay** | `300 s` (default) | Routine loading; shorten if doors must never stay open. |
+
+### 4b.5 Probes, humidity monitor, CT (§4.7)
+
+| Setting | Recommended | Why |
+|---|---|---|
+| **Temperature Display Unit** | `Celsius` (unless operators prefer °F) | Display only; control stays °C. |
+| **Probe 1 / Probe 2 Calibration Offsets** | `0.0 °C` until checked | Manual offsets only — compare against a reference thermometer. **No “Calibrate Probes Now” action.** |
+| **Evaporator Probe (Probe 2) Enabled** | `On` | Required for smart defrost, ice alarm, early terminate. |
+| **Internal SHT31 Sensor Enabled** | `On` if fitted; else leave Off / expect offline | Reports RH toward a **monitor target ~90–95%** (no RH control loop / hysteresis entity exists). Enables Dew-Point / Frost-Rate when On and healthy. Bench: expansion I2C often absent. |
+| **External SHT20 Sensor Enabled** | `On` if fitted | Ambient context on home gauge / diagnostics only. |
+| **CT Clamp Enabled** | `Off` until QNDBK3 fitted @ addr **110** | Whole **plant feed** clamp — leave Off otherwise. |
+| **CT Run-Proof Enabled** | `Off` until clamp online | Then On; set **Idle Max** / **Running Min** from measured idle vs run Amps (defaults 0.40 / 0.55 A are starting points only). |
+| **CT Run-Proof Delay** | `30 s` (default) after enable | Persist before fail-to-start / stuck-on / overcurrent latch. |
+| **CT Overcurrent Limit** | `1.50 A` start, or `0` to disable overcurrent only | Tune from measured plant peak after enable. |
+
+### 4b.6 Notifications, audio, hardware, SD, access (§4.5b, §4.8–§4.9, §4.11, §4.13)
+
+| Setting | Recommended | Why |
+|---|---|---|
+| **ntfy Notifications Enabled** | **On** for remote critical alarms | Low / High / No-Cool / Ice / Probe / Door / Hardware Offline / CT (if used). Set Server + Topic; **Send Test**. Priorities: leave defaults (No-Cool / Probe / Hardware Offline = urgent). |
+| **Audio Alerts Enabled / Speaker Volume** | `On` / `85%` | Spoken alarms on site; leave per-phrase Speak toggles at factory defaults unless noisy. |
+| **Compressor / Light / Siren Relay Enabled** | `On` | Hardware enables for cooling, door light, siren. |
+| **SD Temp Log Retention** | `90 days` (factory 60) | Longer daily CSVs for harvest / seasonal log-tune (§7). Event log + 5 min temp samples (`log_interval_min`) are compile-time — leave as-is. |
+| **Backup All Settings to SD** | After profile is dialled in | Off-device copy before flash / factory reset. |
+| **Touchscreen PIN** | Change from `0000` | First-time checklist — not a cooling parameter. |
+| **Home Assistant API Enabled** | Leave as needed (default Off) | Not part of the cooling profile. |
+
+> **Disclaimer:** illustrative starting values from commercial / research stone-fruit chill
+> practice for Black Amber, Amber Jewel, and Tegan Blue (~15° Brix starting assumption)
+> and this controller’s documented behaviour — **not** a food-safety certification or a
+> measured freeze-point prescription. Confirm freeze point for **your** packout / Brix,
+> local rules, and how the loaded room actually performs. Cultivar spelling in catalogues:
+> **Amber Jewel** (not “Jewels”), **Tegan Blue** (not “Teagan”).
+
 ### Other common produce — quick starting points
 
-Rough industry-standard setpoint/RH hints only — apply the same disclaimer. For stone fruit
-near 0 °C, tighten the **Low Temp Alarm Delta** further (e.g. 1.5 °C) and consider a lower
-setpoint; keep Smart / Dew-Point / Frost-Rate on when humidity sensors are online.
+Rough industry-standard setpoint/RH hints only — same disclaimer. For dessert plums use
+**§4b** (or `recommended_settings_plums.html`) rather than this table alone.
 
 | Product | Typical setpoint | Typical RH target | Notes |
 |---|---|---|---|
-| Apples (long-term) | 0 – 4 °C | 90–95% | Very cold-tolerant; consider a tighter Low Alarm Delta only if storing right at 0 °C. |
-| Leafy greens / general veg | 0 – 4 °C | 95–98% | High RH need; same smart/dew-point defrost idea as the 2 °C profile. |
-| Dairy / general chiller | 1 – 4 °C | Not usually critical | The 2 °C profile above is the default starting point for this case. |
+| **Dessert plums** (Black Amber, Amber Jewel, Tegan Blue; ~15° Brix start) | ~0.5 °C shared (see §4b) | 90–95% (monitor only) | One room / one SP; Low Δ freeze guard for lowest-Brix pack; confirm freeze point. |
+| Apples (long-term) | 0 – 4 °C | 90–95% | Cold-tolerant; tighten Low Alarm Delta only if holding right at 0 °C. |
+| Leafy greens / general veg | 0 – 4 °C | 95–98% | High RH need; same smart/dew-point idea as §4 / §4b when SHT is online. |
+| Dairy / general chiller | 1 – 4 °C | Not usually critical | Start from the **§4** 2 °C profile. |
 
 ---
 
@@ -247,7 +371,8 @@ Also: Min Run Time holds the compressor ON until its minimum ON window elapses (
 
 Once the SD card has about a month of `events.csv` (and daily temperature CSVs), you can
 run a **recommend-only** helper on a PC to spot nuisance alarms, short-cycling, busy doors,
-or aggressive defrost cadence, and compare suggestions to the 2 °C profile above.
+or aggressive defrost cadence, and compare suggestions to the 2 °C (§4) or plums (§4b)
+profile you actually applied.
 
 | OS | How |
 |---|---|
@@ -265,8 +390,9 @@ monthly or per harvest block with `--since`/`--until` or `--window picking` (pre
 Reports also summarise ambient (when logged) and compressor cycle rate. Scheduled
 recommend-only HTML under `logs/tune_reports/`: `tools/run_seasonal_log_tune.sh` (macOS) /
 `.cmd` / `.ps1` (Windows), or menu item **5** in `CoolroomLogTools`. Full protocol / venv /
-launchd / Task Scheduler notes: `tools/README_LOG_TUNING.md`. Printable starting tables
-remain in `reference/recommended_settings_2c.html`.
+launchd / Task Scheduler notes: `tools/README_LOG_TUNING.md`. Printable starting tables:
+`reference/recommended_settings_2c.html` (general 2 °C) and
+`reference/recommended_settings_plums.html` (Black Amber / Amber Jewel / Tegan Blue §4b).
 
 ---
 

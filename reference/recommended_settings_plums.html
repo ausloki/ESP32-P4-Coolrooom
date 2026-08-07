@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recommended Settings — Dessert Plums (Black Amber · Amber Jewel · Tegan Blue)</title>
+  <style>
+    :root {
+      --ink: #1a1a1a;
+      --muted: #555;
+      --rule: #ccc;
+      --bg: #fff;
+      --band: #f4f4f2;
+      --accent: #0b5fff;
+      --ok: #1b6b2a;
+      --warn: #8a5a00;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 11pt/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    }
+    .page {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 18mm 16mm 20mm;
+    }
+    header {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 18pt;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 9.5pt;
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    h2 {
+      margin: 22px 0 8px;
+      font-size: 12.5pt;
+      font-weight: 700;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 3px;
+      page-break-after: avoid;
+    }
+    p { margin: 0 0 10px; }
+    ul { margin: 0 0 12px; padding-left: 1.2em; }
+    li { margin-bottom: 3px; }
+    .callout {
+      background: var(--band);
+      border-left: 3px solid var(--accent);
+      padding: 10px 12px;
+      margin: 12px 0 16px;
+      font-size: 10pt;
+    }
+    .callout.warn {
+      border-left-color: var(--warn);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      margin: 0 0 6px;
+      page-break-inside: auto;
+    }
+    thead { display: table-header-group; }
+    th, td {
+      border-bottom: 1px solid var(--rule);
+      padding: 5px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 8.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    td.val {
+      white-space: nowrap;
+      font-family: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+      font-size: 9pt;
+      font-weight: 600;
+    }
+    td.chg {
+      white-space: nowrap;
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 8.5pt;
+      color: var(--ok);
+    }
+    td.chg.same { color: var(--muted); }
+    .footer {
+      margin-top: 28px;
+      padding-top: 10px;
+      border-top: 1px solid var(--rule);
+      font-size: 9pt;
+      color: var(--muted);
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    .no-print { margin-top: 14px; }
+    .btn {
+      display: inline-block;
+      padding: 8px 14px;
+      background: var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      border: none;
+      cursor: pointer;
+    }
+    @media print {
+      body { font-size: 10pt; }
+      .page { max-width: none; padding: 12mm 12mm 14mm; }
+      .no-print { display: none !important; }
+      a { color: inherit; text-decoration: none; }
+      h2 { break-after: avoid; }
+      tr { break-inside: avoid; }
+    }
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Recommended Settings — Dessert Plums<br>(Black Amber · Amber Jewel · Tegan Blue)</h1>
+      <div class="meta">
+        ESP32-P4 Coolroom Controller · Profile date 2026-08-07 · ~15° Brix starting assumption ·
+        Docs: <code>reference/QUICK_START_GUIDE.md</code> §4b ·
+        Companion to <code>recommended_settings_2c.html</code> (general 2&nbsp;°C food)
+      </div>
+    </header>
+
+    <div class="no-print">
+      <button class="btn" type="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <h2>1. Assumptions</h2>
+    <ul>
+      <li><strong>Site crop set:</strong> <strong>Black Amber</strong>, <strong>Amber Jewel</strong>, and <strong>Tegan Blue</strong> Japanese dessert plums in <strong>one shared coolroom</strong>.</li>
+      <li><strong>Spelling:</strong> catalogues / papers use <strong>Amber Jewel</strong> (singular; not “Jewels”) and <strong>Tegan Blue</strong> (not “Teagan”). UC Davis often writes ‘Blackamber’ as one word — trade name here is <strong>Black Amber</strong>.</li>
+      <li><strong>Target:</strong> shared air hold at <strong>0.5&nbsp;°C</strong> (~15° Brix starting assumption), short-to-medium-term chill — not a freezer, not CA long-haul. Published holds for these three cluster near <strong>0 °C</strong> (Tegan Blue trials often <strong>0 ± 1 °C</strong>, ~90 ± 5% RH).</li>
+      <li><strong>Shared SP / freeze guard:</strong> one setpoint for all three — literature does <em>not</em> give distinct flesh freeze points by cultivar name. Freeze risk tracks <strong>Brix / maturity</strong> (lowest-SSC pack freezes first). <strong>Low Temp Alarm Delta 1.5 °C</strong> → trip ~<strong>−1.0 °C</strong>. Size for the lowest-Brix pack; high-SSC Amber Jewel is usually more freeze-tolerant. Black Amber’s well-documented risk is CI when held too <em>warm</em> (~2–8 °C), hence a tight High Δ as well. <strong>Confirm freeze point for your packout / Brix</strong> before going colder.</li>
+      <li><strong>Control band:</strong> asymmetric — compressor <strong>ON at SP+Diff</strong>, <strong>OFF at SP</strong> (here ON 1.5 / OFF 0.5&nbsp;°C).</li>
+      <li><strong>Plant:</strong> single compressor; <strong>passive / timed defrost</strong> (compressor held off; no heater coil). Evaporator fans <strong>hardwired continuous</strong> — Fan Relay Enabled stays Off.</li>
+      <li><strong>Probes:</strong> Probe&nbsp;1 = coolroom air (RTD CH1), Probe&nbsp;2 = evaporator (RTD CH2) — fixed roles. Manual calibration offsets only (no “Calibrate Probes Now”).</li>
+      <li><strong>Humidity:</strong> <em>monitored, not controlled</em> — no RH setpoint / hysteresis entity. Aim ~90–95% RH with separate humidification if needed. Dew-Point / Frost-Rate need Internal SHT31 fitted.</li>
+      <li><strong>Priority:</strong> freeze protection + stable near-0 hold over aggressive energy saving.</li>
+    </ul>
+
+    <div class="callout warn">
+      <strong>Bench note:</strong> RS485 (relay / RTD / optional CT) and expansion I2C (SHT31/SHT20) may be
+      disconnected. Enable what is physically fitted; Modbus timeouts and sensor-offline diagnostics
+      remain <em>expected</em> until wired. End-to-end cooling cannot be proven without RS485 + probes.
+    </div>
+
+    <div class="callout">
+      <strong>vs 2&nbsp;°C food profile:</strong> lower setpoint (0.5 vs 2.0), tighter High/Low alarm deltas
+      (2.0 / 1.5 vs 2.5 / 2.0), same humid-room defrost cadence (6&nbsp;h + smart/dew/frost when sensors
+      online), ntfy recommended On for remote critical alarms. Same compressor protection timers.
+    </div>
+
+    <h2>2. Apply status</h2>
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Profile type</td><td>Documentation / operator worksheet — apply from UI or REST; not a firmware YAML change</td></tr>
+        <tr><td>Method</td><td>Web dashboard (logged in) or ESPHome LAN REST; each change stages NVS via <code>persist_config_to_nvs</code></td></tr>
+        <tr><td>Door Sensor Mode</td><td class="val">Match physical reed (often NC) — do not flip blindly</td></tr>
+        <tr><td>ntfy topic / Wi‑Fi / PIN</td><td>Site-specific — change PIN from <code>0000</code>; set ntfy topic when enabling push</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. Settings by group</h2>
+    <p>Columns: <em>Value set</em> = this plums profile. <em>vs factory</em> notes differences from firmware <code>initial_value</code> / documented default (and callouts vs the 2&nbsp;°C sheet where useful).</p>
+
+    <h2>3.1 Temperature control &amp; compressor (USER_MANUAL §4.1)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Setpoint</td>
+          <td class="val">0.5 °C</td>
+          <td class="chg">was 2.0</td>
+          <td>Shared near-0 hold for Black Amber / Amber Jewel / Tegan Blue — margin above freeze until packout freeze point (Brix) is confirmed.</td>
+        </tr>
+        <tr>
+          <td>Compressor Differential</td>
+          <td class="val">1.0 °C</td>
+          <td class="chg same">same</td>
+          <td>Asymmetric: ON at 1.5 / OFF at 0.5 °C — tight without short-cycling.</td>
+        </tr>
+        <tr>
+          <td>Compressor Off-Delay (Lockout)</td>
+          <td class="val">3 min</td>
+          <td class="chg same">same</td>
+          <td>Min-off motor protection; do not lower without compressor OEM approval.</td>
+        </tr>
+        <tr>
+          <td>Compressor Min Run Time</td>
+          <td class="val">2 min</td>
+          <td class="chg same">same</td>
+          <td>Min-on pairs with Off-Delay against brief ON/OFF chatter.</td>
+        </tr>
+        <tr>
+          <td>Fan Relay Enabled</td>
+          <td class="val">Off</td>
+          <td class="chg same">same</td>
+          <td>Plant fans hardwired continuous; coil 0 reserved until a fan rewire.</td>
+        </tr>
+        <tr>
+          <td>Sensor Fallback Duty-Cycle</td>
+          <td class="val">On · 3 / 27 min</td>
+          <td class="chg same">same</td>
+          <td>~10% duty if Probe 1 fails — keeps room cold-ish without temperature feedback.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.2 Defrost schedule (USER_MANUAL §4.2)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Defrost System Enabled</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Near-0 °C humid stone-fruit rooms frost the coil steadily.</td>
+        </tr>
+        <tr>
+          <td>Defrost Interval</td>
+          <td class="val">360 min (6 h)</td>
+          <td class="chg">was 480 (8 h)</td>
+          <td>Same humid-room cadence as the 2 °C food profile; shorten further only if ice builds between cycles.</td>
+        </tr>
+        <tr>
+          <td>Defrost Max Duration</td>
+          <td class="val">30 min</td>
+          <td class="chg same">same</td>
+          <td>Safety cap if the coil is slow to clear.</td>
+        </tr>
+        <tr>
+          <td>Early Termination by Temperature</td>
+          <td class="val">On @ 5.0 °C</td>
+          <td class="chg same">same</td>
+          <td>Ends when Probe 2 shows coil clear — less warm-up on freeze-sensitive fruit.</td>
+        </tr>
+        <tr>
+          <td>Drip-Drain Phase</td>
+          <td class="val">On · 5 min</td>
+          <td class="chg same">same</td>
+          <td>Lets meltwater drain before cooling resumes.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.3 Defrost — smart, skip, force-max (USER_MANUAL §4.3)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Smart Defrost (Delta-Triggered)</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>Warm inbound fruit / variable loads — catch frost between fixed intervals. Needs Probe 2.</td>
+        </tr>
+        <tr>
+          <td>Smart Delta / Dwell</td>
+          <td class="val">8.0 °C / 30 min</td>
+          <td class="chg same">same</td>
+          <td>Factory thresholds; tighten later only if ice appears between smart starts.</td>
+        </tr>
+        <tr>
+          <td>Dew Point Early Defrost</td>
+          <td class="val">On if SHT31 fitted</td>
+          <td class="chg">was Off*</td>
+          <td>Defrost when coil is below freezing <em>and</em> below air dew point. *Leave Off if Internal SHT31 not fitted (bench common).</td>
+        </tr>
+        <tr>
+          <td>Frost Rate Monitoring</td>
+          <td class="val">On · 5% / 300 s if SHT31</td>
+          <td class="chg">was Off*</td>
+          <td>Complements dew-point when RH drops while temp is stable. *Off without SHT31.</td>
+        </tr>
+        <tr>
+          <td>Skip-If-Cold</td>
+          <td class="val">Off (−10 °C / force-max 720)</td>
+          <td class="chg same">same</td>
+          <td>Prefer scheduled defrosts until the plant is proven; Force-Max remains a 12 h safety net.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.4 Alarm thresholds (USER_MANUAL §4.4)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>High Temp Alarm Delta</td>
+          <td class="val">2.0 °C → ~2.5 °C</td>
+          <td class="chg">was 3.0</td>
+          <td>Earlier than factory (~5.0 at SP 2.0) and tighter than 2 °C profile (2.5) — catch drift toward the CI “killing zone” (~2–8 °C), especially for Black Amber.</td>
+        </tr>
+        <tr>
+          <td>Low Temp Alarm Delta</td>
+          <td class="val">1.5 °C → ~−1.0 °C</td>
+          <td class="chg">was 3.0</td>
+          <td><strong>Freeze guard</strong> for the mixed room. Tighter than 2 °C profile (2.0). Size for the <strong>lowest-Brix pack</strong> among the three; confirm freeze point for your packout / Brix before tightening further. Avoid nuisance trips inside the 0.5–1.5 °C hold band.</td>
+        </tr>
+        <tr>
+          <td>Alarm Persist Time</td>
+          <td class="val">5 min</td>
+          <td class="chg same">same</td>
+          <td>Ignores brief door / load spikes.</td>
+        </tr>
+        <tr>
+          <td>Alarm Siren Enabled</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Audible local alarm.</td>
+        </tr>
+        <tr>
+          <td>Alarm Recovery Hysteresis</td>
+          <td class="val">0.5 °C</td>
+          <td class="chg same">same</td>
+          <td>Stops clear/re-alarm flap at the threshold.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.5 Alarms — advanced + smart lockout (USER_MANUAL §4.5)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Ice Detection</td>
+          <td class="val">On · Δ15 °C · 10 min</td>
+          <td class="chg same">same</td>
+          <td>Precision polarity: large coolroom−evap gap while cooling. Do not use older “small gap” ice numbers.</td>
+        </tr>
+        <tr>
+          <td>No-Cool Alarm Timeout</td>
+          <td class="val">45 min</td>
+          <td class="chg">was 60</td>
+          <td>Faster refrigeration-failure notice for high-value fruit; still above natural pulldown.</td>
+        </tr>
+        <tr>
+          <td>Startup Alarm Grace Floor</td>
+          <td class="val">15 min</td>
+          <td class="chg same">same</td>
+          <td>Suppresses nuisance alarms during boot pulldown.</td>
+        </tr>
+        <tr>
+          <td>Post-Defrost Alarm Grace</td>
+          <td class="val">20 min</td>
+          <td class="chg same">same</td>
+          <td>Alarm quiet after defrost <strong>and</strong> locks out Smart / Dew-Point / Frost-Rate early re-triggers (scheduled / Force-Max / Manual unaffected). Raise if early defrosts or alarms fire right after drip.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.6 Door &amp; light (USER_MANUAL §4.6)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Door Sensor Enabled</td>
+          <td class="val">On if reed fitted</td>
+          <td class="chg">was Off</td>
+          <td>Enables door alarm / light / hold paths. Leave Off if reed disconnected.</td>
+        </tr>
+        <tr>
+          <td>Door Sensor Mode</td>
+          <td class="val">Match wiring</td>
+          <td class="chg same">left alone</td>
+          <td>Wrong polarity inverts open/closed.</td>
+        </tr>
+        <tr>
+          <td>Door-Triggered Light</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>Staff load/unload; needs Light Relay Enabled.</td>
+        </tr>
+        <tr>
+          <td>Hold Compressor While Door Open</td>
+          <td class="val">Off</td>
+          <td class="chg same">same</td>
+          <td>Opt-in only — stuck reed would starve cooling.</td>
+        </tr>
+        <tr>
+          <td>Door Alarm Delay</td>
+          <td class="val">300 s (5 min)</td>
+          <td class="chg same">same</td>
+          <td>Allows normal loading; shorten if doors should never stay open.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.7 Probes, humidity monitor, CT (USER_MANUAL §4.7)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Temperature Display Unit</td>
+          <td class="val">Celsius</td>
+          <td class="chg same">same</td>
+          <td>Display only; control math stays °C. Switch to °F only for operator preference.</td>
+        </tr>
+        <tr>
+          <td>Probe 1 / Probe 2 Calibration Offsets</td>
+          <td class="val">0.0 °C</td>
+          <td class="chg same">same</td>
+          <td>Manual offsets after comparison to a reference thermometer. No “Calibrate Probes Now”.</td>
+        </tr>
+        <tr>
+          <td>Evaporator Probe (Probe 2)</td>
+          <td class="val">On</td>
+          <td class="chg same">same</td>
+          <td>Required for smart defrost, ice alarm, early terminate.</td>
+        </tr>
+        <tr>
+          <td>Internal SHT31</td>
+          <td class="val">On if fitted</td>
+          <td class="chg same">same*</td>
+          <td>Monitor toward ~90–95% RH (no RH control entity). Enables dew-point / frost-rate. *Disable / expect offline if not fitted.</td>
+        </tr>
+        <tr>
+          <td>External SHT20 (ambient)</td>
+          <td class="val">On if fitted</td>
+          <td class="chg same">same*</td>
+          <td>Ambient context on home gauge / diagnostics only.</td>
+        </tr>
+        <tr>
+          <td>CT Clamp Enabled</td>
+          <td class="val">Off</td>
+          <td class="chg same">same</td>
+          <td>Optional QNDBK3 on whole plant feed @ addr 110 @ 9600 — Off until fitted.</td>
+        </tr>
+        <tr>
+          <td>CT Run-Proof + thresholds</td>
+          <td class="val">Off / then measure</td>
+          <td class="chg same">same until CT online</td>
+          <td>After clamp online: enable run-proof; set Idle Max / Running Min from measured idle vs run Amps (factory 0.40 / 0.55 A are starts only); Delay 30 s; Overcurrent 1.50 A or 0 to disable overcurrent only.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3.8 Notifications, audio, hardware, SD, access (§4.5b, §4.8–§4.9, §4.11, §4.13)</h2>
+    <table>
+      <thead>
+        <tr><th>Setting</th><th>Value set</th><th>vs factory</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ntfy Push Notifications</td>
+          <td class="val">On</td>
+          <td class="chg">was Off</td>
+          <td>Remote critical alarms for high-value fruit (Low/High/No-Cool/Ice/Probe/Door/HW Offline/CT). Set Server + Topic; Send Test. Leave priority defaults (No-Cool / Probe / Hardware Offline = urgent).</td>
+        </tr>
+        <tr>
+          <td>Audio Alerts / Volume</td>
+          <td class="val">On / 85%</td>
+          <td class="chg same">same</td>
+          <td>Spoken on-site alarms. Leave Speak-* phrase toggles at factory defaults unless the room is too chatty.</td>
+        </tr>
+        <tr>
+          <td>Compressor / Light / Siren relays</td>
+          <td class="val">Enabled</td>
+          <td class="chg same">same</td>
+          <td>Hardware enables for control + door light + siren.</td>
+        </tr>
+        <tr>
+          <td>SD Temp Log Retention</td>
+          <td class="val">90 days</td>
+          <td class="chg">was 60</td>
+          <td>Longer daily CSV history for harvest / seasonal log-tune (Quick Start §7). Temp sample interval is compile-time <code>log_interval_min</code> (5 min).</td>
+        </tr>
+        <tr>
+          <td>Backup All Settings to SD</td>
+          <td class="val">After dial-in</td>
+          <td class="chg same">operator action</td>
+          <td>Off-device copy before USB flash / factory reset.</td>
+        </tr>
+        <tr>
+          <td>Touchscreen PIN</td>
+          <td class="val">Change from 0000</td>
+          <td class="chg">site-specific</td>
+          <td>First-time setup — not a cooling parameter.</td>
+        </tr>
+        <tr>
+          <td>Home Assistant API Enabled</td>
+          <td class="val">Leave as needed</td>
+          <td class="chg same">default Off</td>
+          <td>Not part of the cooling profile.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Intentionally left at factory default (or omitted)</h2>
+    <ul>
+      <li><strong>Compressor protection timers</strong> (3 / 2 min) — OEM-safe; no plum-specific reason to shorten.</li>
+      <li><strong>Fan Relay Off / Hold Door Open Off / Skip-If-Cold Off</strong> — same commissioning caution as the 2 °C profile.</li>
+      <li><strong>Ice / smart thresholds</strong> (15 °C, 8 °C, dwells) and <strong>Post-Defrost Grace 20 min</strong> — start from manual defaults; tune from real frost behaviour.</li>
+      <li><strong>Calibration offsets 0.0</strong> — never invent a correction without a reference thermometer.</li>
+      <li><strong>No RH setpoint / humidity hysteresis</strong> — entities do not exist; humidity is report-only + dew/frost triggers.</li>
+      <li><strong>No “Calibrate Probes Now”</strong> — removed from firmware; use Probe 1/2 Calibration Offsets only.</li>
+      <li><strong>Per-phrase Speak toggles / ntfy priority selects</strong> — leave defaults unless site wants quieter speech or different phone urgency.</li>
+      <li><strong>Firmware YAML <code>initial_value</code>s</strong> — not changed; this sheet is live NVS + documentation only.</li>
+    </ul>
+
+    <h2>5. How to apply or revert</h2>
+    <ul>
+      <li><strong>From UI:</strong> log in on the web dashboard → set the values in the tables above (or Quick Start §4b).</li>
+      <li><strong>Via REST (LAN):</strong> <code>POST http://&lt;ip&gt;/number/&lt;Name&gt;/set?value=…</code> and <code>…/switch/&lt;Name&gt;/turn_on|turn_off</code> (empty body + <code>Content-Length: 0</code>).</li>
+      <li><strong>After ≥30 days of SD logs:</strong> optional <code>tools/analyse_logs_tune_settings.py</code> — compare to this profile; WA picking window <code>--window picking</code>. See Quick Start §7.</li>
+      <li><strong>Verify persistence:</strong> reboot (do <em>not</em> use plain USB <code>esphome upload</code> — that erases NVS). Prefer <code>./tools/esphome_flash.sh</code> or OTA if flashing.</li>
+      <li><strong>Backup:</strong> once happy, <strong>Backup All Settings to SD</strong>.</li>
+      <li><strong>Full factory defaults:</strong> Factory Reset or flash with <code>--erase-settings</code>.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Disclaimer:</strong> Starting values from commercial / research stone-fruit chill practice for
+      Black Amber, Amber Jewel, and Tegan Blue (~15° Brix starting assumption) and this
+      controller’s documented behaviour. <strong>Not</strong> a food-safety certification or a measured
+      freeze-point prescription. Confirm freeze point for <strong>your</strong> packout / Brix, local rules,
+      and how the loaded room actually performs. Humidity is reported only — provide separate
+      humidification if required.
+    </div>
+
+    <div class="footer">
+      ESP32-P4 Coolroom · <code>reference/recommended_settings_plums.html</code> ·
+      Cross-refs: USER_MANUAL §4.1–4.9 · QUICK_START_GUIDE §4b · recommended_settings_2c.html ·
+      Cultivars: Black Amber · Amber Jewel · Tegan Blue ·
+      Printed from browser (Cmd/Ctrl+P). No passwords or Wi‑Fi secrets included.
+    </div>
+  </div>
+</body>
+</html>

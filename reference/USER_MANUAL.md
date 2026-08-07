@@ -372,7 +372,7 @@ The basic "something's wrong with the temperature" alarms.
 | Setting | What it does | Range | Default | When to change it |
 |---|---|---|---|---|
 | **High Temp Alarm Delta** | How far *above* setpoint the room can drift before a high-temperature alarm fires. | 0.5 – 20.0 °C | 3.0 °C | Tighten for sensitive product, loosen if door traffic causes nuisance alarms. |
-| **Low Temp Alarm Delta** | How far *below* setpoint before a low-temperature alarm fires. | 0.5 – 20.0 °C | 3.0 °C | Tighten if freeze-sensitive product is stored (see the plums example in the Quick Guide). |
+| **Low Temp Alarm Delta** | How far *below* setpoint before a low-temperature alarm fires. | 0.5 – 20.0 °C | 3.0 °C | Tighten if freeze-sensitive product is stored — see Quick Start **§4b** (Black Amber / Amber Jewel / Tegan Blue shared room) and `reference/recommended_settings_plums.html`. |
 | **Alarm Persist Time** | How long an alarm condition must hold continuously before the siren/notification actually fires. | 0 – 30 min | 5 min | Prevents nuisance alarms from a brief door-open temperature blip. Raise for high-traffic rooms. |
 | **Alarm Siren Enabled** | Master switch for the physical siren relay. | On/Off | On | When on, the siren sounds automatically for any active alarm (past its persist time). Tap the **home-screen bell** to mute it for the current event — the bell stops animating but stays red; banners and notifications keep running. Mute lifts when every alarm has cleared, or when a *new* alarm type appears so that event can sound and the bell re-animates. Turn this switch off if you want the siren permanently quiet. |
 
