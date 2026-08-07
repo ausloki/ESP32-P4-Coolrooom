@@ -165,6 +165,25 @@ inline bool p4_rtd_valid(float t) {
     return std::isfinite(t) && t > -50.0f && t < 80.0f;
 }
 
+// ─── I2C humidity / ambient (SHT31 / SHT20) online ─────────────────────────
+//
+// ESPHome's htu21d (and sht3xd) platforms set status_warning on I2C failure but
+// do **not** publish NaN — the last raw temperature sticks. Online checks that
+// only test `!isnan(raw)` therefore stay true after disconnect, and also when
+// the operator enable switch is OFF (public templates gate to NaN, raw does not).
+// Match the CT-clamp pattern: enabled AND component healthy AND a finite reading.
+
+/// True when an enabled I2C humidity/ambient sensor is responding.
+inline bool p4_i2c_hum_online(bool enabled, bool failed, bool warning, float temp_c) {
+    if (!enabled || failed || warning) return false;
+    return std::isfinite(temp_c);
+}
+
+/// Sticky raw readings should be wiped when the sensor is disabled or unhealthy.
+inline bool p4_i2c_hum_should_clear(bool enabled, bool failed, bool warning) {
+    return !enabled || failed || warning;
+}
+
 /// Return the validated RTD reading, or NaN if invalid.
 inline float p4_rtd_or_nan(float t) {
     return p4_rtd_valid(t) ? t : NAN;

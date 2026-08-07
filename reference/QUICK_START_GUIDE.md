@@ -32,9 +32,10 @@ on any browser on your network.
       on the touchscreen → enter `0000` → **Change PIN** button.
 - [ ] **Check both probes are reading sensibly** (System/Diagnostics section — Probe Health
       Summary) before relying on the unit.
-- [ ] **Check the hardware is all present** — log in → **Hardware** tab. Both RS485 boards,
-      System Time, the humidity sensors and the SD card should read *online* (RS485 boards
-      only once those are wired). If you don't want
+- [ ] **Check the hardware is all present** — log in → **Hardware** tab. System Time and
+      the SD card should read *online*; RS485 boards and SHT31/SHT20 only once those are
+      wired **and** left Enabled in Probes (disconnected I2C must show offline/disabled,
+      not OK). If you don't want
       the alarm relay driving an external siren, turn **Siren Relay Enabled** off here:
       alarms and push notifications carry on as normal. See §4.13.
 - [ ] **Wire the Modbus relay coils correctly** — channel / coil **0 = evaporator fan

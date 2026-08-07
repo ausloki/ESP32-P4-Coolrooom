@@ -679,7 +679,11 @@ if (!fault && !in_grace) {
     }
 
     const bool humidity_offline = input_humidity_internal_enabled->value() &&
-        isnan(sht31_internal_temp_raw->state);
+        !p4_i2c_hum_online(
+            true,
+            i2c_sht31->is_failed(),
+            i2c_sht31->status_has_warning(),
+            sht31_internal_temp_raw->state);
     if (humidity_offline && !ctl_humidity_sensor_offline_logged->value()) {
         ctl_humidity_sensor_offline_logged->value() = true;
         p4_sd_log_event("HUMIDITY_SENSOR_OFFLINE", "sht31 no response");
@@ -690,7 +694,11 @@ if (!fault && !in_grace) {
     }
 
     const bool ambient_offline = input_humidity_external_enabled->value() &&
-        isnan(sht20_external_temp_raw->state);
+        !p4_i2c_hum_online(
+            true,
+            i2c_sht20->is_failed(),
+            i2c_sht20->status_has_warning(),
+            sht20_external_temp_raw->state);
     if (ambient_offline && !ctl_ambient_sensor_offline_logged->value()) {
         ctl_ambient_sensor_offline_logged->value() = true;
         p4_sd_log_event("AMBIENT_SENSOR_OFFLINE", "sht20 no response");
@@ -816,9 +824,17 @@ if (sd_card_ok->value() && log_tick_count->value() >= log_every_ticks) {
     const bool ntfy_rtd_expected = true;
     const bool ntfy_temp_off = ntfy_rtd_expected && !hw_rs485_rtd1_ok->value();
     const bool ntfy_hum_off = input_humidity_internal_enabled->value() &&
-        isnan(sht31_internal_temp_raw->state);
+        !p4_i2c_hum_online(
+            true,
+            i2c_sht31->is_failed(),
+            i2c_sht31->status_has_warning(),
+            sht31_internal_temp_raw->state);
     const bool ntfy_amb_off = input_humidity_external_enabled->value() &&
-        isnan(sht20_external_temp_raw->state);
+        !p4_i2c_hum_online(
+            true,
+            i2c_sht20->is_failed(),
+            i2c_sht20->status_has_warning(),
+            sht20_external_temp_raw->state);
     if (ntfy_relay_off && !ntfy_relay_board_offline_sent->value()) {
       ntfy_relay_board_offline_sent->value() = true;
       ntfy_relay_board_offline_request->trigger();

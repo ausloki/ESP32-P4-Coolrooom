@@ -1875,6 +1875,8 @@
             'text_sensor-status': 'controller_status',
             'binary_sensor-sht31__internal_humidity__online': 'sht31_ok',
             'binary_sensor-sht20__external_humidity__online': 'sht20_ok',
+            'switch-internal_sht31_sensor_enabled': 'sht31_enabled',
+            'switch-external_sht20_sensor_enabled': 'sht20_enabled',
             'binary_sensor-controller_online': 'controller_online',
             'sensor-wifi_signal_strength': 'wifi_rssi',
             'text_sensor-wifi_ssid': 'wifi_ssid',
@@ -1924,7 +1926,7 @@
             'alarm_ice_active', 'alarm_door_active', 'alarm_nocool_active',
             'rs485_relay_ok', 'rs485_rtd_ok', 'rs485_ct_ok', 'ct_clamp_enabled', 'ct_run_proof_enabled',
             'alarm_ct_fail_active', 'alarm_ct_stuck_active', 'alarm_ct_over_active',
-            'system_time_ok', 'sht31_ok', 'sht20_ok',
+            'system_time_ok', 'sht31_ok', 'sht20_ok', 'sht31_enabled', 'sht20_enabled',
             'wifi_connected', 'probe_fault', 'light_on', 'sd_card_ok', 'controller_online',
             'siren_on', 'relay_en_compressor', 'relay_en_fan', 'relay_en_light', 'relay_en_siren',
             'ha_api_enabled',
@@ -2201,7 +2203,13 @@
             const memHtml = `Heap: ${data.heap_free_kb || '--'} KB free<br>CPU: ${cpuTxt}<br>PSRAM: ${data.psram_ok ? '✓ functional' : '✗ error'}`;
             setHtml('memoryStatus', memHtml);
 
-            const probeHtml = `SHT31: <span class="status-badge ${data.sht31_ok ? 'status-ok' : 'status-error'}">${data.sht31_ok ? '✓' : '✗'}</span>SHT20: <span class="status-badge ${data.sht20_ok ? 'status-ok' : 'status-error'}">${data.sht20_ok ? '✓' : '✗'}</span>`;
+            const sht31Badge = data.sht31_enabled === false
+                ? '<span class="status-badge status-idle">disabled</span>'
+                : `<span class="status-badge ${data.sht31_ok ? 'status-ok' : 'status-error'}">${data.sht31_ok ? '✓' : '✗'}</span>`;
+            const sht20Badge = data.sht20_enabled === false
+                ? '<span class="status-badge status-idle">disabled</span>'
+                : `<span class="status-badge ${data.sht20_ok ? 'status-ok' : 'status-error'}">${data.sht20_ok ? '✓' : '✗'}</span>`;
+            const probeHtml = `SHT31: ${sht31Badge}SHT20: ${sht20Badge}`;
             setHtml('probeStatus', probeHtml);
 
             updateHardwarePanel(data);
@@ -2254,8 +2262,16 @@
                     ? `${data.ct_current.toFixed(1)} A`
                     : '--');
             setHtml('hwRtc', okBadge(data.system_time_ok));
-            setHtml('hwSht31', okBadge(data.sht31_ok));
-            setHtml('hwSht20', okBadge(data.sht20_ok));
+            if (data.sht31_enabled === false) {
+                setHtml('hwSht31', '<span class="status-badge status-idle">disabled</span>');
+            } else {
+                setHtml('hwSht31', okBadge(data.sht31_ok));
+            }
+            if (data.sht20_enabled === false) {
+                setHtml('hwSht20', '<span class="status-badge status-idle">disabled</span>');
+            } else {
+                setHtml('hwSht20', okBadge(data.sht20_ok));
+            }
             setHtml('hwSdCard', okBadge(data.sd_card_ok));
             setText('hwChipTemp',
                 fmtTemp(data.chip_temp));

@@ -2271,6 +2271,7 @@ sensor:
   # Some breakouts strap ADDR high → 0x45 — change address: below if needed.
   # See reference/hardware_pins.md (External I2C Header).
   - platform: sht3xd
+    id: i2c_sht31
     i2c_id: i2c_bus
     address: 0x44
     update_interval: 30s
@@ -2283,7 +2284,11 @@ sensor:
 
   # SHT20 (external ambient): HTU21D-compatible, fixed address 0x40
   # (SHT20/SHT21/SHT25/HTU21D all use 0x40 — not configurable).
+  # Online status uses id(i2c_sht20).is_failed()/status_has_warning() — the
+  # stock htu21d driver does not clear sticky readings on I2C fail (see
+  # p4_i2c_hum_online in p4_helpers.h).
   - platform: htu21d
+    id: i2c_sht20
     i2c_id: i2c_bus
     address: 0x40
     model: HTU21D
@@ -2725,7 +2730,12 @@ binary_sensor:
     web_server:
       sorting_group_id: group_diagnostics
       sorting_weight: 34
-    lambda: 'return !isnan(id(sht31_internal_temp_raw).state);'
+    lambda: |-
+      return p4_i2c_hum_online(
+          id(input_humidity_internal_enabled),
+          id(i2c_sht31).is_failed(),
+          id(i2c_sht31).status_has_warning(),
+          id(sht31_internal_temp_raw).state);
 
   - platform: template
     id: sht20_online
@@ -2734,7 +2744,12 @@ binary_sensor:
     web_server:
       sorting_group_id: group_diagnostics
       sorting_weight: 35
-    lambda: 'return !isnan(id(sht20_external_temp_raw).state);'
+    lambda: |-
+      return p4_i2c_hum_online(
+          id(input_humidity_external_enabled),
+          id(i2c_sht20).is_failed(),
+          id(i2c_sht20).status_has_warning(),
+          id(sht20_external_temp_raw).state);
 
   # ── Phase 3: Alarm and fault indicators ───────────────────────────────────
   - platform: template

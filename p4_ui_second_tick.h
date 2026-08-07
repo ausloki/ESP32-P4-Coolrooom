@@ -53,9 +53,17 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
   st_in.rtd_ok = hw_rs485_rtd1_ok->value();
   st_in.rtd_expected = rtd_expected;
   st_in.sht31_enabled = input_humidity_internal_enabled->value();
-  st_in.sht31_ok = !isnan(sht31_internal_temp_raw->state);
+  st_in.sht31_ok = p4_i2c_hum_online(
+      st_in.sht31_enabled,
+      i2c_sht31->is_failed(),
+      i2c_sht31->status_has_warning(),
+      sht31_internal_temp_raw->state);
   st_in.sht20_enabled = input_humidity_external_enabled->value();
-  st_in.sht20_ok = !isnan(sht20_external_temp_raw->state);
+  st_in.sht20_ok = p4_i2c_hum_online(
+      st_in.sht20_enabled,
+      i2c_sht20->is_failed(),
+      i2c_sht20->status_has_warning(),
+      sht20_external_temp_raw->state);
   st_in.probe_fault = ctl_probe_fault->value();
   st_in.alarm_hi = ctl_alarm_high_active->value();
   st_in.alarm_lo = ctl_alarm_low_active->value();
@@ -74,6 +82,25 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
   if (status_text->state != st) status_text->publish_state(st);
 
   system_time_valid->publish_state(p4_wall_clock_ok());
+
+  // ESPHome htu21d/sht3xd leave sticky last readings on I2C fail — wipe raw
+  // NaN when disabled or component unhealthy so online/UI cannot stay true.
+  if (p4_i2c_hum_should_clear(input_humidity_internal_enabled->value(),
+                              i2c_sht31->is_failed(),
+                              i2c_sht31->status_has_warning())) {
+    if (std::isfinite(sht31_internal_temp_raw->state))
+      sht31_internal_temp_raw->publish_state(NAN);
+    if (std::isfinite(sht31_internal_humidity_raw->state))
+      sht31_internal_humidity_raw->publish_state(NAN);
+  }
+  if (p4_i2c_hum_should_clear(input_humidity_external_enabled->value(),
+                              i2c_sht20->is_failed(),
+                              i2c_sht20->status_has_warning())) {
+    if (std::isfinite(sht20_external_temp_raw->state))
+      sht20_external_temp_raw->publish_state(NAN);
+    if (std::isfinite(sht20_external_humidity_raw->state))
+      sht20_external_humidity_raw->publish_state(NAN);
+  }
 
   if (on_home) {
     lv_label_set_text(lbl_date, (p4_ui_fmt_date_short()).c_str());
@@ -387,8 +414,16 @@ inline void p4_ui_second_tick(float dial_min_c, float dial_max_c) {
   lv_label_set_text(lbl_info_probes, ([]() -> std::string {
     char buf[80];
     bool rtd_ok = hw_rs485_rtd1_ok->value();
-    bool sht31_ok = !isnan(sht31_internal_temp_raw->state);
-    bool sht20_ok = !isnan(sht20_external_temp_raw->state);
+    bool sht31_ok = p4_i2c_hum_online(
+        input_humidity_internal_enabled->value(),
+        i2c_sht31->is_failed(),
+        i2c_sht31->status_has_warning(),
+        sht31_internal_temp_raw->state);
+    bool sht20_ok = p4_i2c_hum_online(
+        input_humidity_external_enabled->value(),
+        i2c_sht20->is_failed(),
+        i2c_sht20->status_has_warning(),
+        sht20_external_temp_raw->state);
     snprintf(buf, sizeof(buf), "RTD:%s SHT31:%s SHT20:%s Fault:%s",
              rtd_ok ? "OK" : "NO", sht31_ok ? "OK" : "NO", sht20_ok ? "OK" : "NO",
              ctl_probe_fault->value() ? "YES" : "no");
