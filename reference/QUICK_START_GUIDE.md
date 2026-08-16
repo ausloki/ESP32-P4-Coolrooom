@@ -155,7 +155,7 @@ continuous** (leave **Fan Relay Enabled** off). Humidity is monitored, not contr
 | **Door-Triggered Light Enabled** | `On` | Staff convenience on load/unload. |
 | **Hold Compressor While Door Open** | Leave `Off` | Opt-in only — a stuck reed would starve cooling. |
 | **Door Alarm Delay** | `300 s` (default) | Routine loading; shorten if doors should never stay open long. |
-| **Evaporator Probe / Internal SHT31 / External SHT20** | `On` (defaults) | All-sensors profile — enable what is fitted; bench Modbus/I2C offline is expected until wired. |
+| **Evaporator Probe / Internal SHT31 / External SHT20** | `On` (defaults) | Enable what is fitted. Current bench: RS485 RTD + relay are live; I2C SHT sensors are not fitted (leave those enables off). |
 | **CT Clamp Enabled** | `Off` (default) | Optional RS485 current clamp on the **whole plant feed** — leave off unless fitted and addressed to **110** @ 9600. |
 | **CT Run-Proof** | Leave `Off` until CT is online | Opt-in after enable; defaults 0.40 A idle / 0.55 A run / 30 s (≈64 W idle / 190 W run @ 240 V). |
 | **Probe Calibration Offsets** | `0.0 °C` until checked | Compare against a calibrated reference thermometer before adjusting. |

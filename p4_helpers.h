@@ -159,6 +159,20 @@ inline bool p4_sample_fresh(uint32_t last_ms, uint32_t max_age_ms) {
     return (millis() - last_ms) < max_age_ms;
 }
 
+// ESPHome 2026.7 `modbus_controller.on_online` fires only on offline→online
+// recovery (`module_offline_` starts false). A peer that answers the first
+// poll never hits that YAML hook, so project ok-flags must be set from the
+// data path. `on_offline` still clears them.
+
+/// Return true so YAML can write: id(flag) = p4_rs485_online_from_poll();
+inline bool p4_rs485_online_from_poll() { return true; }
+
+/// Stamp last successful poll time and return true for the matching ok-flag.
+inline bool p4_rs485_note_ok(uint32_t& last_ms) {
+    last_ms = millis();
+    return true;
+}
+
 /// Validate an RTD temperature reading: must be finite and in physical range.
 /// Coolroom applications: -50 °C to +80 °C covers any realistic operating point.
 inline bool p4_rtd_valid(float t) {

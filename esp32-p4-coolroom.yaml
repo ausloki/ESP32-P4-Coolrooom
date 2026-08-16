@@ -680,9 +680,12 @@ modbus_controller:
     modbus_id: rs485_modbus
     setup_priority: -10
     update_interval: 5s
+    # on_online is recovery-only in ESPHome 2026.7 (see p4_rs485_note_ok).
+    # First successful coil/register read also sets hw_rs485_relay_ok.
     on_online:
       - lambda: |-
           id(hw_rs485_relay_ok) = true;
+          id(rs485_relay_online).publish_state(true);
           ESP_LOGI("rs485", "Relay board ONLINE");
           // The relay board is a separate device on its own supply: a
           // controller reboot doesn't clear its coils, and the first poll after
@@ -717,6 +720,7 @@ modbus_controller:
     on_offline:
       - lambda: |-
           id(hw_rs485_relay_ok) = false;
+          id(rs485_relay_online).publish_state(false);
           ESP_LOGW("rs485", "Relay board OFFLINE");
 
   - id: rtd_board_1
@@ -724,13 +728,17 @@ modbus_controller:
     modbus_id: rs485_modbus
     setup_priority: -10
     update_interval: 2s
+    # on_online is recovery-only in ESPHome 2026.7 (see p4_rs485_note_ok).
+    # First successful CH1/CH2 read also sets hw_rs485_rtd1_ok.
     on_online:
       - lambda: |-
           id(hw_rs485_rtd1_ok) = true;
+          id(rs485_rtd1_online).publish_state(true);
           ESP_LOGI("rs485", "RTD board 1 ONLINE");
     on_offline:
       - lambda: |-
           id(hw_rs485_rtd1_ok) = false;
+          id(rs485_rtd1_online).publish_state(false);
           ESP_LOGW("rs485", "RTD board 1 OFFLINE");
 
   # Optional CT clamp — polled only while CT Clamp Enabled is on (default off
@@ -2129,7 +2137,10 @@ sensor:
     accuracy_decimals: 1
     filters:
       - lambda: |-
-          if (!isnan(x)) id(rtd1_ch1_last_ms) = millis();
+          if (!isnan(x)) {
+            id(hw_rs485_rtd1_ok) = p4_rs485_note_ok(id(rtd1_ch1_last_ms));
+            id(rs485_rtd1_online).publish_state(true);
+          }
           return x * ${rtd_temp_scale};
 
   - platform: modbus_controller
@@ -2142,8 +2153,28 @@ sensor:
     accuracy_decimals: 1
     filters:
       - lambda: |-
-          if (!isnan(x)) id(rtd1_ch2_last_ms) = millis();
+          if (!isnan(x)) {
+            id(hw_rs485_rtd1_ok) = p4_rs485_note_ok(id(rtd1_ch2_last_ms));
+            id(rs485_rtd1_online).publish_state(true);
+          }
           return x * ${rtd_temp_scale};
+
+  # Relay-board poll heartbeat. ESPHome on_online does not fire on the first
+  # successful poll; a coil read that returns a value marks the board online.
+  # Coil 0 is already polled by relay_fan — this sensor rides that response.
+  - platform: modbus_controller
+    modbus_controller_id: relay_board
+    id: relay_board_poll_raw
+    internal: true
+    register_type: coil
+    address: 0
+    filters:
+      - lambda: |-
+          if (!isnan(x)) {
+            id(hw_rs485_relay_ok) = p4_rs485_online_from_poll();
+            id(rs485_relay_online).publish_state(true);
+          }
+          return x;
 
   # Optional QNDBK3 CT clamp — holding 0x1002, ÷10 → Amps (see digest).
   - platform: modbus_controller
@@ -2631,7 +2662,7 @@ text_sensor:
     web_server:
       sorting_group_id: group_diagnostics
       sorting_weight: 42
-    lambda: 'return std::string("RTD Addr: 10 (multi-channel)");'
+    lambda: 'return std::string("RTD Addr: ${modbus_rtd1_address} (2CH PT100)");'
 
   - platform: template
     name: "Probe Health Summary"

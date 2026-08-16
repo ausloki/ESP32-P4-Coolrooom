@@ -1,4 +1,6 @@
-# Handover Notes — 2026-07-31 (updated 2026-08-01 evening)
+# Handover Notes — 2026-07-31 (updated 2026-08-16)
+
+Latest bench / RS485 online-flag fix: **`HANDOVER_NOTES_2026-08-16.md`**.
 
 **Branch:** `cursor/wifi-sdmmc-slot-fix`  
 **Closeout:** persistence live-proven; compile + NVS-safe flash (or OTA) mandatory at every
@@ -23,8 +25,8 @@ Verified on hardware 2026-08-01 (OTA item 11: 2026-08-03):
 11. ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF).
 
 Still open / hardware-gated:
-- Probes tab Raw / Offset / Corrected (raw stays `--` until RTD online).
-- End-to-end Modbus control once relay/RTD boards are fitted.
+- End-to-end compressor/light coil commands on the live RTU-4 (see 2026-08-16 notes).
+- I2C SHT / CT clamp still not fitted.
 - Manual screenshots still placeholders in USER_MANUAL / Quick Start (camera only).
 - Dashboard OTA UI (web upload UI — separate from ESPHome CLI OTA above).
 
@@ -36,11 +38,10 @@ Already closed (do not re-chase):
 - Web SD log download; multi-user auth not required; mic on hold.
 - LVGL framebuffer screenshot component — declined.
 
-## Bench (unchanged)
+## Bench (updated 2026-08-16)
 
-RS485 relay/RTD and external I2C sensors **not connected** — Modbus offline expected.
-Centre status will rotate RELAY/TEMP BOARD OFFLINE (and humidity/ambient if those
-sensors are enabled).
+RS485 relay (addr 1) and 2CH PT100 (addr 100) **are connected**. I2C SHT and CT
+clamp are not. See `HANDOVER_NOTES_2026-08-16.md`.
 
 ## Key paths
 

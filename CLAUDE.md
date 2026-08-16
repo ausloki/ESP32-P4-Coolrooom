@@ -28,14 +28,17 @@ Prefer schematic / demo sample pin macros over table wording when names disagree
 
 ## Bench hardware status (current)
 
+**Connected** — treat as live:
+
+- RS485 Waveshare Modbus RTU Relay 4-CH (addr 1) and 2CH PT100 RTD (addr 100)
+  on H10 (GPIO27 TX / GPIO26 RX, 9600 8N1)
+
 **Not connected yet** — do not treat as bugs or spend time diagnosing:
 
-- RS485 relay board / RTD Modbus boards / optional CT clamp (Modbus timeouts and `* Online`
-  OFF are expected; CT Clamp Enabled defaults OFF so it does not poll until turned on)
+- Optional CT clamp (CT Clamp Enabled defaults OFF so it does not poll until turned on)
 - External I2C temp/humidity sensors on the expansion I2C header
 
-Live verification of compressor/defrost/sensor control waits until those are attached.
-On-board UI, Wi-Fi, web, and speaker path remain fair game. See
+On-board UI, Wi-Fi, web, speaker path, and RS485 relay/RTD remain fair game. See
 `.cursor/rules/bench-hardware-status.mdc` — update that rule when hardware is fitted.
 
 ## Flashing: `esphome upload` over USB erases all saved settings

@@ -23,10 +23,14 @@ naming inversion here.
 
 ### Bench note (current)
 
-RS485 (relay / RTD boards / optional CT clamp) and external I2C temp sensors are **not**
-connected on the current bench setup. Offline Modbus / missing external readings are
-expected until that hardware is fitted — see `.cursor/rules/bench-hardware-status.mdc`.
-CT Clamp Enabled defaults **OFF**, so an unfitted clamp does not poll the bus.
+**Connected:** RS485 Waveshare Modbus RTU Relay 4-CH (addr **1**) and 2CH PT100
+(addr **100**) on header H10 (GPIO27 TX / GPIO26 RX, 9600 8N1). Treat relay/RTD
+online-offline as live.
+
+**Not connected:** external I2C SHT31/SHT20 on the PH2.0 I2C header; optional CT
+clamp. Missing I2C readings are expected. CT Clamp Enabled defaults **OFF**, so
+an unfitted clamp does not poll the bus. See
+`.cursor/rules/bench-hardware-status.mdc`.
 
 ---
 

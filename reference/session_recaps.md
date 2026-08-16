@@ -4,6 +4,23 @@ One entry per compact/phase-boundary. Always push with the compact commit.
 
 ---
 
+## 2026-08-16 — RS485 online flags from first poll + Probe 2 live
+
+- **Bug:** ESPHome 2026.7 `modbus_controller.on_online` fires only on offline→online
+  recovery. `hw_rs485_rtd1_ok` / `hw_rs485_relay_ok` started false, so a board that
+  answered the first poll stayed **TEMP/RELAY BOARD OFFLINE** while Coolroom temp
+  updated (19.4–19.6 °C, sample age &lt; 2 s).
+- **Fix:** set ok-flags + publish `rs485_*_online` from a successful register/coil
+  read (`p4_rs485_note_ok` / `p4_rs485_online_from_poll`). `on_offline` still clears.
+  Diagnostic label **RTD Addr: 100 (2CH PT100)** (was stale “Addr: 10”).
+- **Evap:** Probe 2 already defaulted ON; NVS had it saved OFF. POSTed on after OTA
+  (OTA preserves NVS). Live: Probe 1 **19.6 °C**, Probe 2 **19.2 °C**.
+- Bench: RS485 RTU-4 (addr 1) + 2CH PT100 (addr 100) live; I2C SHT and CT clamp not
+  fitted. Coverage OK (no new public entities). Graph update local. OTA →
+  `192.168.50.21` (NVS preserved).
+
+---
+
 ## 2026-08-06 — Seasonal log-tune windows + scheduled runner (docs closeout)
 
 - Analysis windows: `--since` / `--until` / `--window last30|picking` (WA fruit season
