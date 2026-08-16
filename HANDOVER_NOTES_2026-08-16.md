@@ -21,10 +21,14 @@ on after flash). Diagnostic address text is **100**, matching the poll.
 
 See `.cursor/rules/bench-hardware-status.mdc`.
 
+## Proven live (operator, 2026-08-16)
+
+RTU-4 **compressor** and **light** coils cycled as commanded. Coolroom air reached
+achieved/setpoint levels. Treat plant actuation as confirmed on this bench, not
+an open proof item.
+
 ## Still open
 
-- End-to-end compressor/light coil commands on the live RTU-4 (flags now true; plant
-  actuation not fully proven this session).
 - I2C humidity/ambient and CT run-proof still wait on hardware.
 - Manual screenshots still placeholders.
 - Dashboard OTA UI (web upload) — separate from ESPHome CLI OTA.

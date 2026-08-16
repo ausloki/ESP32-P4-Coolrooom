@@ -31,12 +31,11 @@ alt gauge with live temps).
 
 ## Still open
 
-- Probes tab live Raw/Offset/Corrected (needs RTD on bench)
 - Manual screenshots still placeholders
 - Dashboard OTA UI (web upload UI — ESPHome CLI OTA is done)
-- End-to-end Modbus once relay/RTD boards are fitted
-- Alt home gauge / Nest knobs with real coolroom + ambient readings
-- Richer log-based tuning once Probe 1 has real coolroom samples
+- I2C SHT / CT clamp still not fitted
+- Alt home gauge / Nest knobs with real ambient (SHT) readings
+- Richer log-based tuning once ≥30 days of Probe 1 samples exist
 
 ## On hold / not required
 

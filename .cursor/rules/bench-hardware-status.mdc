@@ -34,8 +34,9 @@ optional CT clamp are still absent.
    bench-expected. I2C SHT absence and CT-clamp silence (while disabled) still
    are expected.
 2. Do **not** recommend "fix RS485 wiring" as the next step for unrelated work.
-3. End-to-end coolroom control (compressor coils + RTD) can be exercised on
-   this bench; I2C humidity / ambient and CT run-proof still cannot.
+3. End-to-end coolroom control is **proven on this bench** (2026-08-16): RTD
+   temps live, RTU-4 compressor and light coils cycled, room reached
+   setpoint. I2C humidity / ambient and CT run-proof still cannot.
 4. When the user reports peripherals added or removed, update this rule (and
    `CLAUDE.md` / `reference/hardware_pins.md`) before treating those buses as
    live or expected-offline.

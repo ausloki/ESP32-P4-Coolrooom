@@ -25,7 +25,6 @@ Verified on hardware 2026-08-01 (OTA item 11: 2026-08-03):
 11. ✅ ESPHome OTA confirmed working (2026-08-03): `.venv/bin/esphome upload` → `192.168.37.237`; device returned; NVS preserved (ntfy stayed OFF).
 
 Still open / hardware-gated:
-- End-to-end compressor/light coil commands on the live RTU-4 (see 2026-08-16 notes).
 - I2C SHT / CT clamp still not fitted.
 - Manual screenshots still placeholders in USER_MANUAL / Quick Start (camera only).
 - Dashboard OTA UI (web upload UI — separate from ESPHome CLI OTA above).

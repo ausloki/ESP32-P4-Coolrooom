@@ -38,8 +38,9 @@ Prefer schematic / demo sample pin macros over table wording when names disagree
 - Optional CT clamp (CT Clamp Enabled defaults OFF so it does not poll until turned on)
 - External I2C temp/humidity sensors on the expansion I2C header
 
-On-board UI, Wi-Fi, web, speaker path, and RS485 relay/RTD remain fair game. See
-`.cursor/rules/bench-hardware-status.mdc` — update that rule when hardware is fitted.
+On-board UI, Wi-Fi, web, speaker path, and RS485 relay/RTD remain fair game.
+Operator-confirmed 2026-08-16: RTU-4 compressor and light coils cycled; coolroom
+air reached setpoint. See `.cursor/rules/bench-hardware-status.mdc`.
 
 ## Flashing: `esphome upload` over USB erases all saved settings
 
