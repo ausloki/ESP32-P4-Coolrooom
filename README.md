@@ -117,23 +117,63 @@ Notes:
 - ESPHome native API is inbound (`Home Assistant -> device`).
 - The firmware does not establish a VPN session itself; VPN is handled by site routers.
 
+## Development on another computer
+
+Repo is public: https://github.com/ausloki/ESP32-P4-Coolrooom
+
+Current work lives on **`cursor/wifi-sdmmc-slot-fix`**, not `main`. Clone that branch
+or you will miss the live firmware.
+
+```bash
+git clone -b cursor/wifi-sdmmc-slot-fix https://github.com/ausloki/ESP32-P4-Coolrooom.git
+cd ESP32-P4-Coolrooom
+```
+
+**Copy `secrets.yaml` from this machine** (AirDrop, USB, password manager). It is
+git-ignored and required to compile, OTA, and log into the dashboard. Do **not**
+start from `secrets.example.yaml` if you will flash the existing board — new
+Wi‑Fi / OTA / web-login values will not match the device.
+
+Then:
+
+```bash
+cp secrets.example.yaml secrets.yaml   # only for a brand-new device
+python3 tools/setup_git_hooks.py
+python3 tools/dependency_check.py --install   # creates .venv from requirements.txt
+./tools/esphome_env_check.sh
+./tools/esphome_compile.sh esp32-p4-coolroom.yaml
+```
+
+If you edit `assets/dashboard.html` or web-login secrets, run
+`python3 scripts/embed_dashboard.py` before compile.
+
+### Flash (NVS-safe — do not wipe settings)
+
+**Never** `esphome upload` over USB. That writes the factory image from `0x0` and
+erases stored settings.
+
+```bash
+# USB (preserves NVS):
+./tools/esphome_flash.sh --device /dev/cu.usbmodemXXXX          # macOS
+./tools/esphome_flash.sh --device /dev/ttyACM0                  # Linux
+
+# OTA (app only, also preserves NVS):
+.venv/bin/esphome upload esp32-p4-coolroom.yaml --device 192.168.37.237
+# or: --device esp32-p4-coolroom.local
+```
+
+Use `--erase-settings` on `esphome_flash.sh` only when you intend a factory wipe.
+
 ## Development Environment
 
 ```bash
 # Create virtualenv and install tooling
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install esphome code-review-graph
+.venv/bin/pip install -r requirements.txt
 
 # Compile firmware (no device needed)
-.venv/bin/esphome compile esp32-p4-coolroom.yaml
-
-# Flash via USB-C (item 15 on board — Type-C USB1.1 FS)
-.venv/bin/esphome upload esp32-p4-coolroom.yaml
-
-# OTA flash (confirmed 2026-08-03 — NVS preserved)
-.venv/bin/esphome upload --device esp32-p4-coolroom.local esp32-p4-coolroom.yaml
-# or: .venv/bin/esphome upload esp32-p4-coolroom.yaml --device 192.168.37.237
+./tools/esphome_compile.sh esp32-p4-coolroom.yaml
 ```
 
 ### Compile Helpers (recommended)
@@ -205,7 +245,7 @@ This script:
 Once WiFi is live, all diagnostics can be done without USB:
 
 - **OTA updates** via `esphome upload --device <ip-or-hostname>`
-- **Web diagnostics** at `http://<device-ip>/` (auth required)
+- **Web diagnostics** at `http://<device-ip>/` (guest status, no password; 🔐 Login for settings)
 - **HA entity monitoring** for sensor values, relay states, alarms
 
 ## Code-Review Graph
