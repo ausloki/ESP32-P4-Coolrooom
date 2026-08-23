@@ -172,9 +172,17 @@ python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
 
+# Optional: put .venv/bin (esphome, modbus-cli, …) on PATH for this shell
+source tools/project_env.sh
+# Or install direnv and run `direnv allow` once — repo `.envrc` does the same.
+
 # Compile firmware (no device needed)
 ./tools/esphome_compile.sh esp32-p4-coolroom.yaml
 ```
+
+**Modbus bench tool:** `requirements.txt` includes **modbus-cli** (CLI command `modbus`).
+Use after `source tools/project_env.sh` or with `.venv/bin/modbus` — e.g. to address the
+optional CT clamp before joining the RS485 bus (see `HANDOVER_NOTES_2026-08-23.md`).
 
 ### Compile Helpers (recommended)
 

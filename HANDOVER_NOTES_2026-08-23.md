@@ -26,6 +26,50 @@ Operator received a burst of **ntfy** alerts (likely during or just after a **po
 
 **Do not reflash for diagnosis** unless chasing a firmware bug — prefer reboot; serial `esphome upload` wipes NVS.
 
+## Incoming hardware
+
+- **RS485 CT clamp** (Modbus addr **110**) — **expected to arrive ~7 September 2026**.
+  Still not fitted; leave **CT Clamp Enabled** off until installed and wired on H10.
+  After fit-up: enable CT, confirm Hardware status shows CT online, then exercise
+  CT run-proof settings on bench before relying on fail-to-start / stuck-on alarms.
+
+### Address programming (Mac bench, before joining live bus)
+
+Program the clamp to slave **110** @ **9600 8N1** so it does not collide with the
+relay (**1**) or RTD (**100**). Factory units often ship at address **1**.
+
+**Tool:** pip package **`modbus-cli`** in repo **`.venv`** — CLI command is **`modbus`**.
+From repo root: `source tools/project_env.sh` (or `direnv allow` once) puts it on PATH;
+otherwise use `.venv/bin/modbus`. Register map / broadcast write:
+`reference/QNDBK3-RS485-CT-clamp.md`.
+
+**Hardware:** USB RS485 adapter on this Mac → clamp **A** / **B** only. Prefer
+programming **off the live plant bus** (CT + 12 V + adapter only) so a broadcast
+address write cannot disturb the relay or RTD.
+
+```bash
+# 1) Find the adapter (typical macOS names)
+ls /dev/cu.usb*
+
+# 0) Repo PATH (once per shell)
+source tools/project_env.sh
+
+# 2) Optional — read factory address (often 1)
+modbus /dev/cu.usbserial-XXXX -b 9600 -P n -s 1 h@0x100B
+
+# 3) Broadcast new slave ID 110 → holding register 0x100B (broadcast = 255 / 0xFF)
+modbus /dev/cu.usbserial-XXXX -b 9600 -P n -s 255 h@0x100B=110
+
+# 4) Verify at new address — current register (may read 0 with no AC load)
+modbus /dev/cu.usbserial-XXXX -b 9600 -P n -s 110 h@0x1002
+
+# 5) Confirm baud code still 1 (= 9600; do not change unless UART changes)
+modbus /dev/cu.usbserial-XXXX -b 9600 -P n -s 110 h@0x100C
+```
+
+Then wire onto H10 with relay + RTD, power CT from **12 V**, bond grounds per
+`reference/hardware_pins.md`, and only then turn **CT Clamp Enabled** on in firmware.
+
 ## Follow-up work (deferred until on-site)
 
 ### Startup ntfy gate

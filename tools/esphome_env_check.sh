@@ -14,7 +14,7 @@ fi
 
 if [[ ! -x "$VENV_PY" ]]; then
   echo "ERROR: Missing virtualenv python at $VENV_PY" >&2
-  echo "Run: python3 -m venv $ROOT_DIR/.venv && $ROOT_DIR/.venv/bin/pip install esphome code-review-graph certifi" >&2
+  echo "Run: python3 tools/dependency_check.py --install" >&2
   exit 1
 fi
 
@@ -41,6 +41,15 @@ if missing:
     raise SystemExit("Missing python modules in .venv: " + ", ".join(missing))
 print("Python module check: OK (esphome, certifi)")
 PY
+
+MODBUS_BIN="$ROOT_DIR/.venv/bin/modbus"
+if [[ -x "$MODBUS_BIN" ]]; then
+  echo "modbus-cli: OK ($MODBUS_BIN)"
+else
+  echo "ERROR: modbus-cli not installed in .venv (expected $MODBUS_BIN)." >&2
+  echo "Run: python3 tools/dependency_check.py --install" >&2
+  exit 1
+fi
 
 CMAKE_BIN="$(command -v cmake || true)"
 if [[ -n "$CMAKE_BIN" ]]; then

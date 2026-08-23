@@ -23,9 +23,9 @@ SHT20 online-offline as live. The optional CT clamp is still absent.
 
 ## Not connected (do not diagnose as failures)
 
-- **Optional CT clamp** — not fitted. **CT Clamp Enabled** defaults OFF (no CT
-  Modbus polls until turned on). **CT run-proof** does not evaluate until the
-  clamp is enabled and online.
+- **Optional CT clamp** — not fitted (**expected delivery ~7 Sep 2026**). **CT
+  Clamp Enabled** defaults OFF (no CT Modbus polls until turned on). **CT
+  run-proof** does not evaluate until the clamp is enabled and online.
 
 ## Rules for agents
 
