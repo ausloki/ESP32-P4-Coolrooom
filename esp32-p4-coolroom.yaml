@@ -1770,6 +1770,7 @@ switch:
       - lambda: |-
           id(input_humidity_internal_enabled) = true;
           ESP_LOGI("config", "Internal SHT31 sensor ENABLED");
+          p4_i2c_hum_try_recover(id(i2c_sht31));
       - script.execute: persist_config_to_nvs
     turn_off_action:
       - lambda: |-
@@ -1791,6 +1792,7 @@ switch:
       - lambda: |-
           id(input_humidity_external_enabled) = true;
           ESP_LOGI("config", "External SHT20 sensor ENABLED");
+          p4_i2c_hum_try_recover(id(i2c_sht20));
       - script.execute: persist_config_to_nvs
     turn_off_action:
       - lambda: |-

@@ -5,9 +5,9 @@ alwaysApply: true
 
 # Bench hardware status (current)
 
-The Waveshare ESP32-P4 board under test now has the **RS485 plant bus** fitted.
-Treat Modbus relay / RTD online-offline as live. I2C humidity breakouts and the
-optional CT clamp are still absent.
+The Waveshare ESP32-P4 board under test now has the **RS485 plant bus** and
+**I2C humidity/ambient sensors** fitted. Treat Modbus relay / RTD and SHT31 /
+SHT20 online-offline as live. The optional CT clamp is still absent.
 
 ## Connected / in scope for live checks
 
@@ -15,28 +15,27 @@ optional CT clamp are still absent.
 - **RS485** on header H10 (GPIO27 TX / GPIO26 RX, 9600 8N1):
   - Waveshare Modbus RTU Relay 4-CH — slave **1**
   - 2CH PT100 RTD — slave **100** (CH1 coolroom, CH2 evaporator)
-- On-board **RTC battery holder** (item 11 / 1220) only after a cell is fitted;
-  wall clock uses SoC LP RTC + NTP. Do not treat “time pending until NTP” as a
-  failure when no cell is installed or Wi‑Fi is down.
+- **External I2C** on the PH2.0 header (GPIO7 SDA / GPIO8 SCL):
+  - SHT31 @ **0x44** — internal (cabinet) humidity + temperature
+  - SHT20 @ **0x40** — external/ambient humidity + temperature
+- On-board **RTC battery holder** (item 11 / 1220) — **cell fitted**. Wall
+  clock is SoC LP RTC + NTP; the cell holds VBAT across hard power loss.
 
 ## Not connected (do not diagnose as failures)
 
-- **External I2C** SHT31 / SHT20 on the PH2.0 I2C header — not fitted. Missing
-  ambient/external readings and `SHT* Online` OFF are **expected** while those
-  enables are off.
 - **Optional CT clamp** — not fitted. **CT Clamp Enabled** defaults OFF (no CT
   Modbus polls until turned on). **CT run-proof** does not evaluate until the
   clamp is enabled and online.
 
 ## Rules for agents
 
-1. RS485 relay / RTD timeouts are **in scope** now — do not dismiss them as
-   bench-expected. I2C SHT absence and CT-clamp silence (while disabled) still
-   are expected.
+1. RS485 relay / RTD and I2C SHT31 / SHT20 timeouts are **in scope** now — do
+   not dismiss them as bench-expected. CT-clamp silence (while disabled) still
+   is expected.
 2. Do **not** recommend "fix RS485 wiring" as the next step for unrelated work.
 3. End-to-end coolroom control is **proven on this bench** (2026-08-16): RTD
-   temps live, RTU-4 compressor and light coils cycled, room reached
-   setpoint. I2C humidity / ambient and CT run-proof still cannot.
+   temps live, RTU-4 compressor and light coils cycled, room reached setpoint.
+   I2C SHT31/SHT20 are now fitted and in scope. CT run-proof still cannot.
 4. When the user reports peripherals added or removed, update this rule (and
    `CLAUDE.md` / `reference/hardware_pins.md`) before treating those buses as
    live or expected-offline.

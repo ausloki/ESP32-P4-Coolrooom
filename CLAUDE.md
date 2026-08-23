@@ -32,15 +32,18 @@ Prefer schematic / demo sample pin macros over table wording when names disagree
 
 - RS485 Waveshare Modbus RTU Relay 4-CH (addr 1) and 2CH PT100 RTD (addr 100)
   on H10 (GPIO27 TX / GPIO26 RX, 9600 8N1)
+- I2C SHT31 @ 0x44 (internal humidity/temp) and SHT20 @ 0x40 (ambient) on the
+  PH2.0 I2C header (GPIO7/8)
+- On-board RTC battery holder (item 11 / 1220) — cell fitted; LP RTC + NTP
 
 **Not connected yet** — do not treat as bugs or spend time diagnosing:
 
 - Optional CT clamp (CT Clamp Enabled defaults OFF so it does not poll until turned on)
-- External I2C temp/humidity sensors on the expansion I2C header
 
-On-board UI, Wi-Fi, web, speaker path, and RS485 relay/RTD remain fair game.
-Operator-confirmed 2026-08-16: RTU-4 compressor and light coils cycled; coolroom
-air reached setpoint. See `.cursor/rules/bench-hardware-status.mdc`.
+On-board UI, Wi-Fi, web, speaker path, RS485 relay/RTD, and I2C SHT sensors remain
+fair game. Operator-confirmed 2026-08-16: RTU-4 compressor and light coils cycled;
+coolroom air reached setpoint. See `.cursor/rules/bench-hardware-status.mdc` —
+update that rule when hardware is fitted.
 
 ## Flashing: `esphome upload` over USB erases all saved settings
 

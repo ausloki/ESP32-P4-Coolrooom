@@ -80,7 +80,7 @@ single priority string. Typical fault labels:
 |---|---|
 | **RELAY BOARD OFFLINE** | Modbus relay board not responding (compressor cannot run) |
 | **TEMP BOARD OFFLINE** | RS485 temperature-probe board not responding |
-| **HUMIDITY SENSOR OFFLINE** | Internal cabinet humidity/temp sensor (SHT31) is enabled but not answering |
+| **HUMIDITY SENSOR OFFLINE** | Internal cabinet humidity/temp sensor (SHT31) is enabled but not answering. Clears on its own after a hot-plug (setup retry every ~10 s). |
 | **AMBIENT SENSOR OFFLINE** | External/ambient sensor (SHT20) is enabled but not answering |
 | **COOLROOM PROBE BAD** | Coolroom control probe missing, stale, or implausible (§4.7) |
 | **HIGH TEMP** / **LOW TEMP** / **DOOR OPEN** / **NOT COOLING** / **ICE ON COIL** | Active alarms (§4.4–§4.6) |
@@ -670,7 +670,7 @@ no-account-needed push service. Every message includes a timestamp.
 | ⚠️ Coolroom PROBE FAULT | *(Priority: Probe Fault)* | Main probe fails (§4.7) |
 | ⚠️ Coolroom RELAY BOARD OFFLINE | *(Priority: Hardware Offline)* | Modbus relay board stops responding (§4.3 / centre status) |
 | ⚠️ Coolroom TEMP BOARD OFFLINE | *(Priority: Hardware Offline)* | Modbus RTD board expected but offline |
-| ⚠️ Coolroom HUMIDITY SENSOR OFFLINE | *(Priority: Hardware Offline)* | Cabinet SHT31 enabled but not responding |
+| ⚠️ Coolroom HUMIDITY SENSOR OFFLINE | *(Priority: Hardware Offline)* | Cabinet SHT31 enabled but not responding. After a hot-plug, setup retries every ~10 s so this can clear without a reboot. |
 | ⚠️ Coolroom AMBIENT SENSOR OFFLINE | *(Priority: Hardware Offline)* | Ambient SHT20 enabled but not responding |
 | ✅ Coolroom … ONLINE (relay / temp / humidity / ambient) | *(Priority: All-Clear)* | Matching board or sensor responds again |
 | ⚠️ Coolroom SD CARD FAILURE | *(Priority: SD Card)* | SD card missing at boot, or fails during operation (§4.9) |
@@ -842,7 +842,7 @@ Mostly read-only status, useful for troubleshooting rather than day-to-day adjus
 | Free Heap / Free PSRAM / Chip Temperature / CPU Usage | Controller's own internal health. CPU shows the average busy percentage across both P4 cores over the last sample window (~30 s publish interval), plus per-core busy% (`C0` / `C1`) on the Info page and web Hardware / System Health lines. The web dashboard EMA-smooths the average so a hard page refresh does not briefly flash a reconnect spike; per-core values are the raw windowed samples. |
 | SD Card Free Space / SD Card Mounted | Storage headroom and current mount status (§4.9). The touchscreen Info page shows card total plus used/free in MB **and percent**, and whether a `backup.json` is present. |
 | RS485 Bus Status / RTD Sample Age / Probe Health Summary | Whether the sensor bus and individual probes are responding and how fresh their last reading is. **RS485 Relay / RTD Board Online** follow a successful Modbus poll (not only a later reconnect). |
-| System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 Online = the matching sensor is **enabled** in Probes settings **and** responding on the I2C header (failed/warning I2C or a sticky last reading no longer counts as online). Disabled sensors show as offline/disabled, not OK. |
+| System Time Valid / SHT31 / SHT20 Online | System Time Valid = wall clock has a usable time (SoC LP RTC, usually after NTP). SHT31/SHT20 Online = the matching sensor is **enabled** in Probes settings **and** responding on the I2C header (failed/warning I2C or a sticky last reading no longer counts as online). If a sensor is plugged in after boot, the controller retries setup about every **10 s** so **HUMIDITY / AMBIENT SENSOR OFFLINE** can clear without a reboot. Disabled sensors show as offline/disabled, not OK. |
 | Sensor Fallback Active | Whether the compressor is currently running the fallback duty cycle from §4.1/§4.7 |
 | **Restart Controller** *(button)* | Reboots the device. Settings are preserved (stored in flash), in-progress defrost/alarm timers are not. On the web dashboard this lives on the **Hardware** tab under *Controller*. |
 | **Factory Reset** *(button)* | Erases every setting in this manual back to its default value **and clears the saved WiFi credentials**, then reboots. The controller comes back on its own access point and has to be re-joined to your network (§4.10), so do not use it remotely. Take a Backup (§4.9) first if you want to restore afterward. On the web dashboard it is on the **Hardware** tab under *Controller*, behind a confirmation and a typed `RESET`. |

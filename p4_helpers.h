@@ -22,6 +22,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/idf_additions.h>
+#include "esphome/core/component.h"
 
 // ─── GT911 touch — shared LCD/touch reset (GPIO33) ─────────────────────────
 
@@ -196,6 +197,23 @@ inline bool p4_i2c_hum_online(bool enabled, bool failed, bool warning, float tem
 /// Sticky raw readings should be wiped when the sensor is disabled or unhealthy.
 inline bool p4_i2c_hum_should_clear(bool enabled, bool failed, bool warning) {
     return !enabled || failed || warning;
+}
+
+/// Re-run setup for an optional I2C humidity chip that `mark_failed()` at boot
+/// because it was unplugged. ESPHome 2026.7 does not resume PollingComponent
+/// updates until construction state is restored. Call from the 10 s control
+/// tick (HTU21D setup blocks ~15 ms) — not the 1 s LVGL tick.
+/// Returns true when setup succeeded and an immediate `update()` was started.
+inline bool p4_i2c_hum_try_recover(esphome::PollingComponent *comp) {
+    if (comp == nullptr || !comp->is_failed()) return false;
+    ESP_LOGI("i2c", "Retrying failed humidity sensor setup");
+    comp->stop_poller();
+    comp->reset_to_construction_state();
+    comp->call();  // CONSTRUCTION → SETUP (start_poller + setup)
+    if (comp->is_failed()) return false;
+    comp->call();  // SETUP → LOOP
+    comp->update();
+    return true;
 }
 
 /// Return the validated RTD reading, or NaN if invalid.

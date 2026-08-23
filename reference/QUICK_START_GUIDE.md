@@ -359,7 +359,7 @@ Also: Min Run Time holds the compressor ON until its minimum ON window elapses (
 | ⚠️ PROBE FAULT | Main sensor has failed | Check probe wiring/connection urgently |
 | ⚠️ RELAY BOARD OFFLINE | Modbus relay board not responding | Check RS485 / power to the relay module |
 | ⚠️ TEMP BOARD OFFLINE | Modbus RTD board not responding | Check RS485 / RTD converter |
-| ⚠️ HUMIDITY SENSOR OFFLINE | Cabinet SHT31 not responding | Check I2C / enable only if fitted |
+| ⚠️ HUMIDITY SENSOR OFFLINE | Cabinet SHT31 not responding | Check I2C / enable only if fitted. After a hot-plug the controller retries about every 10 s — no reboot needed. |
 | ⚠️ AMBIENT SENSOR OFFLINE | Ambient SHT20 not responding | Check I2C / enable only if fitted |
 | ✅ … ONLINE (relay/temp/humidity/ambient) | Matching board or sensor recovered | No action needed |
 | ⚠️ SD CARD FAILURE | Logging/backup paused, cooling still runs fine | Check the card when convenient — not urgent for cooling itself |

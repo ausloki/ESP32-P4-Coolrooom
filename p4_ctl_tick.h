@@ -678,6 +678,11 @@ if (!fault && !in_grace) {
         p4_sd_log_event("TEMP_BOARD_ONLINE", "modbus rtd recovered");
     }
 
+    if (input_humidity_internal_enabled->value())
+        p4_i2c_hum_try_recover(i2c_sht31);
+    if (input_humidity_external_enabled->value())
+        p4_i2c_hum_try_recover(i2c_sht20);
+
     const bool humidity_offline = input_humidity_internal_enabled->value() &&
         !p4_i2c_hum_online(
             true,

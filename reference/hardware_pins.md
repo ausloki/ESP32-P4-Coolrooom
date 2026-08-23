@@ -24,12 +24,13 @@ naming inversion here.
 ### Bench note (current)
 
 **Connected:** RS485 Waveshare Modbus RTU Relay 4-CH (addr **1**) and 2CH PT100
-(addr **100**) on header H10 (GPIO27 TX / GPIO26 RX, 9600 8N1). Treat relay/RTD
-online-offline as live.
+(addr **100**) on header H10 (GPIO27 TX / GPIO26 RX, 9600 8N1). I2C SHT31 @
+**0x44** (internal) and SHT20 @ **0x40** (ambient) on the PH2.0 I2C header
+(GPIO7 SDA / GPIO8 SCL). RTC holder item 11 has a **1220 cell fitted**. Treat
+relay/RTD/SHT online-offline as live.
 
-**Not connected:** external I2C SHT31/SHT20 on the PH2.0 I2C header; optional CT
-clamp. Missing I2C readings are expected. CT Clamp Enabled defaults **OFF**, so
-an unfitted clamp does not poll the bus. See
+**Not connected:** optional CT clamp. CT Clamp Enabled defaults **OFF**, so an
+unfitted clamp does not poll the bus. See
 `.cursor/rules/bench-hardware-status.mdc`.
 
 ---
