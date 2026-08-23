@@ -5899,8 +5899,8 @@ lvgl:
                         align: CENTER
                         x: 328
                         y: 80
-                        text_font: font_small
-                        text_color: col_text
+                        text_font: font_large
+                        text_color: col_green
 
                     - label:
                         id: lbl_int_humidity_large
@@ -5908,8 +5908,8 @@ lvgl:
                         align: CENTER
                         x: 328
                         y: 196
-                        text_font: font_small
-                        text_color: col_text
+                        text_font: font_large
+                        text_color: col_green
 
                     - label:
                         id: lbl_ext_humidity_large
@@ -5917,8 +5917,8 @@ lvgl:
                         align: CENTER
                         x: 328
                         y: 312
-                        text_font: font_small
-                        text_color: col_pink
+                        text_font: font_large
+                        text_color: col_green
 
                     - label:
                         id: lbl_power_info
@@ -6125,8 +6125,8 @@ lvgl:
                         align: CENTER
                         x: 328
                         y: 80
-                        text_font: font_small
-                        text_color: col_text
+                        text_font: font_large
+                        text_color: col_green
 
                     - label:
                         id: lbl_int_humidity_alt
@@ -6134,8 +6134,8 @@ lvgl:
                         align: CENTER
                         x: 328
                         y: 196
-                        text_font: font_small
-                        text_color: col_text
+                        text_font: font_large
+                        text_color: col_green
 
                     - label:
                         id: lbl_ext_humidity_alt
@@ -6143,8 +6143,8 @@ lvgl:
                         align: CENTER
                         x: 328
                         y: 312
-                        text_font: font_small
-                        text_color: col_pink
+                        text_font: font_large
+                        text_color: col_green
 
         # Hidden LED indicators for status updates
         - obj:

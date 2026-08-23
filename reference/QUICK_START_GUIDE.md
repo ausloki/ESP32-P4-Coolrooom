@@ -111,7 +111,7 @@ temperature sensors according to HA's own unit-system setting.
 Swipe **up** on the centre for an HA-style thermostat view (set vs current on one ring with
 display-only thumb/pip — not drag-to-set); swipe **down** to return. Centre temperature
 stays blue like the coolroom arc. Right-rail **Evap** / **Int** / **Ext** sensor readouts
-appear on both home views.
+appear on both home views at Set-line size, in green.
 
 **After a power cut the compressor won't start straight away** — the off-delay counts from
 power-up, so expect up to 3 minutes (default) of amber countdown under the snowflake before

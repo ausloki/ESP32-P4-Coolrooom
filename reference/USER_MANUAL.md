@@ -46,7 +46,8 @@ arc math only runs while that page is scrolled into view.) On both home views
 the large centre temperature stays **blue** (same as the coolroom arc) and
 follows **Temperature Display Unit** (°C or °F). The right-rail secondary
 readouts — **Evap** (Probe 2), **Int** (SHT31 temp + RH), and **Ext** (SHT20
-temp + RH) — appear on both the classic and alternate home views. The web
+temp + RH) — appear on both the classic and alternate home views at the same
+size as the cyan **Set:** line. **Evap**, **Int**, and **Ext** are green. The web
 Coolroom Status gauge stays on the classic three-arc layout.
 
 A reading colder than −10 °C or warmer than +30 °C sits pinned at the end of its arc — the
