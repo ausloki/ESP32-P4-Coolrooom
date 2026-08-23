@@ -392,7 +392,8 @@ See `reference/USER_MANUAL.md` §4.13 and `reference/CAREL_CONTROL_DECISIONS.md`
 ### Optional Modbus CT clamp (firmware)
 
 Nanjing Qineng **QNDBK3/RS485** split-core CT on the **same** RS485 bus (H10 A/B),
-**DC 12 V** on Power+/Power−. Digest: `reference/QNDBK3-RS485-CT-clamp.md`.
+**DC 12 V** on Power+/Power−. **Ordered model: QNDBK3-10** (10 mm aperture, 5–75 A
+rated). Digest: `reference/QNDBK3-RS485-CT-clamp.md`.
 
 | Item | Value |
 | --- | --- |

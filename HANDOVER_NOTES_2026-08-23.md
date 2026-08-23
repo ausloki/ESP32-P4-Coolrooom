@@ -28,10 +28,12 @@ Operator received a burst of **ntfy** alerts (likely during or just after a **po
 
 ## Incoming hardware
 
-- **RS485 CT clamp** (Modbus addr **110**) — **expected to arrive ~7 September 2026**.
+- **RS485 CT clamp — Qineng QNDBK3-10** (Modbus addr **110**) — **expected ~7 Sep 2026**.
+  **10 mm** aperture, vendor rated **5–75 A**; same RS485/Modbus map as other QNDBK3 sizes.
   Still not fitted; leave **CT Clamp Enabled** off until installed and wired on H10.
-  After fit-up: enable CT, confirm Hardware status shows CT online, then exercise
-  CT run-proof settings on bench before relying on fail-to-start / stuck-on alarms.
+  Verify the plant feed fits **10 mm** before clamping. After fit-up: enable CT, confirm
+  Hardware status shows CT online, then exercise CT run-proof settings on bench before
+  relying on fail-to-start / stuck-on alarms.
 
 ### Address programming (Mac bench, before joining live bus)
 

@@ -3,11 +3,18 @@
 **Product:** Nanjing Qineng **QNDBK3/RS485** (switchable single-phase AC digital current
 transformer with RS-485 Modbus RTU output).
 
+**Bench unit (ordered):** **QNDBK3-10** — **10 mm** split-core aperture; vendor rated
+input **5–75 A** (suffix **-10** is aperture size, not a 10 A-only sensor). Expected
+delivery ~7 Sep 2026. This coolroom’s whole-feed band (~**0.27 A** idle / **~0.79 A**
+run @ 240 V) is well inside that range. **Confirm the plant feed conductor fits the
+10 mm window** before clamping; use a larger `-16`/`-24` model if the cable bundle will
+not close.
+
 **Sources (local):**
 
 | File | Content |
 | --- | --- |
-| `reference/QNDBK3-RS485-CT-clamp.pdf` | Full vendor manual (copied from operator download) |
+| `reference/QNDBK3-RS485-CT-clamp.pdf` | Full vendor manual (QNDBK3/RS485, 7 pp., Nov 2025) |
 | `reference/QNDBK3-RS485-CT-specs.png` | Technical parameters (50 Hz), DC 12 V, rated current options |
 | `reference/QNDBK3-RS485-CT-mechanical.png` | Aperture sizes / Power+/Power−/A/B terminals |
 | `reference/QNDBK3-RS485-CT-protocol-frame.png` | Modbus frame format + read example from `0x1000` |
