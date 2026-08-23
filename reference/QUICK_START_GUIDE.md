@@ -48,10 +48,11 @@ on any browser on your network.
       **Hold Compressor While Door Open** all default **off**. Turn the sensor on only when
       the reed is fitted and NC/NO mode matches the wiring. Leave door-hold off unless you
       want cooling paused while the door is open (a stuck reed would starve cooling).
-- [ ] **Subscribe to push notifications** — log in → **Alarms & Notify** tab → set topic
-      (and server if not using ntfy.sh) → optionally tune each alert's priority →
-      **Send Test Notification**. Install the free ntfy app and subscribe to that same
-      topic. See User Manual §4.8.
+- [ ] **Subscribe to push notifications** — log in → **Alarms & Notify** tab → **Set**
+      the topic (and server if not using ntfy.sh) → **Send Test Notification** (check
+      Events for `NTFY_TEST`) → turn **ntfy Push Notifications Enabled** on when you
+      want real alarms. Install the free ntfy app and subscribe to that same topic.
+      See User Manual §4.8.
 - [ ] **Set your target temperature and alarm thresholds** — see the worked examples below
       (§4 general 2 °C food coolroom, or §4b Black Amber / Amber Jewel / Tegan Blue plums),
       or your own product's requirements.

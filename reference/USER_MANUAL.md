@@ -642,9 +642,9 @@ no-account-needed push service. Every message includes a timestamp.
 
 | Setting | Range / values | Default | When to change it |
 |---|---|---|---|
-| **ntfy Push Notifications Enabled** | on / off | off | Mute phone pushes without silencing local alarms or the siren |
-| **ntfy Server URL** | `http://` or `https://` URL | `https://ntfy.sh` | Point at a self-hosted ntfy instance |
-| **ntfy Topic** | 1–64 characters | (firmware build default) | Match the topic you subscribe to in the ntfy app |
+| **ntfy Push Notifications Enabled** | on / off | off | Mute phone pushes without silencing local alarms or the siren. **Send Test** still fires while this is off |
+| **ntfy Server URL** | `http://` or `https://` URL | `https://ntfy.sh` | Point at a self-hosted ntfy instance. Click **Set** beside the field to apply |
+| **ntfy Topic** | 1–64 characters | (firmware build default) | Match the topic you subscribe to in the ntfy app. Click **Set** (not SD Backup) — a successful set writes `NTFY_TOPIC` on Events |
 | **Priority: High Temp Alarm** | min / low / default / high / urgent | high | Raise to urgent if the phone must break through Do Not Disturb |
 | **Priority: Low Temp Alarm** | min / low / default / high / urgent | high | Same as high-temp, for freeze-sensitive stock |
 | **Priority: Door Open Alarm** | min / low / default / high / urgent | high | Often turned down — a door left open is usually noticed on site first |
@@ -655,7 +655,7 @@ no-account-needed push service. Every message includes a timestamp.
 | **Priority: CT Run-Proof Alarm** | min / low / default / high / urgent | high | Shared priority for CT fail-to-start / stuck-on / overcurrent (no spoken alert) |
 | **Priority: SD Card Failure** | min / low / default / high / urgent | high | Cooling is unaffected — fair one to turn down |
 | **Priority: All-Clear Messages** | min / low / default / high / urgent | low | Covers Alarm CLEARED, SD Card Recovered, and hardware ONLINE recoveries; low so good news does not wake anyone |
-| **Send Test Notification** *(button)* | — | — | Confirm the phone is subscribed; sent at the High Temp Alarm priority |
+| **Send Test Notification** *(button)* | — | — | Confirm the phone is subscribed; sent at the High Temp Alarm priority even if the master switch is off. Writes `NTFY_TEST` on Events (`NTFY_TEST_SKIPPED` if Wi‑Fi is down). Real alarm pushes still need the master switch **On** |
 
 | Alert | Priority | When it fires |
 |---|---|---|
@@ -680,9 +680,11 @@ no-account-needed push service. Every message includes a timestamp.
 Every alarm type reaches ntfy — none are event-log-only any more.
 
 **Setup:** open the web dashboard **Alarms & Notify** tab after logging in. Set the
-**ntfy Server** and **Topic**, tune each alert's priority if you want, then use
-**Send Test Notification** to confirm delivery. Install the free ntfy app
-(iOS/Android) or use ntfy.sh in a browser and subscribe to that same topic.
+**ntfy Server** and **Topic** (click **Set** beside each field), tune each alert's
+priority if you want, then use **Send Test Notification** to confirm delivery —
+watch the **Events** tab for `NTFY_TOPIC` / `NTFY_TEST`. Install the free ntfy app
+(iOS/Android) or use ntfy.sh in a browser and subscribe to that same topic. Turn
+**ntfy Push Notifications Enabled** on when you want real alarms to follow.
 
 ---
 

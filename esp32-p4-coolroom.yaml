@@ -880,11 +880,13 @@ switch:
       - lambda: |-
           id(input_ntfy_enabled) = true;
           ESP_LOGI("ntfy", "Push notifications ENABLED");
+          p4_sd_log_event("NTFY_ENABLED", "on");
       - script.execute: persist_config_to_nvs
     turn_off_action:
       - lambda: |-
           id(input_ntfy_enabled) = false;
           ESP_LOGI("ntfy", "Push notifications DISABLED");
+          p4_sd_log_event("NTFY_DISABLED", "off");
       - script.execute: persist_config_to_nvs
     lambda: 'return id(input_ntfy_enabled);'
 
@@ -3736,10 +3738,12 @@ text:
           while (!s.empty() && s.front() == ' ') s.erase(s.begin());
           if (s.rfind("http://", 0) != 0 && s.rfind("https://", 0) != 0) {
             ESP_LOGW("ntfy", "Server rejected — must start with http:// or https://");
+            p4_sd_log_event("NTFY_SERVER_REJECTED", "need http:// or https://");
             return;
           }
           id(ctl_ntfy_server) = s;
           ESP_LOGI("ntfy", "Server set to %s", s.c_str());
+          p4_sd_log_event("NTFY_SERVER", s.c_str());
 
       - script.execute: persist_config_to_nvs
   - platform: template
@@ -3761,10 +3765,12 @@ text:
           while (!t.empty() && (t.back() == '/' || t.back() == ' ')) t.pop_back();
           if (t.empty()) {
             ESP_LOGW("ntfy", "Topic rejected — empty");
+            p4_sd_log_event("NTFY_TOPIC_REJECTED", "empty");
             return;
           }
           id(ctl_ntfy_topic) = t;
           ESP_LOGI("ntfy", "Topic set to %s", t.c_str());
+          p4_sd_log_event("NTFY_TOPIC", t.c_str());
 
       - script.execute: persist_config_to_nvs
   # ── WiFi reconnect (read-only stats live on Hardware Config; this is the
@@ -3850,14 +3856,19 @@ button:
       sorting_weight: 24
     on_press:
       - lambda: |-
-          if (!id(input_ntfy_enabled)) {
-            ESP_LOGW("ntfy", "Test skipped — notifications disabled");
-            return;
-          }
+          // Explicit operator test — send even when the master switch is off
+          // so setup can prove the topic before enabling alarm pushes.
           if (!id(ctl_wifi_connected)) {
             ESP_LOGW("ntfy", "Test skipped — WiFi not connected");
+            p4_sd_log_event("NTFY_TEST_SKIPPED", "wifi offline");
             return;
           }
+          char detail[96];
+          snprintf(detail, sizeof(detail), "%s %s",
+                   id(ctl_ntfy_topic).c_str(),
+                   id(input_ntfy_enabled) ? "alarms-on" : "alarms-off");
+          ESP_LOGI("ntfy", "Test push queued (%s)", detail);
+          p4_sd_log_event("NTFY_TEST", detail);
           id(ntfy_test_request).trigger();
 
   - platform: template
@@ -11758,10 +11769,11 @@ script:
           body: !lambda |-
             char ts[24];
             p4_fmt_time(ts, sizeof(ts));
-            char buf[128];
+            char buf[200];
             snprintf(buf, sizeof(buf),
-                     "[%s] Test push from Coolroom Controller — topic %s",
-                     ts, id(ctl_ntfy_topic).c_str());
+                     "[%s] Test push from Coolroom Controller — topic %s%s",
+                     ts, id(ctl_ntfy_topic).c_str(),
+                     id(input_ntfy_enabled) ? "" : " (alarm pushes still OFF)");
             return std::string(buf);
 
   # ── Phase 9: LVGL page navigation scripts ──────────────────────────────────

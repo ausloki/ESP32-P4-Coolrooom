@@ -136,6 +136,14 @@
             background: #003d82;
             color: #fff;
         }
+        .settings-feedback {
+            padding: 10px 12px;
+            margin: -4px 0 14px 0;
+            border-radius: 6px;
+            border-left: 4px solid;
+            font-size: 13px;
+        }
+        .settings-feedback.hidden { display: none !important; }
         .settings-tab-panel.hidden { display: none !important; }
         .sd-stats {
             display: grid;
@@ -763,6 +771,7 @@
                 <button type="button" data-tab="tab-hardware" onclick="switchSettingsTab('tab-hardware')">Hardware</button>
                 <button type="button" data-tab="tab-wireless" onclick="switchSettingsTab('tab-wireless')">Wireless</button>
             </div>
+            <div id="settingsFeedback" class="settings-feedback hidden" role="status"></div>
 
             <div id="tab-ops" class="settings-tab-panel">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
@@ -2443,6 +2452,18 @@
                 alertsDiv.innerHTML = '';
                 showAlert._clearTimer = null;
             }, 4000);
+            const settings = document.getElementById('settingsSection');
+            const sf = document.getElementById('settingsFeedback');
+            if (sf && settings && !settings.classList.contains('hidden')) {
+                sf.className = `settings-feedback alert-${type}`;
+                sf.textContent = message;
+                sf.classList.remove('hidden');
+                if (showAlert._sfTimer) clearTimeout(showAlert._sfTimer);
+                showAlert._sfTimer = setTimeout(() => {
+                    sf.classList.add('hidden');
+                    showAlert._sfTimer = null;
+                }, 8000);
+            }
         }
 
         // Setting help balloons — click the small "i" icon next to a setting
@@ -2697,13 +2718,13 @@
                     { type: 'number', entity: 'post-defrost_alarm_grace__min_', name: 'Post-Defrost Alarm Grace (min)', label: 'Post-Defrost Alarm Grace (min)', min: 0, max: 60, step: 1,
                       help: 'Alarms are suppressed for this long after each defrost cycle ends, since the room is briefly warmer than usual while it re-cools \u2014 avoids a false High Temperature alarm every defrost cycle.' },
                     { type: 'switch', entity: 'ntfy_notifications_enabled', name: 'ntfy Notifications Enabled', label: 'ntfy Push Notifications Enabled',
-                      help: 'Master switch for phone/computer push alerts via ntfy. Local alarms, banners and the siren still work when this is off \u2014 only the HTTP push is gated.' },
+                      help: 'Master switch for automatic phone/computer alarm pushes. Off by default. Local alarms, banners and the siren still work. Send Test still fires while this is off so you can prove the topic first.' },
                     { type: 'text', entity: 'ntfy_server', name: 'ntfy Server', label: 'ntfy Server URL', maxlength: 96,
-                      help: 'Push server base URL, e.g. https://ntfy.sh or your self-hosted ntfy instance. Must start with http:// or https://.' },
+                      help: 'Push server base URL, e.g. https://ntfy.sh or your self-hosted ntfy instance. Must start with http:// or https://. Click Set beside this field to apply — typing alone does not save.' },
                     { type: 'text', entity: 'ntfy_topic', name: 'ntfy Topic', label: 'ntfy Topic', maxlength: 64,
-                      help: 'Topic name to subscribe to in the ntfy app (or browser). Changing this does not migrate old subscribers \u2014 tell staff the new topic.' },
+                      help: 'Topic name to subscribe to in the ntfy app (or browser). Click Set beside this field to apply — typing alone does not save. Changing this does not migrate old subscribers \u2014 tell staff the new topic. A successful Set writes NTFY_TOPIC on the Events tab.' },
                     { type: 'button', entity: 'send_test_ntfy_notification', name: 'Send Test ntfy Notification', label: 'Send Test Notification',
-                      help: 'Fires one test push to the configured server/topic so you can confirm the phone is subscribed before relying on real alarms. Sent at the High Temp Alarm priority, so it also proves a real alarm would get through.' },
+                      help: 'Fires one test push to the last Set server/topic (even if the master switch is off). Watch Events for NTFY_TEST. Sent at the High Temp Alarm priority. Real alarm pushes still need the master switch ON.' },
                     { type: 'select', entity: 'high_temp_alarm_priority', name: 'High Temp Alarm Priority', label: 'Priority: High Temp Alarm',
                       help: 'ntfy priority for the \ud83c\udf21\ufe0f HIGH TEMP push. "urgent" breaks through Do Not Disturb on most phones; "min" arrives silently with no banner.' },
                     { type: 'select', entity: 'low_temp_alarm_priority', name: 'Low Temp Alarm Priority', label: 'Priority: Low Temp Alarm',
@@ -3141,7 +3162,7 @@
                 showAlert('error', `Could not update ${label}`);
                 return;
             }
-            showAlert('success', `${label} updated`);
+            showAlert('success', `${label} updated — check Events`);
             fetchStatus();
         }
 
@@ -3182,7 +3203,11 @@
                 showAlert('error', `Could not trigger ${label}`);
                 return;
             }
-            showAlert('success', `${label} sent`);
+            if (entityName === 'Send Test ntfy Notification') {
+                showAlert('success', 'Test queued — check Events for NTFY_TEST. Phone pings if subscribed to the last Set topic.');
+            } else {
+                showAlert('success', `${label} sent`);
+            }
         }
 
         async function restartController() {
