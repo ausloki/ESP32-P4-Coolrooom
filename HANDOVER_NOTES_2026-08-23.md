@@ -28,26 +28,81 @@ Operator received a burst of **ntfy** alerts (likely during or just after a **po
 
 ## Incoming hardware
 
-- **RS485 CT clamp — Qineng QNDBK3-10** (Modbus addr **110**) — **expected ~7 Sep 2026**.
-  **10 mm** aperture, vendor rated **5–75 A**; same RS485/Modbus map as other QNDBK3 sizes.
-  Still not fitted; leave **CT Clamp Enabled** off until installed and wired on H10.
-  Verify the plant feed fits **10 mm** before clamping. After fit-up: enable CT, confirm
-  Hardware status shows CT online, then exercise CT run-proof settings on bench before
-  relying on fail-to-start / stuck-on alarms.
+- **RS485 CT clamp — Qineng QNDBK3-10** (Modbus addr **110**) — **arrived and bench-programmed
+  2026-09-02** (see below). **10 mm** aperture, vendor rated **5–75 A**; same RS485/Modbus
+  map as other QNDBK3 sizes. **Not yet** on controller H10 — leave **CT Clamp Enabled** off
+  until A/B/GND are wired on the live plant bus. Verify the plant feed fits **10 mm** before
+  clamping. After fit-up: enable CT, confirm Hardware status shows CT online, then exercise
+  CT run-proof settings before relying on fail-to-start / stuck-on alarms.
+
+## Bench programming complete — 2026-09-02
+
+**Status:** CT clamp programmed and Modbus-verified on Mac bench. **Not yet** wired to
+controller header H10.
+
+### USB port (Mac bench)
+
+| Device | macOS port | Use |
+| --- | --- | --- |
+| **JK BMS FTDI RS485 dongle** (serial **A9HMB132**, FT232R) | `/dev/cu.usbserial-A9HMB132` | **Correct** — RJ45 to clamp for programming |
+| ESP32-P4 board USB | `/dev/cu.usbmodem*` | Flash / debug / logs only — **not** CT Modbus |
+
+Only the FTDI dongle should be used for offline clamp programming. On the live plant, RS485
+is header **H10** (GPIO27 TX / GPIO26 RX), not the board USB cable.
+
+### RJ45 → clamp wiring (confirmed working)
+
+JK dongle uses **T568B** on pins **1 / 2 / 3** only (unlabeled bundle dongle):
+
+| RJ45 pin | Wire colour | Clamp terminal |
+| --- | --- | --- |
+| **2** | **Orange** | **A** |
+| **1** | **White/orange** | **B** |
+| **3** | **White/green** | **GND** → **12 V −** / **Power−** |
+
+Also: **12 V +** → clamp **Power+**. Green LED on clamp = DC power OK.
+
+**Trap that cost a session:** A/B alone stays **silent** until pin **3** is bonded to
+**Power−** (not Power+). Several A/B swaps made no difference until GND was correct.
+
+### Modbus results (9600 8N1)
+
+| Item | Value |
+| --- | --- |
+| Factory slave ID | **29** (not **1** — do not assume factory addr 1) |
+| Programmed ID | **110** via broadcast write `0x100B=110` (slave **255**) |
+| Verify | Addr **110** answers; addr **29** no longer responds |
+| Baud register `0x100C` | Code **1** (= **9600**) — leave unchanged |
+| Current `0x1002` on bench | **0.00 A** — expected with no AC through the CT core |
+
+Wide address scan found the clamp at **29** only after GND was fixed; polls at addr **1**
+returned zero bytes throughout earlier attempts.
+
+### On-site next steps
+
+- [ ] Wire clamp **A / B / GND** onto **H10** with relay (**1**) and RTD (**100**); **12 V**
+  from plant PSU; bond grounds per `reference/hardware_pins.md`.
+- [ ] Enable **CT Clamp Enabled**; confirm **Hardware status** shows CT online.
+- [ ] Clamp split core on **whole plant AC feed** (not compressor lead alone).
+- [ ] Expect roughly **~0.27 A** idle / **~0.79 A** run @ **240 V** once live.
+- [ ] Tune / exercise **CT run-proof** thresholds before relying on fail-to-start / stuck-on
+  alarms.
 
 ### Address programming (Mac bench, before joining live bus)
 
 Program the clamp to slave **110** @ **9600 8N1** so it does not collide with the
-relay (**1**) or RTD (**100**). Factory units often ship at address **1**.
+relay (**1**) or RTD (**100**). Factory address may be **1** or another value — this
+unit shipped at **29** (see bench section above). Scan addrs **1–250** if silent at **1**.
 
 **Tool:** pip package **`modbus-cli`** in repo **`.venv`** — CLI command is **`modbus`**.
 From repo root: `source tools/project_env.sh` (or `direnv allow` once) puts it on PATH;
 otherwise use `.venv/bin/modbus`. Register map / broadcast write:
 `reference/QNDBK3-RS485-CT-clamp.md`.
 
-**Hardware:** USB RS485 adapter on this Mac → clamp **A** / **B** only. Prefer
-programming **off the live plant bus** (CT + 12 V + adapter only) so a broadcast
-address write cannot disturb the relay or RTD.
+**Hardware:** USB RS485 adapter on this Mac → clamp **A** / **B** / **GND** (pin 3 to
+**Power−**). Bench dongle: `/dev/cu.usbserial-A9HMB132`. Prefer programming **off the live
+plant bus** (CT + 12 V + adapter only) so a broadcast address write cannot disturb the
+relay or RTD.
 
 ```bash
 # 1) Find the adapter (typical macOS names)
